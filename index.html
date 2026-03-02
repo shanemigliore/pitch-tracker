@@ -69,14 +69,22 @@
     return out;
   }
 
-  window.__fbSubscribe = function(onData, onOffline) {
+  window.__fbSubscribe = function(onData, onConnected, onOffline) {
     const ref = db.ref(ROOT);
 
-    // Detect connectivity
+    // .info/connected fires false on init then true once connected.
+    // We only call onOffline after we've been connected at least once.
+    let everConnected = false;
     db.ref(".info/connected").on("value", snap => {
-      if (!snap.val()) onOffline();
+      if (snap.val()) {
+        everConnected = true;
+        onConnected();
+      } else if (everConnected) {
+        onOffline();
+      }
     });
 
+    // Real-time data listener
     ref.on("value", snap => {
       const val = snap.val() || {};
       onData({
@@ -85,7 +93,7 @@
       });
     }, () => onOffline());
 
-    return () => ref.off();
+    return () => { ref.off(); db.ref(".info/connected").off(); };
   };
 
   // Write to Firebase — returns a promise so we can confirm success
@@ -1989,12 +1997,20 @@ function App() {
       setSyncStatus("offline");
       return;
     }
-    const unsub = window.__fbSubscribe((data) => {
-      setRoster(data.roster || []);
-      setTournaments(data.tournaments || []);
-      setLoaded(true);
-      setSyncStatus("synced");
-    }, () => setSyncStatus("offline"));
+    const unsub = window.__fbSubscribe(
+      (data) => {
+        // Data received — always means we're connected and synced
+        setRoster(data.roster || []);
+        setTournaments(data.tournaments || []);
+        setLoaded(true);
+        setSyncStatus("synced");
+      },
+      () => {
+        // Connected (but no data change) — mark synced if already loaded
+        setSyncStatus(prev => prev === "connecting" ? prev : "synced");
+      },
+      () => setSyncStatus("offline")
+    );
     return () => unsub && unsub();
   }, []);
 
@@ -2118,7 +2134,7 @@ function App() {
           </div>
           <div style={{ display:"flex", gap:5, alignItems:"center" }}>
             {availableCount>0 && <div style={{ padding:"3px 8px", borderRadius:8, background:"rgba(74,222,128,0.15)", fontSize:11, fontWeight:700, color:"#4ade80" }}>{availableCount}✓</div>}
-            {restingCount>0 && <div style={{ padding:"3px 8px", borderRadius:8, background:"rgba(244,63,94,0.15)", fontSize:11, fontWeight:700, color:"#f43f5e" }}>{restingCount}⏳</div>}
+            {restingCount>0 && <div title={`${restingCount} pitcher${restingCount!==1?"s":""} resting`} style={{ padding:"3px 8px", borderRadius:8, background:"rgba(244,63,94,0.15)", fontSize:11, fontWeight:700, color:"#f43f5e" }}>{restingCount}😴</div>}
             <div title={syncStatus} style={{ width:7, height:7, borderRadius:"50%", flexShrink:0,
               background: syncStatus==="synced"?"#4ade80": syncStatus==="saving"?"#fbbf24": syncStatus==="offline"?"#f43f5e":"rgba(255,255,255,0.3)",
               boxShadow: syncStatus==="synced"?"0 0 6px #4ade80": syncStatus==="saving"?"0 0 6px #fbbf24": syncStatus==="offline"?"0 0 6px #f43f5e":"none",
