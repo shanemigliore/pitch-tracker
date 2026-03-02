@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -22,25 +21,18 @@
   </style>
 
   <!-- Firebase SDK (compat version — works without a build step) -->
-
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 
   <!-- React + Babel -->
-
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-
 </head>
 <body>
   <div id="root"></div>
 
   <!-- Firebase initialisation (runs before React) -->
-
   <script>
 
   // ── Firebase Realtime Database setup ──────────────────────────────────────
@@ -104,7 +96,6 @@
   </script>
 
   <!-- App -->
-
   <script type="text/babel" data-presets="react">
     const { useState, useEffect, useCallback, useRef } = React;
 
@@ -2194,7 +2185,6 @@ window.__PitchApp = App;
   </script>
 
   <!-- Service worker for offline shell -->
-
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -2233,6 +2223,5 @@ window.__PitchApp = App;
       });
     }
   </script>
-
 </body>
 </html>
