@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -14,25 +15,33 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; background: #080c14; height: 100%; overscroll-behavior: none; }
-    body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+    body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+           padding-top: env(safe-area-inset-top, 0px); }
     input, button, select, textarea { font-family: inherit; }
     * { -webkit-overflow-scrolling: touch; }
     #root { height: 100%; }
   </style>
 
   <!-- Firebase SDK (compat version — works without a build step) -->
+
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 
   <!-- React + Babel -->
+
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
 </head>
 <body>
   <div id="root"></div>
 
   <!-- Firebase initialisation (runs before React) -->
+
   <script>
 
   // ── Firebase Realtime Database setup ──────────────────────────────────────
@@ -104,6 +113,7 @@
   </script>
 
   <!-- App -->
+
   <script type="text/babel" data-presets="react">
     const { useState, useEffect, useCallback, useRef } = React;
 
@@ -241,9 +251,10 @@ const I = {
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 const inputStyle = {
-  display:"block", width:"100%", padding:"10px 13px", borderRadius:10, fontSize:14,
+  display:"block", width:"100%", maxWidth:"100%", padding:"10px 13px", borderRadius:10, fontSize:14,
   background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)",
   color:"#f8fafc", outline:"none", boxSizing:"border-box", marginBottom:0,
+  WebkitAppearance:"none", appearance:"none",
 };
 const primaryBtn = {
   display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 18px",
@@ -257,7 +268,7 @@ const cancelBtn = {
 };
 const card = {
   background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)",
-  borderRadius:16, padding:14, marginBottom:12,
+  borderRadius:16, padding:14, marginBottom:12, overflow:"hidden",
 };
 const sectionLabel = {
   margin:"0 0 8px", fontSize:10, fontWeight:700, color:"rgba(255,255,255,0.35)", letterSpacing:1.5,
@@ -2113,6 +2124,7 @@ function App() {
   return (
     <div style={{ background:"#080c14", minHeight:"100vh", maxWidth:430, margin:"0 auto",
       fontFamily:"'Barlow',sans-serif", color:"#f8fafc", position:"relative",
+      overflowX:"hidden",
       backgroundImage:"radial-gradient(ellipse at 20% 0%,rgba(30,58,138,0.25) 0%,transparent 60%),radial-gradient(ellipse at 80% 100%,rgba(22,101,52,0.15) 0%,transparent 60%)" }}>
 
       <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
@@ -2123,7 +2135,8 @@ function App() {
       )}
 
       <div style={{ background:"rgba(8,12,20,0.9)", backdropFilter:"blur(16px)",
-        borderBottom:"1px solid rgba(255,255,255,0.06)", padding:"12px 16px",
+        borderBottom:"1px solid rgba(255,255,255,0.06)",
+        padding:"12px 16px",
         position:"sticky", top:0, zIndex:20 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <div style={{ width:32, height:32, borderRadius:9, background:"linear-gradient(135deg,#1d4ed8,#1e40af)",
@@ -2201,6 +2214,7 @@ window.__PitchApp = App;
   </script>
 
   <!-- Service worker for offline shell -->
+
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -2239,5 +2253,6 @@ window.__PitchApp = App;
       });
     }
   </script>
+
 </body>
 </html>
