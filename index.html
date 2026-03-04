@@ -20,7 +20,12 @@
     input, button, select, textarea { font-family: inherit; }
     * { -webkit-overflow-scrolling: touch; }
     #root { height: 100%; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+    .spinner { animation: spin 0.9s linear infinite; display: inline-block; }
+    .offline-banner { animation: fadeIn 0.3s ease; }
   </style>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 
   <!-- Firebase SDK (compat version — works without a build step) -->
 
@@ -178,12 +183,6 @@ function getEligibleDateStr(pitcher) {
   const d = getEligibleDate(pitcher.lastGameDate, pitcher.lastPitches, getRegRestDays);
   return d ? d.toISOString() : null;
 }
-
-const AGE_GROUPS = [
-  { id:"7-8",   label:"Ages 7–8"   },
-  { id:"9-10",  label:"Ages 9–10"  },
-  { id:"11-12", label:"Ages 11–12" },
-];
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -660,6 +659,7 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState(pitcher.name);
   const [editJersey, setEditJersey] = useState(pitcher.jersey||"");
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const status = getAvailabilityStatus(pitcher);
   const s = STATUS[status];
@@ -703,7 +703,7 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
 
       <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 16px" }}>
         <button onClick={onBack} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
-          padding:7, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
+          padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
         <div style={{ flex:1 }}>
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>
             {pitcher.jersey?`#${pitcher.jersey} · `:""}{pitcher.name.toUpperCase()}
@@ -712,7 +712,7 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
         <button onClick={()=>{ setEditName(pitcher.name); setEditJersey(pitcher.jersey||""); setEditOpen(o=>!o); }}
           style={{ background:editOpen?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.07)",
             border:`1px solid ${editOpen?"rgba(56,189,248,0.4)":"rgba(255,255,255,0.1)"}`,
-            borderRadius:10, padding:7, color:editOpen?"#38bdf8":"rgba(255,255,255,0.5)",
+            borderRadius:10, padding:10, color:editOpen?"#38bdf8":"rgba(255,255,255,0.5)",
             cursor:"pointer", display:"flex" }}>{I.edit}</button>
         <Chip status={status} size="lg"/>
       </div>
@@ -898,11 +898,28 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
         </div>
       )}
 
-      <button onClick={()=>onDelete(pitcher.id)} style={{ width:"100%", background:"transparent",
-        border:"1px solid rgba(244,63,94,0.2)", borderRadius:14, padding:12, color:"rgba(244,63,94,0.6)",
-        fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-        {I.trash} Remove from Roster
-      </button>
+      {!confirmRemove ? (
+        <button onClick={()=>setConfirmRemove(true)} style={{ width:"100%", background:"transparent",
+          border:"1px solid rgba(244,63,94,0.2)", borderRadius:14, padding:12, color:"rgba(244,63,94,0.6)",
+          fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+          {I.trash} Remove from Roster
+        </button>
+      ) : (
+        <div style={{ background:"rgba(244,63,94,0.08)", border:"1px solid rgba(244,63,94,0.25)",
+          borderRadius:14, padding:14 }}>
+          <p style={{ margin:"0 0 10px", fontSize:13, color:"#f87171", fontWeight:600, textAlign:"center" }}>
+            Remove {pitcher.name} from the roster? This will delete all their pitch history.
+          </p>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={()=>setConfirmRemove(false)} style={{ ...cancelBtn, flex:1 }}>Keep Player</button>
+            <button onClick={()=>onDelete(pitcher.id)}
+              style={{ flex:2, background:"linear-gradient(135deg,#dc2626,#b91c1c)", border:"none",
+                borderRadius:12, padding:10, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+              Yes, Remove
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1061,7 +1078,13 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
                           : `Eligible ${status==="tomorrow"?"tomorrow":"in 2 days"} (${formatDate(getEligibleDateStr(p))})`}
                       </div>
                     )}
-                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                      {[-5,-1].map(d=>(
+                        <button key={d} onClick={()=>setEntry(p.id,String(Math.max(0,getCount(p.id)+d)))}
+                          style={{ width:36, height:36, borderRadius:"50%", background:"rgba(255,255,255,0.07)",
+                            border:"1px solid rgba(255,255,255,0.12)", color:"rgba(255,255,255,0.8)",
+                            fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0 }}>{d}</button>
+                      ))}
                       <input type="number" min="0" placeholder="0"
                         value={entries[p.id]||""}
                         onChange={e=>setEntry(p.id,e.target.value)}
@@ -1069,7 +1092,14 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
                           fontFamily:"'Bebas Neue',cursive",
                           borderColor:overLimit?"rgba(244,63,94,0.5)":atWarning?"rgba(251,146,60,0.5)":"rgba(255,255,255,0.1)",
                           background:overLimit?"rgba(244,63,94,0.1)":atWarning?"rgba(251,146,60,0.08)":"rgba(255,255,255,0.05)" }}/>
-                      <div style={{ textAlign:"right", minWidth:72 }}>
+                      {[1,5].map(d=>(
+                        <button key={d} onClick={()=>setEntry(p.id,String(getCount(p.id)+d))}
+                          style={{ width:36, height:36, borderRadius:"50%",
+                            background:"linear-gradient(135deg,#2563eb,#1d4ed8)", border:"none",
+                            color:"#fff", fontSize:12, fontWeight:800, cursor:"pointer",
+                            boxShadow:"0 2px 8px rgba(37,99,235,0.35)", flexShrink:0 }}>+{d}</button>
+                      ))}
+                      <div style={{ textAlign:"right", minWidth:64 }}>
                         {count>0 && (
                           <>
                             <div style={{ fontSize:11, color:overLimit?(context==="regular"?"#f43f5e":"#fb923c"):atWarning?"#fb923c":"rgba(255,255,255,0.4)" }}>
@@ -1163,7 +1193,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
 // SCREEN: ELIGIBILITY CHECKER
 // ══════════════════════════════════════════════════════════════════════════════
 function EligibilityScreen({ roster, tournaments }) {
-  const [checkDate, setCheckDate] = useState(addDays(todayStr(),1));
+  const [checkDate, setCheckDate] = useState(todayStr());
   const [viewMode, setViewMode] = useState("regular");
   const selectedTourney = tournaments.find(t=>t.id===viewMode);
 
@@ -1347,6 +1377,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
   const [maxPerGame, setMaxPerGame] = useState("55");
   const [maxDay1, setMaxDay1] = useState("55");
   const [maxTotal, setMaxTotal] = useState("115");
+  const [confirmDeleteTourney, setConfirmDeleteTourney] = useState(false);
 
   function handleCreate() {
     if (!name.trim()) return;
@@ -1363,7 +1394,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
       <div style={{ padding:"0 16px 110px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 18px" }}>
           <button onClick={()=>setView("list")} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
-            padding:7, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
+            padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>NEW TOURNAMENT</h2>
         </div>
         <div style={card}>
@@ -1429,17 +1460,34 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
       <div style={{ padding:"0 16px 110px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 18px" }}>
           <button onClick={()=>setView("list")} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
-            padding:7, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
+            padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
           <div style={{ flex:1 }}>
             <h2 style={{ margin:0, fontSize:21, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>
               🏆 {t.name.toUpperCase()}
             </h2>
             <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>{t.days}-day tournament</div>
           </div>
-          <button onClick={()=>{ if(window.confirm(`Delete "${t.name}"?`)) { onDeleteTourney(t.id); setView("list"); }}}
+          <button onClick={()=>setConfirmDeleteTourney(true)}
             style={{ background:"rgba(244,63,94,0.1)", border:"1px solid rgba(244,63,94,0.25)", borderRadius:8,
-              padding:7, color:"rgba(244,63,94,0.7)", cursor:"pointer", display:"flex" }}>{I.trash}</button>
+              padding:10, color:"rgba(244,63,94,0.7)", cursor:"pointer", display:"flex" }}>{I.trash}</button>
         </div>
+        {confirmDeleteTourney && (
+          <div style={{ background:"rgba(244,63,94,0.08)", border:"1px solid rgba(244,63,94,0.25)",
+            borderRadius:14, padding:14, marginBottom:12 }}>
+            <p style={{ margin:"0 0 10px", fontSize:13, color:"#f87171", fontWeight:600, textAlign:"center" }}>
+              Delete "{t.name}"? All pitch data logged for this tournament will be removed from history.
+            </p>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={()=>setConfirmDeleteTourney(false)} style={{ ...cancelBtn, flex:1 }}>Keep It</button>
+              <button onClick={()=>{ onDeleteTourney(t.id); setView("list"); setConfirmDeleteTourney(false); }}
+                style={{ flex:2, background:"linear-gradient(135deg,#dc2626,#b91c1c)", border:"none",
+                  borderRadius:12, padding:10, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        )}
+
         <div style={card}>
           <p style={sectionLabel}>PITCH RULES</p>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
@@ -2113,8 +2161,12 @@ function App() {
   }, []);
 
   if (!loaded) return (
-    <div style={{ background:"#080c14", minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <div style={{ color:"rgba(255,255,255,0.3)", fontSize:14 }}>Loading...</div>
+    <div style={{ background:"#080c14", minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16 }}>
+      <div style={{ width:56, height:56, borderRadius:14, background:"linear-gradient(135deg,#1d4ed8,#1e40af)",
+        display:"flex", alignItems:"center", justifyContent:"center", fontSize:28 }}>⚾</div>
+      <div style={{ fontSize:18, fontWeight:800, color:"rgba(255,255,255,0.85)", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>PITCH COUNT TRACKER</div>
+      <div className="spinner" style={{ fontSize:22, marginTop:4 }}>⟳</div>
+      <div style={{ fontSize:12, color:"rgba(255,255,255,0.25)", marginTop:-8 }}>Connecting…</div>
     </div>
   );
 
@@ -2127,17 +2179,23 @@ function App() {
       overflowX:"hidden",
       backgroundImage:"radial-gradient(ellipse at 20% 0%,rgba(30,58,138,0.25) 0%,transparent 60%),radial-gradient(ellipse at 80% 100%,rgba(22,101,52,0.15) 0%,transparent 60%)" }}>
 
-      <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-
       {showData && (
         <DataPanel roster={roster} tournaments={tournaments}
           onImport={importData} onClose={()=>setShowData(false)}/>
       )}
 
+      {syncStatus==="offline" && (
+        <div className="offline-banner" style={{ background:"rgba(244,63,94,0.12)", borderBottom:"1px solid rgba(244,63,94,0.3)",
+          padding:"8px 16px", display:"flex", alignItems:"center", gap:8,
+          fontSize:12, color:"#f87171", fontWeight:600, position:"sticky", top:0, zIndex:30 }}>
+          {I.warning} Offline — changes will sync when reconnected
+        </div>
+      )}
+
       <div style={{ background:"rgba(8,12,20,0.9)", backdropFilter:"blur(16px)",
         borderBottom:"1px solid rgba(255,255,255,0.06)",
         padding:"12px 16px",
-        position:"sticky", top:0, zIndex:20 }}>
+        position:"sticky", top:syncStatus==="offline"?33:0, zIndex:20 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <div style={{ width:32, height:32, borderRadius:9, background:"linear-gradient(135deg,#1d4ed8,#1e40af)",
             display:"flex", alignItems:"center", justifyContent:"center", fontSize:17 }}>⚾</div>
@@ -2155,8 +2213,8 @@ function App() {
             <button onClick={()=>setShowData(true)}
               style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)",
                 borderRadius:8, padding:"5px 8px", color:"rgba(255,255,255,0.5)", cursor:"pointer",
-                fontSize:11, fontWeight:700, letterSpacing:0.5 }}>
-              ⬆⬇
+                fontSize:11, fontWeight:700, letterSpacing:0.5, display:"flex", alignItems:"center", gap:4 }}>
+              {I.download} DATA
             </button>
           </div>
         </div>
@@ -2192,7 +2250,7 @@ function App() {
                 style={{ flex:1, background:"transparent", border:"none", cursor:"pointer",
                   padding:"9px 0 7px", display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
                 <div style={{ color:active?"#38bdf8":"rgba(255,255,255,0.3)", transition:"color 0.2s" }}>{t.icon}</div>
-                <span style={{ fontSize:9, fontWeight:700, letterSpacing:0.5,
+                <span style={{ fontSize:10, fontWeight:700, letterSpacing:0.5,
                   color:active?"#38bdf8":"rgba(255,255,255,0.3)", transition:"color 0.2s" }}>
                   {t.label.toUpperCase()}
                 </span>
