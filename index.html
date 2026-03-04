@@ -184,12 +184,6 @@ function getEligibleDateStr(pitcher) {
   return d ? d.toISOString() : null;
 }
 
-const AGE_GROUPS = [
-  { id:"7-8",   label:"Ages 7–8"   },
-  { id:"9-10",  label:"Ages 9–10"  },
-  { id:"11-12", label:"Ages 11–12" },
-];
-
 function formatDate(iso) {
   if (!iso) return "—";
   const d = new Date(iso + (iso.includes("T") ? "" : "T12:00:00"));
@@ -709,7 +703,7 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
 
       <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 16px" }}>
         <button onClick={onBack} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
-          padding:7, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
+          padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
         <div style={{ flex:1 }}>
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>
             {pitcher.jersey?`#${pitcher.jersey} · `:""}{pitcher.name.toUpperCase()}
@@ -718,7 +712,7 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
         <button onClick={()=>{ setEditName(pitcher.name); setEditJersey(pitcher.jersey||""); setEditOpen(o=>!o); }}
           style={{ background:editOpen?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.07)",
             border:`1px solid ${editOpen?"rgba(56,189,248,0.4)":"rgba(255,255,255,0.1)"}`,
-            borderRadius:10, padding:7, color:editOpen?"#38bdf8":"rgba(255,255,255,0.5)",
+            borderRadius:10, padding:10, color:editOpen?"#38bdf8":"rgba(255,255,255,0.5)",
             cursor:"pointer", display:"flex" }}>{I.edit}</button>
         <Chip status={status} size="lg"/>
       </div>
@@ -1084,7 +1078,13 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
                           : `Eligible ${status==="tomorrow"?"tomorrow":"in 2 days"} (${formatDate(getEligibleDateStr(p))})`}
                       </div>
                     )}
-                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                      {[-5,-1].map(d=>(
+                        <button key={d} onClick={()=>setEntry(p.id,String(Math.max(0,getCount(p.id)+d)))}
+                          style={{ width:36, height:36, borderRadius:"50%", background:"rgba(255,255,255,0.07)",
+                            border:"1px solid rgba(255,255,255,0.12)", color:"rgba(255,255,255,0.8)",
+                            fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0 }}>{d}</button>
+                      ))}
                       <input type="number" min="0" placeholder="0"
                         value={entries[p.id]||""}
                         onChange={e=>setEntry(p.id,e.target.value)}
@@ -1092,7 +1092,14 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
                           fontFamily:"'Bebas Neue',cursive",
                           borderColor:overLimit?"rgba(244,63,94,0.5)":atWarning?"rgba(251,146,60,0.5)":"rgba(255,255,255,0.1)",
                           background:overLimit?"rgba(244,63,94,0.1)":atWarning?"rgba(251,146,60,0.08)":"rgba(255,255,255,0.05)" }}/>
-                      <div style={{ textAlign:"right", minWidth:72 }}>
+                      {[1,5].map(d=>(
+                        <button key={d} onClick={()=>setEntry(p.id,String(getCount(p.id)+d))}
+                          style={{ width:36, height:36, borderRadius:"50%",
+                            background:"linear-gradient(135deg,#2563eb,#1d4ed8)", border:"none",
+                            color:"#fff", fontSize:12, fontWeight:800, cursor:"pointer",
+                            boxShadow:"0 2px 8px rgba(37,99,235,0.35)", flexShrink:0 }}>+{d}</button>
+                      ))}
+                      <div style={{ textAlign:"right", minWidth:64 }}>
                         {count>0 && (
                           <>
                             <div style={{ fontSize:11, color:overLimit?(context==="regular"?"#f43f5e":"#fb923c"):atWarning?"#fb923c":"rgba(255,255,255,0.4)" }}>
@@ -1186,7 +1193,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
 // SCREEN: ELIGIBILITY CHECKER
 // ══════════════════════════════════════════════════════════════════════════════
 function EligibilityScreen({ roster, tournaments }) {
-  const [checkDate, setCheckDate] = useState(addDays(todayStr(),1));
+  const [checkDate, setCheckDate] = useState(todayStr());
   const [viewMode, setViewMode] = useState("regular");
   const selectedTourney = tournaments.find(t=>t.id===viewMode);
 
@@ -1387,7 +1394,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
       <div style={{ padding:"0 16px 110px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 18px" }}>
           <button onClick={()=>setView("list")} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
-            padding:7, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
+            padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>NEW TOURNAMENT</h2>
         </div>
         <div style={card}>
@@ -1453,7 +1460,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
       <div style={{ padding:"0 16px 110px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 18px" }}>
           <button onClick={()=>setView("list")} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
-            padding:7, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
+            padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
           <div style={{ flex:1 }}>
             <h2 style={{ margin:0, fontSize:21, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>
               🏆 {t.name.toUpperCase()}
@@ -1462,7 +1469,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
           </div>
           <button onClick={()=>setConfirmDeleteTourney(true)}
             style={{ background:"rgba(244,63,94,0.1)", border:"1px solid rgba(244,63,94,0.25)", borderRadius:8,
-              padding:7, color:"rgba(244,63,94,0.7)", cursor:"pointer", display:"flex" }}>{I.trash}</button>
+              padding:10, color:"rgba(244,63,94,0.7)", cursor:"pointer", display:"flex" }}>{I.trash}</button>
         </div>
         {confirmDeleteTourney && (
           <div style={{ background:"rgba(244,63,94,0.08)", border:"1px solid rgba(244,63,94,0.25)",
@@ -2243,7 +2250,7 @@ function App() {
                 style={{ flex:1, background:"transparent", border:"none", cursor:"pointer",
                   padding:"9px 0 7px", display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
                 <div style={{ color:active?"#38bdf8":"rgba(255,255,255,0.3)", transition:"color 0.2s" }}>{t.icon}</div>
-                <span style={{ fontSize:9, fontWeight:700, letterSpacing:0.5,
+                <span style={{ fontSize:10, fontWeight:700, letterSpacing:0.5,
                   color:active?"#38bdf8":"rgba(255,255,255,0.3)", transition:"color 0.2s" }}>
                   {t.label.toUpperCase()}
                 </span>
