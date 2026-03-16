@@ -223,8 +223,8 @@ function save(key, val) {
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS = {
   available: { label:"Ready",    color:"#4ade80", bg:"rgba(74,222,128,0.12)",  ring:"rgba(74,222,128,0.35)" },
-  tomorrow:  { label:"Tomorrow", color:"#fb923c", bg:"rgba(251,146,60,0.12)",  ring:"rgba(251,146,60,0.35)" },
-  soon:      { label:"2 Days",   color:"#f97316", bg:"rgba(249,115,22,0.12)",  ring:"rgba(249,115,22,0.35)" },
+  tomorrow:  { label:"Tomorrow", color:"#fbbf24", bg:"rgba(251,191,36,0.12)",  ring:"rgba(251,191,36,0.35)" },
+  soon:      { label:"2 Days",   color:"#fb923c", bg:"rgba(251,146,60,0.12)",  ring:"rgba(251,146,60,0.35)" },
   resting:   { label:"Resting",  color:"#f43f5e", bg:"rgba(244,63,94,0.12)",   ring:"rgba(244,63,94,0.35)"  },
 };
 
@@ -466,7 +466,7 @@ function RosterScreen({ roster, onAdd, onSelect }) {
             <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:3 }}>
               <Chip status={status}/>
               {left>0 && <span style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>{left}d rest</span>}
-              {p.lastPitches>0 && <span style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>{p.lastPitches}p last</span>}
+              {p.lastPitches>0 && <span style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>Last: {p.lastPitches}p on {formatDate(p.lastGameDate)}</span>}
             </div>
             <div style={{ color:"rgba(255,255,255,0.2)" }}>{I.chevron}</div>
           </div>
@@ -485,6 +485,20 @@ function RosterScreen({ roster, onAdd, onSelect }) {
           </div>
         </div>
       )}
+
+      <div style={{ ...card, marginTop:4 }}>
+        <p style={sectionLabel}>CPYL REST REQUIREMENTS</p>
+        {[["0–20 pitches","No rest","#4ade80"],["21–40 pitches","1 day","#a3e635"],["41–60 pitches","2 days","#fb923c"],["61+ pitches","3 days","#f43f5e"]].map(([r,rest,c],i)=>(
+          <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"7px 0",
+            borderBottom:i<3?"1px solid rgba(255,255,255,0.05)":"none", fontSize:13 }}>
+            <span style={{ color:"rgba(255,255,255,0.6)", fontFamily:"'DM Mono',monospace" }}>{r}</span>
+            <span style={{ color:c, fontWeight:600 }}>{rest}</span>
+          </div>
+        ))}
+        <p style={{ margin:"8px 0 0", fontSize:11, color:"rgba(255,255,255,0.3)", display:"flex", alignItems:"center", gap:5 }}>
+          {I.warning} Max 55 — may finish batter already in progress
+        </p>
+      </div>
     </div>
   );
 }
@@ -763,21 +777,6 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
             Last: {formatDate(pitcher.lastGameDate)} · {pitcher.lastPitches}p
           </div>}
         </div>
-      </div>
-
-      {/* Rest rules */}
-      <div style={card}>
-        <p style={sectionLabel}>REST REQUIREMENTS</p>
-        {[["0–20","No rest","#4ade80"],["21–40","1 day","#a3e635"],["41–60","2 days","#fb923c"],["61+","3 days","#f43f5e"]].map(([r,rest,c],i)=>(
-          <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"7px 0",
-            borderBottom:i<3?"1px solid rgba(255,255,255,0.05)":"none", fontSize:13 }}>
-            <span style={{ color:"rgba(255,255,255,0.6)", fontFamily:"'DM Mono',monospace" }}>{r} pitches</span>
-            <span style={{ color:c, fontWeight:600 }}>{rest}</span>
-          </div>
-        ))}
-        <p style={{ margin:"8px 0 0", fontSize:11, color:"rgba(255,255,255,0.3)", display:"flex", alignItems:"center", gap:5 }}>
-          {I.warning} Max 55 — may finish batter already in progress
-        </p>
       </div>
 
       {/* Log new pitches */}
@@ -1708,6 +1707,7 @@ function SeasonHistory({ roster, onEditGame, onDeleteGame }) {
     : allGames.filter(g=>String(g.pitcherId)===String(filterPitcherId));
 
   const totalPitches = filteredGames.reduce((s,g)=>s+g.pitches,0);
+  const distinctGameCount = new Set(filteredGames.map(g=>g.date)).size;
 
   const pitchersWithGames = roster.filter(p=>(p.history||[]).some(h=>h.date.startsWith(displayYear)));
 
@@ -1737,7 +1737,7 @@ function SeasonHistory({ roster, onEditGame, onDeleteGame }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"16px 0 14px" }}>
         <div>
           <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>HISTORY</h2>
-          <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>{filteredGames.length} appearances</p>
+          <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>{distinctGameCount} game{distinctGameCount!==1?"s":""} · {filteredGames.length} appearance{filteredGames.length!==1?"s":""}</p>
         </div>
         {years.length>1 && (
           <select value={displayYear} onChange={e=>setYear(e.target.value)}
@@ -1790,8 +1790,8 @@ function SeasonHistory({ roster, onEditGame, onDeleteGame }) {
           {/* Summary stats */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:12 }}>
             {[["Total",totalPitches+"p","#38bdf8"],
-              ["Games",filteredGames.length,"#4ade80"],
-              ["Tourney",filteredGames.filter(g=>g.isTournament).length,"#f59e0b"]
+              ["Games",distinctGameCount,"#4ade80"],
+              ["Tourney",new Set(filteredGames.filter(g=>g.isTournament).map(g=>g.date)).size,"#f59e0b"]
             ].map(([l,v,c])=>(
               <div key={l} style={{ textAlign:"center", padding:"12px 6px", background:"rgba(255,255,255,0.03)",
                 border:"1px solid rgba(255,255,255,0.07)", borderRadius:12 }}>
@@ -1805,30 +1805,37 @@ function SeasonHistory({ roster, onEditGame, onDeleteGame }) {
           {filterPitcherId==="all" && leaderboard.length>0 && (
             <div style={card}>
               <p style={sectionLabel}>LEADERBOARD</p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr auto auto auto", gap:"5px 12px",
-                fontSize:10, color:"rgba(255,255,255,0.35)", fontWeight:700, letterSpacing:1,
+              {/* Single grid so header and every row share the same column widths */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 54px 48px 54px", columnGap:8,
                 marginBottom:6, paddingBottom:6, borderBottom:"1px solid rgba(255,255,255,0.07)" }}>
-                <span>PLAYER</span><span>G</span><span>AVG</span><span>TOT</span>
+                <span style={{ fontSize:10, color:"rgba(255,255,255,0.35)", fontWeight:700, letterSpacing:1 }}>PLAYER</span>
+                <span style={{ fontSize:10, color:"rgba(255,255,255,0.35)", fontWeight:700, letterSpacing:1, textAlign:"right" }}>GAMES</span>
+                <span style={{ fontSize:10, color:"rgba(255,255,255,0.35)", fontWeight:700, letterSpacing:1, textAlign:"right" }}>AVG</span>
+                <span style={{ fontSize:10, color:"rgba(255,255,255,0.35)", fontWeight:700, letterSpacing:1, textAlign:"right" }}>TOT</span>
               </div>
-              {leaderboard.map((p,i)=>(
-                <div key={p.id} style={{ display:"grid", gridTemplateColumns:"1fr auto auto auto", gap:"5px 12px",
-                  padding:"7px 0", borderBottom:i<leaderboard.length-1?"1px solid rgba(255,255,255,0.04)":"none", alignItems:"center",
-                  cursor:"pointer" }}
-                  onClick={()=>setFilterPitcherId(String(p.id))}>
-                  <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                    <span style={{ width:20, height:20, borderRadius:6,
-                      background:i===0?"rgba(251,191,36,0.2)":i===1?"rgba(156,163,175,0.15)":i===2?"rgba(180,120,60,0.15)":"rgba(255,255,255,0.04)",
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      fontSize:10, fontWeight:800, color:i===0?"#fbbf24":i===1?"#9ca3af":i===2?"#b47a3c":"rgba(255,255,255,0.3)", flexShrink:0 }}>
-                      {i+1}
-                    </span>
-                    <span style={{ fontSize:13, color:"rgba(255,255,255,0.8)", fontWeight:600 }}>{p.jersey?`#${p.jersey} `:""}{p.name}</span>
-                  </div>
-                  <span style={{ fontSize:13, color:"rgba(255,255,255,0.5)", fontFamily:"'DM Mono',monospace", textAlign:"right" }}>{p.games}</span>
-                  <span style={{ fontSize:13, color:"#38bdf8", fontFamily:"'DM Mono',monospace", textAlign:"right" }}>{p.avg}p</span>
-                  <span style={{ fontSize:13, color:"#f8fafc", fontFamily:"'DM Mono',monospace", fontWeight:700, textAlign:"right" }}>{p.total}p</span>
-                </div>
-              ))}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 54px 48px 54px", columnGap:8 }}>
+                {leaderboard.map((p,i)=>(
+                  <React.Fragment key={p.id}>
+                    <div onClick={()=>setFilterPitcherId(String(p.id))}
+                      style={{ display:"flex", alignItems:"center", gap:7, cursor:"pointer",
+                        padding:"7px 0", borderBottom:i<leaderboard.length-1?"1px solid rgba(255,255,255,0.04)":"none" }}>
+                      <span style={{ width:20, height:20, borderRadius:6,
+                        background:i===0?"rgba(251,191,36,0.2)":i===1?"rgba(156,163,175,0.15)":i===2?"rgba(180,120,60,0.15)":"rgba(255,255,255,0.04)",
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        fontSize:10, fontWeight:800, color:i===0?"#fbbf24":i===1?"#9ca3af":i===2?"#b47a3c":"rgba(255,255,255,0.3)", flexShrink:0 }}>
+                        {i+1}
+                      </span>
+                      <span style={{ fontSize:13, color:"rgba(255,255,255,0.8)", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.jersey?`#${p.jersey} `:""}{p.name}</span>
+                    </div>
+                    <span onClick={()=>setFilterPitcherId(String(p.id))} style={{ fontSize:13, color:"rgba(255,255,255,0.5)", fontFamily:"'DM Mono',monospace", textAlign:"right", cursor:"pointer",
+                      padding:"7px 0", borderBottom:i<leaderboard.length-1?"1px solid rgba(255,255,255,0.04)":"none", display:"flex", alignItems:"center", justifyContent:"flex-end" }}>{p.games}</span>
+                    <span onClick={()=>setFilterPitcherId(String(p.id))} style={{ fontSize:13, color:"#38bdf8", fontFamily:"'DM Mono',monospace", textAlign:"right", cursor:"pointer",
+                      padding:"7px 0", borderBottom:i<leaderboard.length-1?"1px solid rgba(255,255,255,0.04)":"none", display:"flex", alignItems:"center", justifyContent:"flex-end" }}>{p.avg}p</span>
+                    <span onClick={()=>setFilterPitcherId(String(p.id))} style={{ fontSize:13, color:"#f8fafc", fontFamily:"'DM Mono',monospace", fontWeight:700, textAlign:"right", cursor:"pointer",
+                      padding:"7px 0", borderBottom:i<leaderboard.length-1?"1px solid rgba(255,255,255,0.04)":"none", display:"flex", alignItems:"center", justifyContent:"flex-end" }}>{p.total}p</span>
+                  </React.Fragment>
+                ))}
+              </div>
               <p style={{ margin:"8px 0 0", fontSize:10, color:"rgba(255,255,255,0.25)" }}>Tap a player to filter their games</p>
             </div>
           )}
@@ -1840,7 +1847,7 @@ function SeasonHistory({ roster, onEditGame, onDeleteGame }) {
                 <div>
                   <div style={{ fontSize:15, fontWeight:800, color:"#38bdf8" }}>{activePitcher.jersey?`#${activePitcher.jersey} `:""}{activePitcher.name}</div>
                   <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)", marginTop:2 }}>
-                    {filteredGames.length} appearances · {totalPitches}p total · avg {filteredGames.length?Math.round(totalPitches/filteredGames.length):0}p/game
+                    {distinctGameCount} game{distinctGameCount!==1?"s":""} · {totalPitches}p total · avg {distinctGameCount?Math.round(totalPitches/distinctGameCount):0}p/game
                   </div>
                 </div>
                 <Chip status={getAvailabilityStatus(activePitcher)} size="lg"/>
