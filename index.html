@@ -383,7 +383,7 @@ function ContextPicker({ context, setContext, tourneyDay, setTourneyDay, tournam
             ))}
           </div>
           <div style={{ marginTop:5, fontSize:11, color:"rgba(255,255,255,0.35)" }}>
-            Day 1 guideline: {selectedTourney.maxDay1}p · Per-game guideline: {selectedTourney.maxPerGame}p · <strong style={{color:"rgba(255,255,255,0.5)"}}>Tournament limit: {selectedTourney.maxTotal}p</strong>
+            Day 1 {selectedTourney.day1IsHardLimit?"limit":"guideline"}: {selectedTourney.maxDay1}p · <strong style={{color:"rgba(255,255,255,0.5)"}}>Tournament limit: {selectedTourney.maxTotal}p</strong>
           </div>
         </div>
       )}
@@ -465,7 +465,7 @@ function RosterScreen({ roster, onAdd, onSelect }) {
             </div>
             <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:3 }}>
               <Chip status={status}/>
-              {left>0 && <span style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>{left}d rest</span>}
+              {left>0 && <span style={{ fontSize:11, color:"rgba(255,255,255,0.55)", fontWeight:600 }}>Eligible {formatDate(getEligibleDateStr(p))}</span>}
               {p.lastPitches>0 && <span style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>Last: {p.lastPitches}p on {formatDate(p.lastGameDate)}</span>}
             </div>
             <div style={{ color:"rgba(255,255,255,0.2)" }}>{I.chevron}</div>
@@ -942,7 +942,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
   function setEntry(id, val) { setEntries(e=>({...e,[id]:val})); }
   function getCount(id) { const v=parseInt(entries[id]||"0",10); return isNaN(v)||v<0?0:v; }
 
-  const pitcherLimit = context==="regular" ? REG_MAX : (selectedTourney?.maxPerGame||REG_MAX);
+  const pitcherLimit = REG_MAX;
 
   function handleSave() {
     const toLog = roster.filter(p=>getCount(p.id)>0);
@@ -1210,8 +1210,8 @@ function EligibilityScreen({ roster, tournaments }) {
     // Exceeded tournament total → ineligible for rest of tournament
     if (stats.total >= tourney.maxTotal) return { eligible:false, reason:`Reached tournament total (${stats.total}/${tourney.maxTotal}p)` };
 
-    // Exceeded Day 1 limit → ineligible for Day 2+ (must stay within Day 1 cap to continue)
-    if (stats.day1 > tourney.maxDay1) return { eligible:false, reason:`Exceeded Day 1 limit (${stats.day1}/${tourney.maxDay1}p)` };
+    // Exceeded Day 1 hard limit → ineligible for rest of tournament (only when configured as hard limit)
+    if (tourney.day1IsHardLimit && stats.day1 > tourney.maxDay1) return { eligible:false, reason:`Exceeded Day 1 limit (${stats.day1}/${tourney.maxDay1}p)` };
 
     // Rest requirement — use last tournament game specifically (not a regular-season carry-over)
     const lastTourneyGame = stats.games.slice().sort((a,b)=>a.date<b.date?1:-1)[0];
@@ -1288,7 +1288,7 @@ function EligibilityScreen({ roster, tournaments }) {
         </div>
         {viewMode!=="regular" && selectedTourney && (
           <div style={{ marginTop:8, fontSize:11, color:"rgba(255,255,255,0.35)" }}>
-            Per-game guideline: {selectedTourney.maxPerGame}p · Day 1 guideline: {selectedTourney.maxDay1}p · <strong style={{color:"rgba(255,255,255,0.5)"}}>Total limit: {selectedTourney.maxTotal}p</strong>
+            Day 1 {selectedTourney.day1IsHardLimit?"limit":"guideline"}: {selectedTourney.maxDay1}p · <strong style={{color:"rgba(255,255,255,0.5)"}}>Total limit: {selectedTourney.maxTotal}p</strong>
           </div>
         )}
       </div>
@@ -1348,11 +1348,16 @@ function EligibilityScreen({ roster, tournaments }) {
                   </div>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:14, fontWeight:700, color:"#f8fafc" }}>{p.name}</div>
-                    <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>
-                      {viewMode!=="regular" && p.tourneyReason
-                        ? p.tourneyReason
-                        : eligStr ? `Eligible ${formatDate(eligStr)} · ${left}d rest` : "Resting"}
-                    </div>
+                    {viewMode!=="regular" && p.tourneyReason ? (
+                      <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>{p.tourneyReason}</div>
+                    ) : eligStr ? (
+                      <>
+                        <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Eligible {formatDate(eligStr)}</div>
+                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>{left}d rest remaining</div>
+                      </>
+                    ) : (
+                      <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>Resting</div>
+                    )}
                   </div>
                   <Chip status={p.status}/>
                 </div>
@@ -1373,18 +1378,20 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
   const [name, setName] = useState("");
   const [days, setDays] = useState("2");
   const [customDays, setCustomDays] = useState("");
-  const [maxPerGame, setMaxPerGame] = useState("55");
   const [maxDay1, setMaxDay1] = useState("55");
   const [maxTotal, setMaxTotal] = useState("115");
+  const [day1IsHardLimit, setDay1IsHardLimit] = useState(false);
   const [confirmDeleteTourney, setConfirmDeleteTourney] = useState(false);
 
   function handleCreate() {
     if (!name.trim()) return;
     const resolvedDays = days==="custom" ? (parseInt(customDays)||1) : (parseInt(days)||2);
     onAddTourney({ id:newId(), name:name.trim(), days:resolvedDays,
-      maxPerGame:parseInt(maxPerGame)||55, maxDay1:parseInt(maxDay1)||55,
-      maxTotal:parseInt(maxTotal)||115, createdAt:todayStr() });
-    setName(""); setDays("2"); setCustomDays(""); setMaxPerGame("55"); setMaxDay1("55"); setMaxTotal("115");
+      maxDay1:parseInt(maxDay1)||55,
+      maxTotal:parseInt(maxTotal)||115,
+      day1IsHardLimit,
+      createdAt:todayStr() });
+    setName(""); setDays("2"); setCustomDays(""); setMaxDay1("55"); setMaxTotal("115"); setDay1IsHardLimit(false);
     setView("list");
   }
 
@@ -1421,18 +1428,37 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
         </div>
         <div style={card}>
           <p style={sectionLabel}>PITCH RULES</p>
-          <p style={{ margin:"0 0 10px", fontSize:11, color:"rgba(255,255,255,0.4)" }}>
-            Per-game and Day 1 limits are <strong style={{color:"rgba(255,255,255,0.6)"}}>guidelines only</strong> — they don't affect eligibility. Only the tournament total limit counts.
+
+          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — DAY 1</label>
+          <input type="number" min="1" placeholder="55" value={maxDay1} onChange={e=>setMaxDay1(e.target.value)}
+            style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center", marginBottom:10 }}/>
+
+          <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>DAY 1 LIMIT TYPE</label>
+          <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+            <button onClick={()=>setDay1IsHardLimit(false)}
+              style={{ flex:1, padding:"10px 8px", borderRadius:10,
+                border:`1px solid ${!day1IsHardLimit?"#4ade80":"rgba(255,255,255,0.1)"}`,
+                background:!day1IsHardLimit?"rgba(74,222,128,0.12)":"rgba(255,255,255,0.04)",
+                color:!day1IsHardLimit?"#4ade80":"rgba(255,255,255,0.5)", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              Guideline only
+            </button>
+            <button onClick={()=>setDay1IsHardLimit(true)}
+              style={{ flex:1, padding:"10px 8px", borderRadius:10,
+                border:`1px solid ${day1IsHardLimit?"#f43f5e":"rgba(255,255,255,0.1)"}`,
+                background:day1IsHardLimit?"rgba(244,63,94,0.12)":"rgba(255,255,255,0.04)",
+                color:day1IsHardLimit?"#f43f5e":"rgba(255,255,255,0.5)", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              Hard limit
+            </button>
+          </div>
+          <p style={{ margin:"0 0 14px", fontSize:11, color:"rgba(255,255,255,0.4)", lineHeight:1.5 }}>
+            {day1IsHardLimit
+              ? <><strong style={{color:"#f43f5e"}}>Hard limit:</strong> exceeding the Day 1 cap makes a pitcher ineligible for the rest of the tournament.</>
+              : <><strong style={{color:"#4ade80"}}>Guideline:</strong> Day 1 limit is informational only and does not affect eligibility.</>}
           </p>
-          {[["MAX PITCHES PER GAME (guideline)",maxPerGame,setMaxPerGame,"55"],
-            ["MAX PITCHES — DAY 1 (guideline)",maxDay1,setMaxDay1,"55"],
-            ["MAX PITCHES — ENTIRE TOURNAMENT (eligibility limit)",maxTotal,setMaxTotal,"115"]].map(([label,val,setter,ph])=>(
-            <div key={label} style={{ marginBottom:12 }}>
-              <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>{label}</label>
-              <input type="number" min="1" placeholder={ph} value={val} onChange={e=>setter(e.target.value)}
-                style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center" }}/>
-            </div>
-          ))}
+
+          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — ENTIRE TOURNAMENT (eligibility limit)</label>
+          <input type="number" min="1" placeholder="115" value={maxTotal} onChange={e=>setMaxTotal(e.target.value)}
+            style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center" }}/>
         </div>
         <button onClick={handleCreate} disabled={!name.trim()}
           style={{ ...primaryBtn, width:"100%", padding:14, opacity:name.trim()?1:0.4,
@@ -1489,14 +1515,19 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
 
         <div style={card}>
           <p style={sectionLabel}>PITCH RULES</p>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
-            {[["Per-game",t.maxPerGame+"p","guideline"],["Day 1",t.maxDay1+"p","guideline"],["Total",t.maxTotal+"p","eligibility limit"]].map(([l,v,sub])=>(
-              <div key={l} style={{ textAlign:"center", padding:"10px 6px", background:"rgba(255,255,255,0.04)", borderRadius:10 }}>
-                <div style={{ fontSize:20, fontWeight:800, color:"#fbbf24", fontFamily:"'Bebas Neue',cursive" }}>{v}</div>
-                <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>{l}</div>
-                <div style={{ fontSize:9, color:"rgba(255,255,255,0.2)", marginTop:1 }}>{sub}</div>
-              </div>
-            ))}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+            <div style={{ textAlign:"center", padding:"10px 6px", background:"rgba(255,255,255,0.04)", borderRadius:10,
+              border:`1px solid ${t.day1IsHardLimit?"rgba(244,63,94,0.25)":"rgba(255,255,255,0.06)"}` }}>
+              <div style={{ fontSize:20, fontWeight:800, color:t.day1IsHardLimit?"#f43f5e":"#fbbf24", fontFamily:"'Bebas Neue',cursive" }}>{t.maxDay1}p</div>
+              <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>Day 1</div>
+              <div style={{ fontSize:9, color:t.day1IsHardLimit?"rgba(244,63,94,0.6)":"rgba(255,255,255,0.2)", marginTop:1 }}>{t.day1IsHardLimit?"hard limit":"guideline"}</div>
+            </div>
+            <div style={{ textAlign:"center", padding:"10px 6px", background:"rgba(255,255,255,0.04)", borderRadius:10,
+              border:"1px solid rgba(251,146,60,0.25)" }}>
+              <div style={{ fontSize:20, fontWeight:800, color:"#fb923c", fontFamily:"'Bebas Neue',cursive" }}>{t.maxTotal}p</div>
+              <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>Total</div>
+              <div style={{ fontSize:9, color:"rgba(255,255,255,0.2)", marginTop:1 }}>eligibility limit</div>
+            </div>
           </div>
         </div>
         {allEntries.length>0 && (
@@ -1513,11 +1544,11 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
         {/* Pitcher eligibility & remaining pitches — ALL roster players */}
         <div style={card}>
           <p style={sectionLabel}>PITCHER STATUS & REMAINING PITCHES</p>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr auto auto", gap:"4px 10px",
+          <div style={{ display:"grid", gridTemplateColumns:t.day1IsHardLimit?"1fr auto auto":"1fr auto", gap:"4px 10px",
             fontSize:9, color:"rgba(255,255,255,0.3)", fontWeight:700, letterSpacing:1,
             paddingBottom:8, marginBottom:8, borderBottom:"1px solid rgba(255,255,255,0.07)" }}>
             <span>PITCHER</span>
-            <span style={{textAlign:"right"}}>DAY 1 REM</span>
+            {t.day1IsHardLimit && <span style={{textAlign:"right"}}>DAY 1 REM</span>}
             <span style={{textAlign:"right"}}>TOTAL REM</span>
           </div>
           {roster.map(p=>{
@@ -1526,7 +1557,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
             const totalUsed = pGames.reduce((s,e)=>s+e.pitches,0);
             const day1Rem = Math.max(0, t.maxDay1 - day1Used);
             const totalRem = Math.max(0, t.maxTotal - totalUsed);
-            const exceededDay1 = day1Used > t.maxDay1;
+            const exceededDay1 = t.day1IsHardLimit && day1Used > t.maxDay1;
             const exceededTotal = totalUsed >= t.maxTotal;
             const ineligible = exceededDay1 || exceededTotal;
             const ineligReason = exceededTotal
@@ -1544,7 +1575,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
               <div key={p.id} style={{ marginBottom:10, paddingBottom:10,
                 borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
                 {/* Row: name + remaining columns */}
-                <div style={{ display:"grid", gridTemplateColumns:"1fr auto auto", gap:"4px 10px", alignItems:"center", marginBottom:6 }}>
+                <div style={{ display:"grid", gridTemplateColumns:t.day1IsHardLimit?"1fr auto auto":"1fr auto", gap:"4px 10px", alignItems:"center", marginBottom:6 }}>
                   <div style={{ minWidth:0 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                       <span style={{ fontSize:13, fontWeight:700, color:nameColor, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -1571,13 +1602,20 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
                         {totalUsed}p used of {t.maxTotal}p total
                       </div>
                     )}
+                    {!ineligible && !t.day1IsHardLimit && day1Used>0 && day1Used>t.maxDay1 && (
+                      <div style={{ fontSize:10, color:"rgba(251,191,36,0.7)", marginTop:1 }}>
+                        ⚠ Day 1: {day1Used}/{t.maxDay1}p (over guideline)
+                      </div>
+                    )}
                   </div>
-                  <div style={{ textAlign:"right", minWidth:56 }}>
-                    <div style={{ fontSize:15, fontWeight:800, color:day1RemColor, fontFamily:"'Bebas Neue',cursive", lineHeight:1 }}>
-                      {exceededDay1 ? "—" : `${day1Rem}p`}
+                  {t.day1IsHardLimit && (
+                    <div style={{ textAlign:"right", minWidth:56 }}>
+                      <div style={{ fontSize:15, fontWeight:800, color:day1RemColor, fontFamily:"'Bebas Neue',cursive", lineHeight:1 }}>
+                        {exceededDay1 ? "—" : `${day1Rem}p`}
+                      </div>
+                      <div style={{ fontSize:9, color:"rgba(255,255,255,0.25)" }}>Day 1</div>
                     </div>
-                    <div style={{ fontSize:9, color:"rgba(255,255,255,0.25)" }}>Day 1</div>
-                  </div>
+                  )}
                   <div style={{ textAlign:"right", minWidth:56 }}>
                     <div style={{ fontSize:15, fontWeight:800, color:totalRemColor, fontFamily:"'Bebas Neue',cursive", lineHeight:1 }}>
                       {exceededTotal ? "0p" : `${totalRem}p`}
@@ -1599,14 +1637,14 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
             <p style={sectionLabel}>GAME LOG BY DAY</p>
             {Array.from({length:t.days},(_,i)=>i+1).map(day=>{
               const dayEntries = byDay[day]||[];
-              const limit = day===1?t.maxDay1:t.maxPerGame;
+              const day1Label = day===1 ? `${t.maxDay1}p ${t.day1IsHardLimit?"hard limit":"guideline"}` : null;
               return (
                 <div key={day} style={{ marginBottom:day<t.days?16:0 }}>
                   <div style={{ fontSize:13, fontWeight:700, color:"#f59e0b", marginBottom:8, display:"flex", alignItems:"center", gap:6 }}>
                     <div style={{ width:22, height:22, borderRadius:6, background:"rgba(245,158,11,0.15)",
                       border:"1px solid rgba(245,158,11,0.3)", display:"flex", alignItems:"center", justifyContent:"center",
                       fontSize:11, fontWeight:800, color:"#f59e0b" }}>{day}</div>
-                    Day {day} <span style={{ fontWeight:400, color:"rgba(255,255,255,0.4)", fontSize:12 }}>(guideline: {limit}p)</span>
+                    Day {day} {day1Label && <span style={{ fontWeight:400, color:"rgba(255,255,255,0.4)", fontSize:12 }}>({day1Label})</span>}
                     {dayEntries.length===0 && <span style={{ color:"rgba(255,255,255,0.3)", fontWeight:400 }}>— No entries</span>}
                   </div>
                   {dayEntries.map((e,i)=>{
@@ -1618,11 +1656,11 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
                           <div style={{ fontSize:13, color:"#f8fafc", fontWeight:600 }}>{e.jersey?`#${e.jersey} `:""}{e.playerName}</div>
                           <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>
                             {formatDate(e.date)}{e.opponent?` · vs ${e.opponent}`:""}
-                            {e.pitches>limit && <span style={{ color:"#fb923c", marginLeft:4 }}>⚠ over guideline</span>}
+                            {day===1 && e.pitches>t.maxDay1 && <span style={{ color:t.day1IsHardLimit?"#f43f5e":"#fb923c", marginLeft:4 }}>⚠ over Day 1 {t.day1IsHardLimit?"limit":"guideline"}</span>}
                           </div>
                         </div>
                         <div style={{ textAlign:"right" }}>
-                          <div style={{ fontSize:17, fontWeight:800, color:e.pitches>limit?"#fb923c":"#38bdf8", fontFamily:"'Bebas Neue',cursive" }}>{e.pitches}p</div>
+                          <div style={{ fontSize:17, fontWeight:800, color:(day===1&&e.pitches>t.maxDay1)?"#fb923c":"#38bdf8", fontFamily:"'Bebas Neue',cursive" }}>{e.pitches}p</div>
                           <div style={{ fontSize:11, color:rd===0?"#4ade80":rd<=2?"#fb923c":"#f43f5e", fontWeight:600 }}>{rd===0?"No rest":`${rd}d`}</div>
                         </div>
                       </div>
@@ -1674,7 +1712,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
             <div style={{ flex:1 }}>
               <div style={{ fontSize:15, fontWeight:700, color:"#f8fafc" }}>{t.name}</div>
               <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)" }}>
-                {t.days} days · {t.maxPerGame}p/game guideline · {t.maxTotal}p total limit
+                {t.days} day{t.days!==1?"s":""} · Day 1: {t.maxDay1}p {t.day1IsHardLimit?"(hard limit)":"(guideline)"} · {t.maxTotal}p total
               </div>
               {entries.length>0 && <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)", marginTop:1 }}>{entries.length} appearances · {players} pitcher{players!==1?"s":""}</div>}
             </div>
