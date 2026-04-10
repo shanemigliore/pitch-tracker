@@ -2322,7 +2322,7 @@ window.__PitchApp = App;
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         const swCode = `
-          const CACHE = 'pitch-tracker-fb-v2';
+          const CACHE = 'pitch-tracker-fb-v3';
           self.addEventListener('install', e => {
             e.waitUntil(caches.open(CACHE).then(c => c.add(location.href)).then(() => self.skipWaiting()));
           });
