@@ -137,7 +137,7 @@ function getEligibleDate(gameDate, pitches, restFn) {
   const days = restFn(pitches);
   if (days === 0) return null;
   const d = new Date(gameDate + "T12:00:00");
-  d.setDate(d.getDate() + days);
+  d.setDate(d.getDate() + days + 1);
   return d;
 }
 
@@ -162,9 +162,11 @@ function getAvailabilityStatus(pitcher, onDate) {
   if (eligMid <= ref) return "available";
   const msLeft = eligMid - ref;
   const daysLeft = Math.ceil(msLeft / 86400000);
-  if (daysLeft <= 1) return "tomorrow";
-  if (daysLeft <= 2) return "soon";
-  return "resting";
+  if (daysLeft <= 1) return "tomorrow";          // eligible tomorrow
+  const restDays = getRegRestDays(pitcher.lastPitches);
+  if (restDays <= 1) return "soon";              // 1 rest day (pitched today)
+  if (restDays <= 2) return "resting2";          // 2 rest days
+  return "resting";                              // 3 rest days
 }
 
 function daysUntilEligible(pitcher, onDate) {
@@ -224,7 +226,8 @@ function save(key, val) {
 const STATUS = {
   available: { label:"Ready",    color:"#4ade80", bg:"rgba(74,222,128,0.12)",  ring:"rgba(74,222,128,0.35)" },
   tomorrow:  { label:"Tomorrow", color:"#fbbf24", bg:"rgba(251,191,36,0.12)",  ring:"rgba(251,191,36,0.35)" },
-  soon:      { label:"2 Days",   color:"#fb923c", bg:"rgba(251,146,60,0.12)",  ring:"rgba(251,146,60,0.35)" },
+  soon:      { label:"1 Day",    color:"#fbbf24", bg:"rgba(251,191,36,0.12)",  ring:"rgba(251,191,36,0.35)" },
+  resting2:  { label:"2 Days",   color:"#fb923c", bg:"rgba(251,146,60,0.12)",  ring:"rgba(251,146,60,0.35)"  },
   resting:   { label:"Resting",  color:"#f43f5e", bg:"rgba(244,63,94,0.12)",   ring:"rgba(244,63,94,0.35)"  },
 };
 
@@ -306,10 +309,10 @@ function PitcherStatusBanner({ pitcher }) {
   return (
     <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
       background:s.bg, border:`1px solid ${s.ring}`, borderRadius:12, marginBottom:12 }}>
-      <span style={{ fontSize:18 }}>{status==="resting" ? "🚫" : "⚠️"}</span>
+      <span style={{ fontSize:18 }}>{status==="resting" || status==="resting2" ? "🚫" : "⚠️"}</span>
       <div style={{ flex:1 }}>
         <div style={{ fontSize:13, fontWeight:700, color:s.color }}>
-          {status==="resting" ? "Not eligible — still resting" : `Eligible ${status==="tomorrow"?"tomorrow":"in 2 days"}`}
+          {status==="resting" || status==="resting2" ? "Not eligible — still resting" : `Eligible ${formatDate(eligStr)}`}
         </div>
         <div style={{ fontSize:11, color:"rgba(255,255,255,0.5)" }}>
           {pitcher.lastPitches}p on {formatDate(pitcher.lastGameDate)} · Eligible: {formatDate(eligStr)}
@@ -400,7 +403,7 @@ function RosterScreen({ roster, onAdd, onSelect }) {
   const [jersey, setJersey] = useState("");
 
   const sorted = [...roster].sort((a,b) => {
-    const order = { available:0, tomorrow:1, soon:2, resting:3 };
+    const order = { available:0, tomorrow:1, soon:2, resting2:3, resting:4 };
     return order[getAvailabilityStatus(a)] - order[getAvailabilityStatus(b)];
   });
   const available = sorted.filter(p=>getAvailabilityStatus(p)==="available").length;
@@ -679,6 +682,7 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
   const s = STATUS[status];
   const eligible = getEligibleDate(pitcher.lastGameDate, pitcher.lastPitches, getRegRestDays);
   const daysLeft = daysUntilEligible(pitcher);
+  const restRemaining = daysLeft - (pitcher.lastGameDate === todayStr() ? 1 : 0);
   const selectedTourney = tournaments.find(t=>t.id===context);
   const seasons = [...new Set((pitcher.history||[]).map(h=>h.date.slice(0,4)))].sort().reverse();
 
@@ -768,7 +772,7 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
         </div>
         <div style={{ flex:1 }}>
           <div style={{ fontSize:15, fontWeight:700, color:s.color, marginBottom:3 }}>
-            {status==="available" ? "✅ Available to pitch" : `⏳ ${daysLeft} day${daysLeft!==1?"s":""} rest remaining`}
+            {status==="available" ? "✅ Available to pitch" : `⏳ ${restRemaining} day${restRemaining!==1?"s":""} rest remaining`}
           </div>
           {eligible && <div style={{ fontSize:13, color:"rgba(255,255,255,0.5)" }}>
             Eligible: <strong style={{ color:"rgba(255,255,255,0.85)" }}>{formatDate(eligible.toISOString())}</strong>
@@ -1072,9 +1076,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
                         background:"rgba(0,0,0,0.3)", borderRadius:8, marginBottom:8,
                         color:s.color, fontSize:12, fontWeight:600 }}>
                         {I.warning}
-                        {status==="resting"
-                          ? `Not eligible — ${daysUntilEligible(p)}d rest remaining`
-                          : `Eligible ${status==="tomorrow"?"tomorrow":"in 2 days"} (${formatDate(getEligibleDateStr(p))})`}
+                        {`Eligible ${formatDate(getEligibleDateStr(p))}`}
                       </div>
                     )}
                     <div style={{ display:"flex", alignItems:"center", gap:5 }}>
@@ -1337,6 +1339,7 @@ function EligibilityScreen({ roster, tournaments }) {
               <p style={{ fontSize:13, color:"rgba(255,255,255,0.3)", margin:0 }}>All pitchers eligible!</p>
             ) : ineligibleList.map(p=>{
               const left = daysUntilEligible(p, checkDate);
+              const restLeft = left - (p.lastGameDate === checkDate ? 1 : 0);
               const eligStr = getEligibleDateStr(p);
               return (
                 <div key={p.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
@@ -1353,7 +1356,7 @@ function EligibilityScreen({ roster, tournaments }) {
                     ) : eligStr ? (
                       <>
                         <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Eligible {formatDate(eligStr)}</div>
-                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>{left}d rest remaining</div>
+                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>{restLeft}d rest remaining</div>
                       </>
                     ) : (
                       <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>Resting</div>
