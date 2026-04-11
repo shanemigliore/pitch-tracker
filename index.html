@@ -1215,14 +1215,6 @@ function EligibilityScreen({ roster, tournaments }) {
     // Exceeded Day 1 hard limit → ineligible for rest of tournament (only when configured as hard limit)
     if (tourney.day1IsHardLimit && stats.day1 > tourney.maxDay1) return { eligible:false, reason:`Exceeded Day 1 limit (${stats.day1}/${tourney.maxDay1}p)` };
 
-    // Rest requirement — use last tournament game specifically (not a regular-season carry-over)
-    const lastTourneyGame = stats.games.slice().sort((a,b)=>a.date<b.date?1:-1)[0];
-    if (lastTourneyGame) {
-      const pitcherForRest = { lastPitches: lastTourneyGame.pitches, lastGameDate: lastTourneyGame.date };
-      const restElig = getEligibleDateOnDate(checkDate, pitcherForRest);
-      if (!restElig) return { eligible:false, reason:`Rest requirement — eligible ${formatDate(getEligibleDateStr(pitcherForRest))}` };
-    }
-
     const remaining = tourney.maxTotal - stats.total;
     return { eligible:true, reason:`${remaining}p remaining in tournament` };
   }
@@ -1233,9 +1225,7 @@ function EligibilityScreen({ roster, tournaments }) {
       return { ...p, eligible: status==="available", status };
     } else {
       const { eligible, reason } = getTourneyEligibility(p, selectedTourney);
-      const restStatus = getAvailabilityStatus(p, checkDate);
-      const finalEligible = eligible && restStatus==="available";
-      return { ...p, eligible:finalEligible, status:finalEligible?"available":"resting", tourneyReason:reason };
+      return { ...p, eligible, status:eligible?"available":"resting", tourneyReason:reason };
     }
   });
 
