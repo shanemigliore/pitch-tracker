@@ -141,50 +141,77 @@ function getEligibleDate(gameDate, pitches, restFn) {
   return d;
 }
 
-function getEligibleDateOnDate(checkDate, pitcher) {
-  if (!pitcher.lastGameDate || pitcher.lastPitches === 0) return true;
-  const eligible = getEligibleDate(pitcher.lastGameDate, pitcher.lastPitches, getRegRestDays);
-  if (!eligible) return true;
-  const eligMid = new Date(eligible); eligMid.setHours(0,0,0,0);
-  const check = new Date(checkDate + "T00:00:00"); check.setHours(0,0,0,0);
-  return check >= eligMid;
+// Post-tournament rest: eligible = max(lastPitchDate + restDays + 1, tournamentEndDate + 1)
+// Accounts for CPYL rule that rest runs from the end of the tournament weekend,
+// and pitchers cannot return to regular season play until after the tournament is over.
+// Uses TOTAL pitches across all tournament games (not just the last game).
+function getTourneyAdjustedRestInfo(pitcher, tournaments) {
+  const history = pitcher.history || [];
+  if (history.length > 0 && tournaments && tournaments.length > 0) {
+    const sorted = [...history].sort((a,b) => a.date < b.date ? 1 : -1);
+    const lastGame = sorted[0];
+    if (lastGame && lastGame.isTournament && lastGame.tournamentId) {
+      const tourney = tournaments.find(t => t.id === lastGame.tournamentId);
+      if (tourney && tourney.startDate) {
+        const tourneyGames = history.filter(h => h.tournamentId === lastGame.tournamentId);
+        const totalPitches = tourneyGames.reduce((s, g) => s + g.pitches, 0);
+        const lastPitchDate = lastGame.date;
+        const endDate = addDays(tourney.startDate, (tourney.days || 1) - 1);
+        const restDays = getRegRestDays(totalPitches);
+        // Day after tournament ends — earliest possible regular-season return
+        const afterTourney = new Date(endDate + "T12:00:00");
+        afterTourney.setDate(afterTourney.getDate() + 1);
+        let eligibleDate;
+        if (restDays === 0) {
+          eligibleDate = afterTourney;
+        } else {
+          const eligFromRest = new Date(lastPitchDate + "T12:00:00");
+          eligFromRest.setDate(eligFromRest.getDate() + restDays + 1);
+          eligibleDate = eligFromRest >= afterTourney ? eligFromRest : afterTourney;
+        }
+        return { isTourney:true, totalPitches, lastPitchDate, endDate, eligibleDate, restDays };
+      }
+    }
+  }
+  // Standard regular-season rest
+  const eligibleDate = getEligibleDate(pitcher.lastGameDate, pitcher.lastPitches, getRegRestDays);
+  return { isTourney:false, totalPitches:pitcher.lastPitches, lastPitchDate:pitcher.lastGameDate, eligibleDate };
 }
 
-function getAvailabilityStatus(pitcher, onDate) {
+function getAvailabilityStatus(pitcher, onDate, tournaments) {
   if (!pitcher.lastPitches || pitcher.lastPitches === 0) return "available";
-  const days = getRegRestDays(pitcher.lastPitches);
-  if (days === 0) return "available";
-  const eligible = getEligibleDate(pitcher.lastGameDate, pitcher.lastPitches, getRegRestDays);
-  if (!eligible) return "available";
-  const eligMid = new Date(eligible); eligMid.setHours(0,0,0,0);
+  const info = getTourneyAdjustedRestInfo(pitcher, tournaments);
+  if (!info.eligibleDate) return "available";
+  const eligMid = new Date(info.eligibleDate); eligMid.setHours(0,0,0,0);
   const ref = onDate ? new Date(onDate + "T00:00:00") : new Date();
   ref.setHours(0,0,0,0);
   if (eligMid <= ref) return "available";
   const msLeft = eligMid - ref;
   const daysLeft = Math.ceil(msLeft / 86400000);
-  if (daysLeft <= 1) return "tomorrow";          // eligible tomorrow
-  const restDays = getRegRestDays(pitcher.lastPitches);
-  if (restDays <= 1) return "soon";              // 1 rest day (pitched today)
-  if (restDays <= 2) return "resting2";          // 2 rest days
-  return "resting";                              // 3 rest days
+  if (daysLeft <= 1) return "tomorrow";
+  const restDays = info.isTourney ? info.restDays : getRegRestDays(pitcher.lastPitches);
+  if (restDays <= 1) return "soon";
+  if (restDays <= 2) return "resting2";
+  return "resting";
 }
 
-function daysUntilEligible(pitcher, onDate) {
+function daysUntilEligible(pitcher, onDate, tournaments) {
   if (!pitcher.lastGameDate || pitcher.lastPitches === 0) return 0;
-  const eligible = getEligibleDate(pitcher.lastGameDate, pitcher.lastPitches, getRegRestDays);
-  if (!eligible) return 0;
-  const eligMid = new Date(eligible); eligMid.setHours(0,0,0,0);
+  const info = getTourneyAdjustedRestInfo(pitcher, tournaments);
+  if (!info.eligibleDate) return 0;
+  const eligMid = new Date(info.eligibleDate); eligMid.setHours(0,0,0,0);
   const ref = onDate ? new Date(onDate + "T00:00:00") : new Date();
   ref.setHours(0,0,0,0);
   const ms = eligMid - ref;
   return Math.max(0, Math.ceil(ms / 86400000));
 }
 
-function getEligibleDateStr(pitcher) {
+function getEligibleDateStr(pitcher, tournaments) {
   if (!pitcher.lastGameDate || !pitcher.lastPitches) return null;
-  const d = getEligibleDate(pitcher.lastGameDate, pitcher.lastPitches, getRegRestDays);
-  return d ? d.toISOString() : null;
+  const info = getTourneyAdjustedRestInfo(pitcher, tournaments);
+  return info.eligibleDate ? info.eligibleDate.toISOString() : null;
 }
+
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -290,10 +317,10 @@ function Chip({ status, size="sm" }) {
   );
 }
 
-function PitcherStatusBanner({ pitcher }) {
-  const status = getAvailabilityStatus(pitcher);
+function PitcherStatusBanner({ pitcher, tournaments }) {
+  const status = getAvailabilityStatus(pitcher, null, tournaments);
   const s = STATUS[status];
-  const eligStr = getEligibleDateStr(pitcher);
+  const eligStr = getEligibleDateStr(pitcher, tournaments);
   if (status === "available") {
     return (
       <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
@@ -397,16 +424,16 @@ function ContextPicker({ context, setContext, tourneyDay, setTourneyDay, tournam
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: ROSTER
 // ══════════════════════════════════════════════════════════════════════════════
-function RosterScreen({ roster, onAdd, onSelect }) {
+function RosterScreen({ roster, onAdd, onSelect, tournaments }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [jersey, setJersey] = useState("");
 
   const sorted = [...roster].sort((a,b) => {
     const order = { available:0, tomorrow:1, soon:2, resting2:3, resting:4 };
-    return order[getAvailabilityStatus(a)] - order[getAvailabilityStatus(b)];
+    return order[getAvailabilityStatus(a, null, tournaments)] - order[getAvailabilityStatus(b, null, tournaments)];
   });
-  const available = sorted.filter(p=>getAvailabilityStatus(p)==="available").length;
+  const available = sorted.filter(p=>getAvailabilityStatus(p, null, tournaments)==="available").length;
 
   function submit() {
     if (!name.trim()) return;
@@ -450,9 +477,9 @@ function RosterScreen({ roster, onAdd, onSelect }) {
           <p style={{ fontSize:13 }}>Tap "Add" to build your roster</p>
         </div>
       ) : sorted.map(p => {
-        const status = getAvailabilityStatus(p);
+        const status = getAvailabilityStatus(p, null, tournaments);
         const s = STATUS[status];
-        const left = daysUntilEligible(p);
+        const left = daysUntilEligible(p, null, tournaments);
         return (
           <div key={p.id} onClick={()=>onSelect(p)}
             style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", marginBottom:8,
@@ -468,7 +495,7 @@ function RosterScreen({ roster, onAdd, onSelect }) {
             </div>
             <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:3 }}>
               <Chip status={status}/>
-              {left>0 && <span style={{ fontSize:11, color:"rgba(255,255,255,0.55)", fontWeight:600 }}>Eligible {formatDate(getEligibleDateStr(p))}</span>}
+              {left>0 && <span style={{ fontSize:11, color:"rgba(255,255,255,0.55)", fontWeight:600 }}>Eligible {formatDate(getEligibleDateStr(p, tournaments))}</span>}
               {p.lastPitches>0 && <span style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>Last: {p.lastPitches}p on {formatDate(p.lastGameDate)}</span>}
             </div>
             <div style={{ color:"rgba(255,255,255,0.2)" }}>{I.chevron}</div>
@@ -678,11 +705,14 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
   const [editJersey, setEditJersey] = useState(pitcher.jersey||"");
   const [confirmRemove, setConfirmRemove] = useState(false);
 
-  const status = getAvailabilityStatus(pitcher);
+  const status = getAvailabilityStatus(pitcher, null, tournaments);
   const s = STATUS[status];
-  const eligible = getEligibleDate(pitcher.lastGameDate, pitcher.lastPitches, getRegRestDays);
-  const daysLeft = daysUntilEligible(pitcher);
-  const restRemaining = daysLeft - (pitcher.lastGameDate === todayStr() ? 1 : 0);
+  const restInfo = getTourneyAdjustedRestInfo(pitcher, tournaments);
+  const eligible = restInfo.eligibleDate;
+  const daysLeft = daysUntilEligible(pitcher, null, tournaments);
+  const restRemaining = restInfo.isTourney
+    ? daysLeft
+    : daysLeft - (pitcher.lastGameDate === todayStr() ? 1 : 0);
   const selectedTourney = tournaments.find(t=>t.id===context);
   const seasons = [...new Set((pitcher.history||[]).map(h=>h.date.slice(0,4)))].sort().reverse();
 
@@ -797,7 +827,7 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
       ) : (
         <div style={{ ...card, border:"1px solid rgba(255,255,255,0.12)" }}>
           <p style={sectionLabel}>LOG PITCHES</p>
-          <PitcherStatusBanner pitcher={pitcher}/>
+          <PitcherStatusBanner pitcher={pitcher} tournaments={tournaments}/>
           <ContextPicker context={context} setContext={setContext}
             tourneyDay={tourneyDay} setTourneyDay={setTourneyDay} tournaments={tournaments}/>
           <div style={{ textAlign:"center", marginBottom:12 }}>
@@ -1048,7 +1078,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
               {roster.length===0 ? (
                 <div style={{ textAlign:"center", padding:"20px 0", color:"rgba(255,255,255,0.3)", fontSize:13 }}>No players on roster yet</div>
               ) : roster.map(p=>{
-                const status = getAvailabilityStatus(p);
+                const status = getAvailabilityStatus(p, null, tournaments);
                 const s = STATUS[status];
                 const count = getCount(p.id);
                 const overLimit = count > pitcherLimit;
@@ -1076,7 +1106,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
                         background:"rgba(0,0,0,0.3)", borderRadius:8, marginBottom:8,
                         color:s.color, fontSize:12, fontWeight:600 }}>
                         {I.warning}
-                        {`Eligible ${formatDate(getEligibleDateStr(p))}`}
+                        {`Eligible ${formatDate(getEligibleDateStr(p, tournaments))}`}
                       </div>
                     )}
                     <div style={{ display:"flex", alignItems:"center", gap:5 }}>
@@ -1221,7 +1251,7 @@ function EligibilityScreen({ roster, tournaments }) {
 
   const allPitchers = [...roster].map(p => {
     if (viewMode==="regular") {
-      const status = getAvailabilityStatus(p, checkDate);
+      const status = getAvailabilityStatus(p, checkDate, tournaments);
       return { ...p, eligible: status==="available", status };
     } else {
       const { eligible, reason } = getTourneyEligibility(p, selectedTourney);
@@ -1328,9 +1358,9 @@ function EligibilityScreen({ roster, tournaments }) {
             {ineligibleList.length===0 ? (
               <p style={{ fontSize:13, color:"rgba(255,255,255,0.3)", margin:0 }}>All pitchers eligible!</p>
             ) : ineligibleList.map(p=>{
-              const left = daysUntilEligible(p, checkDate);
+              const left = daysUntilEligible(p, checkDate, tournaments);
               const restLeft = left - (p.lastGameDate === checkDate ? 1 : 0);
-              const eligStr = getEligibleDateStr(p);
+              const eligStr = getEligibleDateStr(p, tournaments);
               return (
                 <div key={p.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
                   borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
@@ -1369,6 +1399,7 @@ function EligibilityScreen({ roster, tournaments }) {
 function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }) {
   const [view, setView] = useState("list");
   const [name, setName] = useState("");
+  const [startDate, setStartDate] = useState(todayStr());
   const [days, setDays] = useState("2");
   const [customDays, setCustomDays] = useState("");
   const [maxDay1, setMaxDay1] = useState("55");
@@ -1379,12 +1410,12 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
   function handleCreate() {
     if (!name.trim()) return;
     const resolvedDays = days==="custom" ? (parseInt(customDays)||1) : (parseInt(days)||2);
-    onAddTourney({ id:newId(), name:name.trim(), days:resolvedDays,
+    onAddTourney({ id:newId(), name:name.trim(), startDate, days:resolvedDays,
       maxDay1:parseInt(maxDay1)||55,
       maxTotal:parseInt(maxTotal)||115,
       day1IsHardLimit,
       createdAt:todayStr() });
-    setName(""); setDays("2"); setCustomDays(""); setMaxDay1("55"); setMaxTotal("115"); setDay1IsHardLimit(false);
+    setName(""); setStartDate(todayStr()); setDays("2"); setCustomDays(""); setMaxDay1("55"); setMaxTotal("115"); setDay1IsHardLimit(false);
     setView("list");
   }
 
@@ -1400,6 +1431,9 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
           <p style={sectionLabel}>DETAILS</p>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NAME</label>
           <input placeholder="e.g. District 5 Tournament" value={name} onChange={e=>setName(e.target.value)}
+            style={{ ...inputStyle, marginBottom:10 }}/>
+          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>START DATE</label>
+          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}
             style={{ ...inputStyle, marginBottom:10 }}/>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NUMBER OF DAYS</label>
           <div style={{ display:"flex", gap:8, marginBottom:days==="custom"?10:0 }}>
@@ -1720,7 +1754,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: SEASON HISTORY — with pitcher filter
 // ══════════════════════════════════════════════════════════════════════════════
-function SeasonHistory({ roster, onEditGame, onDeleteGame }) {
+function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
   const [year, setYear] = useState(new Date().getFullYear().toString());
   const [filterPitcherId, setFilterPitcherId] = useState("all");
   const [editingEntry, setEditingEntry] = useState(null);
@@ -1881,7 +1915,7 @@ function SeasonHistory({ roster, onEditGame, onDeleteGame }) {
                     {distinctGameCount} game{distinctGameCount!==1?"s":""} · {totalPitches}p total · avg {distinctGameCount?Math.round(totalPitches/distinctGameCount):0}p/game
                   </div>
                 </div>
-                <Chip status={getAvailabilityStatus(activePitcher)} size="lg"/>
+                <Chip status={getAvailabilityStatus(activePitcher, null, tournaments)} size="lg"/>
               </div>
             </div>
           )}
@@ -2208,8 +2242,8 @@ function App() {
     </div>
   );
 
-  const availableCount = roster.filter(p=>getAvailabilityStatus(p)==="available").length;
-  const restingCount = roster.filter(p=>getAvailabilityStatus(p)!=="available").length;
+  const availableCount = roster.filter(p=>getAvailabilityStatus(p, null, tournaments)==="available").length;
+  const restingCount = roster.filter(p=>getAvailabilityStatus(p, null, tournaments)!=="available").length;
 
   return (
     <div style={{ background:"#080c14", minHeight:"100vh", maxWidth:430, margin:"0 auto",
@@ -2264,7 +2298,7 @@ function App() {
             onLog={logGame} onDelete={deletePlayer} tournaments={tournaments}
             onEditGame={editGame} onDeleteGame={deleteGame} onEditPlayer={editPlayer}/>
         ) : tab==="roster" ? (
-          <RosterScreen roster={roster} onAdd={addPlayer} onSelect={p=>setSelectedPlayer(p)} onEditPlayer={editPlayer}/>
+          <RosterScreen roster={roster} tournaments={tournaments} onAdd={addPlayer} onSelect={p=>setSelectedPlayer(p)} onEditPlayer={editPlayer}/>
         ) : tab==="gamelog" ? (
           <GameLogScreen roster={roster} onLogMultiple={logMultiple} tournaments={tournaments}
             onEditGame={editGame} onDeleteGame={deleteGame}/>
@@ -2273,7 +2307,7 @@ function App() {
         ) : tab==="tournament" ? (
           <TournamentScreen roster={roster} tournaments={tournaments} onAddTourney={addTourney} onDeleteTourney={deleteTourney}/>
         ) : (
-          <SeasonHistory roster={roster} onEditGame={editGame} onDeleteGame={deleteGame}/>
+          <SeasonHistory roster={roster} tournaments={tournaments} onEditGame={editGame} onDeleteGame={deleteGame}/>
         )}
       </div>
 
