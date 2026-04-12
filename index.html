@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Pitch Tracker"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#080c14"/>
+  <meta name="app-version" content="v1.1"/>
   <title>Pitch Count Tracker</title>
   <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22Pitch Count Tracker%22,%22short_name%22:%22Pitches%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%23080c14%22,%22theme_color%22:%22%23080c14%22,%22orientation%22:%22portrait%22,%22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2722%27 fill=%27%231d4ed8%27/%3E%3Ctext y=%27.9em%27 font-size=%2772%27 text-anchor=%27middle%27 x=%2750%27%3E%E2%9A%BE%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]}"/>
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%231d4ed8'/><text y='.9em' font-size='72' text-anchor='middle' x='50'>&#x26BE;</text></svg>"/>
@@ -2447,10 +2448,32 @@ window.__PitchApp = App;
   <!-- Service worker for offline shell -->
 
   <script>
+    // Auto-update: when app-version meta changes (new deploy), clear all SW caches and reload once
+    (function() {
+      const VERSION_KEY = 'pt_app_version';
+      const CURRENT = document.querySelector('meta[name="app-version"]')?.content || '';
+      const stored = localStorage.getItem(VERSION_KEY);
+      if (CURRENT) {
+        if (stored && stored !== CURRENT) {
+          localStorage.setItem(VERSION_KEY, CURRENT);
+          if ('caches' in window) {
+            caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
+                         .then(() => location.reload(true));
+          } else {
+            location.reload(true);
+          }
+        } else {
+          localStorage.setItem(VERSION_KEY, CURRENT);
+        }
+      }
+    })();
+  </script>
+
+  <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         const swCode = `
-          const CACHE = 'pitch-tracker-fb-v4';
+          const CACHE = 'pitch-tracker-fb-v5';
           self.addEventListener('install', e => {
             e.waitUntil(caches.open(CACHE).then(c => c.add(location.href)).then(() => self.skipWaiting()));
           });
