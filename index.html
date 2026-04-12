@@ -123,6 +123,9 @@
     const { useState, useEffect, useCallback, useRef } = React;
 
 
+// ─── App version (bump minor for each PR) ────────────────────────────────────
+const APP_VERSION = "v1.0";
+
 // ─── Regular Season Rules ────────────────────────────────────────────────────
 const REG_MAX = 55;
 
@@ -1396,8 +1399,9 @@ function EligibilityScreen({ roster, tournaments }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: TOURNAMENT MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }) {
+function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, onUpdateTourney }) {
   const [view, setView] = useState("list");
+  const [editId, setEditId] = useState(null);
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState(todayStr());
   const [days, setDays] = useState("2");
@@ -1406,6 +1410,19 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
   const [maxTotal, setMaxTotal] = useState("115");
   const [day1IsHardLimit, setDay1IsHardLimit] = useState(false);
   const [confirmDeleteTourney, setConfirmDeleteTourney] = useState(false);
+
+  function openEdit(t) {
+    setEditId(t.id);
+    setName(t.name);
+    setStartDate(t.startDate || todayStr());
+    const d = t.days || 2;
+    if (d === 1 || d === 2) { setDays(String(d)); setCustomDays(""); }
+    else { setDays("custom"); setCustomDays(String(d)); }
+    setMaxDay1(String(t.maxDay1 || 55));
+    setMaxTotal(String(t.maxTotal || 115));
+    setDay1IsHardLimit(!!t.day1IsHardLimit);
+    setView("edit");
+  }
 
   function handleCreate() {
     if (!name.trim()) return;
@@ -1417,6 +1434,18 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
       createdAt:todayStr() });
     setName(""); setStartDate(todayStr()); setDays("2"); setCustomDays(""); setMaxDay1("55"); setMaxTotal("115"); setDay1IsHardLimit(false);
     setView("list");
+  }
+
+  function handleSaveEdit() {
+    if (!name.trim() || !editId) return;
+    const resolvedDays = days==="custom" ? (parseInt(customDays)||1) : (parseInt(days)||2);
+    const original = tournaments.find(t=>t.id===editId);
+    onUpdateTourney({ ...original, name:name.trim(), startDate, days:resolvedDays,
+      maxDay1:parseInt(maxDay1)||55,
+      maxTotal:parseInt(maxTotal)||115,
+      day1IsHardLimit });
+    setEditId(null);
+    setView(editId);
   }
 
   if (view==="create") {
@@ -1497,6 +1526,81 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
     );
   }
 
+  if (view==="edit") {
+    return (
+      <div style={{ padding:"0 16px 110px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 18px" }}>
+          <button onClick={()=>{ setEditId(null); setView(editId); }} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
+            padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
+          <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>EDIT TOURNAMENT</h2>
+        </div>
+        <div style={card}>
+          <p style={sectionLabel}>DETAILS</p>
+          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NAME</label>
+          <input placeholder="e.g. District 5 Tournament" value={name} onChange={e=>setName(e.target.value)}
+            style={{ ...inputStyle, marginBottom:10 }}/>
+          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>START DATE</label>
+          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}
+            style={{ ...inputStyle, marginBottom:10 }}/>
+          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NUMBER OF DAYS</label>
+          <div style={{ display:"flex", gap:8, marginBottom:days==="custom"?10:0 }}>
+            {[["1","1"],["2","2"],["custom","Custom"]].map(([val,label])=>(
+              <button key={val} onClick={()=>setDays(val)}
+                style={{ flex:1, height:42, borderRadius:10,
+                  border:`1px solid ${days===val?"#38bdf8":"rgba(255,255,255,0.1)"}`,
+                  background:days===val?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
+                  color:days===val?"#38bdf8":"rgba(255,255,255,0.6)", fontSize:14, fontWeight:700, cursor:"pointer",
+                  fontFamily:"'Bebas Neue',cursive" }}>{label}</button>
+            ))}
+          </div>
+          {days==="custom" && (
+            <input type="number" min="1" max="14" placeholder="Number of days"
+              value={customDays} onChange={e=>setCustomDays(e.target.value)}
+              style={{ ...inputStyle, textAlign:"center", fontSize:18, fontWeight:800,
+                fontFamily:"'Bebas Neue',cursive" }}/>
+          )}
+        </div>
+        <div style={card}>
+          <p style={sectionLabel}>PITCH RULES</p>
+          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — DAY 1</label>
+          <input type="number" min="1" placeholder="55" value={maxDay1} onChange={e=>setMaxDay1(e.target.value)}
+            style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center", marginBottom:10 }}/>
+          <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>DAY 1 LIMIT TYPE</label>
+          <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+            <button onClick={()=>setDay1IsHardLimit(false)}
+              style={{ flex:1, padding:"10px 8px", borderRadius:10,
+                border:`1px solid ${!day1IsHardLimit?"#4ade80":"rgba(255,255,255,0.1)"}`,
+                background:!day1IsHardLimit?"rgba(74,222,128,0.12)":"rgba(255,255,255,0.04)",
+                color:!day1IsHardLimit?"#4ade80":"rgba(255,255,255,0.5)", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              Guideline only
+            </button>
+            <button onClick={()=>setDay1IsHardLimit(true)}
+              style={{ flex:1, padding:"10px 8px", borderRadius:10,
+                border:`1px solid ${day1IsHardLimit?"#f43f5e":"rgba(255,255,255,0.1)"}`,
+                background:day1IsHardLimit?"rgba(244,63,94,0.12)":"rgba(255,255,255,0.04)",
+                color:day1IsHardLimit?"#f43f5e":"rgba(255,255,255,0.5)", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              Hard limit
+            </button>
+          </div>
+          <p style={{ margin:"0 0 14px", fontSize:11, color:"rgba(255,255,255,0.4)", lineHeight:1.5 }}>
+            {day1IsHardLimit
+              ? <><strong style={{color:"#f43f5e"}}>Hard limit:</strong> exceeding the Day 1 cap makes a pitcher ineligible for the rest of the tournament.</>
+              : <><strong style={{color:"#4ade80"}}>Guideline:</strong> Day 1 limit is informational only and does not affect eligibility.</>}
+          </p>
+          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — ENTIRE TOURNAMENT (eligibility limit)</label>
+          <input type="number" min="1" placeholder="115" value={maxTotal} onChange={e=>setMaxTotal(e.target.value)}
+            style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center" }}/>
+        </div>
+        <button onClick={handleSaveEdit} disabled={!name.trim()}
+          style={{ ...primaryBtn, width:"100%", padding:14, opacity:name.trim()?1:0.4,
+            background:"linear-gradient(135deg,#1d4ed8,#1e40af)",
+            boxShadow:"0 4px 20px rgba(29,78,216,0.35)" }}>
+          Save Changes
+        </button>
+      </div>
+    );
+  }
+
   if (view!=="list") {
     const t = tournaments.find(t=>t.id===view);
     if (!t) { return null; }
@@ -1519,6 +1623,9 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney }
             </h2>
             <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>{t.days}-day tournament</div>
           </div>
+          <button onClick={()=>openEdit(t)}
+            style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8,
+              padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.edit}</button>
           <button onClick={()=>setConfirmDeleteTourney(true)}
             style={{ background:"rgba(244,63,94,0.1)", border:"1px solid rgba(244,63,94,0.25)", borderRadius:8,
               padding:10, color:"rgba(244,63,94,0.7)", cursor:"pointer", display:"flex" }}>{I.trash}</button>
@@ -2170,6 +2277,7 @@ function App() {
   }, []);
   const addTourney = useCallback(t=>setTournaments(ts=>[...ts,t]), []);
   const deleteTourney = useCallback(id=>setTournaments(ts=>ts.filter(t=>t.id!==id)), []);
+  const updateTourney = useCallback(t=>setTournaments(ts=>ts.map(x=>x.id===t.id?t:x)), []);
 
   const importData = useCallback((newRoster, newTournaments) => {
     setRoster(newRoster);
@@ -2273,7 +2381,7 @@ function App() {
             display:"flex", alignItems:"center", justifyContent:"center", fontSize:17 }}>⚾</div>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:15, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2, lineHeight:1 }}>PITCH COUNT TRACKER</div>
-            <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)", letterSpacing:0.5 }}>Minor/Majors · 55 pitch limit</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)", letterSpacing:0.5 }}>{APP_VERSION}</div>
           </div>
           <div style={{ display:"flex", gap:5, alignItems:"center" }}>
             {availableCount>0 && <div style={{ padding:"3px 8px", borderRadius:8, background:"rgba(74,222,128,0.15)", fontSize:11, fontWeight:700, color:"#4ade80" }}>{availableCount}✓</div>}
@@ -2305,7 +2413,7 @@ function App() {
         ) : tab==="eligibility" ? (
           <EligibilityScreen roster={roster} tournaments={tournaments}/>
         ) : tab==="tournament" ? (
-          <TournamentScreen roster={roster} tournaments={tournaments} onAddTourney={addTourney} onDeleteTourney={deleteTourney}/>
+          <TournamentScreen roster={roster} tournaments={tournaments} onAddTourney={addTourney} onDeleteTourney={deleteTourney} onUpdateTourney={updateTourney}/>
         ) : (
           <SeasonHistory roster={roster} tournaments={tournaments} onEditGame={editGame} onDeleteGame={deleteGame}/>
         )}
