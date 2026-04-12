@@ -124,7 +124,7 @@
 
 
 // ─── App version (bump minor for each PR) ────────────────────────────────────
-const APP_VERSION = "v1.0";
+const APP_VERSION = "v1.1";
 
 // ─── Regular Season Rules ────────────────────────────────────────────────────
 const REG_MAX = 55;
@@ -144,10 +144,10 @@ function getEligibleDate(gameDate, pitches, restFn) {
   return d;
 }
 
-// Post-tournament rest: eligible = max(lastPitchDate + restDays + 1, tournamentEndDate + 1)
-// Accounts for CPYL rule that rest runs from the end of the tournament weekend,
-// and pitchers cannot return to regular season play until after the tournament is over.
-// Uses TOTAL pitches across all tournament games (not just the last game).
+// Post-tournament rest (CPYL rules):
+// - First rest day = day after last pitch date in tournament
+// - Total tournament pitches determine rest requirement (same thresholds as regular season)
+// - ≤20 total pitches = no rest required (eligible immediately)
 function getTourneyAdjustedRestInfo(pitcher, tournaments) {
   const history = pitcher.history || [];
   if (history.length > 0 && tournaments && tournaments.length > 0) {
@@ -155,24 +155,17 @@ function getTourneyAdjustedRestInfo(pitcher, tournaments) {
     const lastGame = sorted[0];
     if (lastGame && lastGame.isTournament && lastGame.tournamentId) {
       const tourney = tournaments.find(t => t.id === lastGame.tournamentId);
-      if (tourney && tourney.startDate) {
+      if (tourney) {
         const tourneyGames = history.filter(h => h.tournamentId === lastGame.tournamentId);
         const totalPitches = tourneyGames.reduce((s, g) => s + g.pitches, 0);
         const lastPitchDate = lastGame.date;
-        const endDate = addDays(tourney.startDate, (tourney.days || 1) - 1);
         const restDays = getRegRestDays(totalPitches);
-        // Day after tournament ends — earliest possible regular-season return
-        const afterTourney = new Date(endDate + "T12:00:00");
-        afterTourney.setDate(afterTourney.getDate() + 1);
-        let eligibleDate;
-        if (restDays === 0) {
-          eligibleDate = afterTourney;
-        } else {
-          const eligFromRest = new Date(lastPitchDate + "T12:00:00");
-          eligFromRest.setDate(eligFromRest.getDate() + restDays + 1);
-          eligibleDate = eligFromRest >= afterTourney ? eligFromRest : afterTourney;
+        let eligibleDate = null;
+        if (restDays > 0) {
+          eligibleDate = new Date(lastPitchDate + "T12:00:00");
+          eligibleDate.setDate(eligibleDate.getDate() + restDays + 1);
         }
-        return { isTourney:true, totalPitches, lastPitchDate, endDate, eligibleDate, restDays };
+        return { isTourney:true, totalPitches, lastPitchDate, eligibleDate, restDays };
       }
     }
   }
