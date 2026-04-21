@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Pitch Tracker"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#080c14"/>
-  <meta name="app-version" content="v1.3"/>
+  <meta name="app-version" content="v1.4"/>
   <title>Pitch Count Tracker</title>
   <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22Pitch Count Tracker%22,%22short_name%22:%22Pitches%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%23080c14%22,%22theme_color%22:%22%23080c14%22,%22orientation%22:%22portrait%22,%22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2722%27 fill=%27%231d4ed8%27/%3E%3Ctext y=%27.9em%27 font-size=%2772%27 text-anchor=%27middle%27 x=%2750%27%3E%E2%9A%BE%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]}"/>
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%231d4ed8'/><text y='.9em' font-size='72' text-anchor='middle' x='50'>&#x26BE;</text></svg>"/>
@@ -145,7 +145,7 @@
 
 
 // ─── App version (bump minor for each PR) ────────────────────────────────────
-const APP_VERSION = "v1.3";
+const APP_VERSION = "v1.4";
 
 // ─── Regular Season Rules ────────────────────────────────────────────────────
 const REG_MAX = 55;
@@ -384,7 +384,13 @@ function RadialArc({ value, max, size=120, strokeW=9, color="#38bdf8" }) {
 }
 
 // ─── Context picker (reused in multiple screens) ──────────────────────────────
-function ContextPicker({ context, setContext, tourneyDay, setTourneyDay, tournaments }) {
+function ContextPicker({ context, setContext, tourneyDay, setTourneyDay, tournaments, gameDate }) {
+  // Only show tournaments that are still active on the selected game date
+  const activeTournaments = tournaments.filter(t => {
+    if (!t.startDate) return true; // no start date set — always show
+    const endDate = addDays(t.startDate, (t.days || 1) - 1);
+    return (gameDate || todayStr()) <= endDate;
+  });
   const selectedTourney = tournaments.find(t=>t.id===context);
   return (
     <>
@@ -398,7 +404,7 @@ function ContextPicker({ context, setContext, tourneyDay, setTourneyDay, tournam
               color:context==="regular"?"#60a5fa":"rgba(255,255,255,0.6)", fontSize:13, fontWeight:600, cursor:"pointer" }}>
             ⚾ Regular Season
           </button>
-          {tournaments.map(t=>(
+          {activeTournaments.map(t=>(
             <button key={t.id} onClick={()=>{setContext(t.id); if(setTourneyDay) setTourneyDay(1);}}
               style={{ flex:1, minWidth:80, padding:"9px 10px", borderRadius:10,
                 border:`1px solid ${context===t.id?"#f59e0b":"rgba(255,255,255,0.1)"}`,
@@ -407,7 +413,7 @@ function ContextPicker({ context, setContext, tourneyDay, setTourneyDay, tournam
               🏆 {t.name}
             </button>
           ))}
-          {tournaments.length===0 && (
+          {activeTournaments.length===0 && (
             <div style={{ flex:1, padding:"9px 10px", borderRadius:10, border:"1px solid rgba(255,255,255,0.06)",
               background:"rgba(255,255,255,0.02)", color:"rgba(255,255,255,0.3)", fontSize:12, textAlign:"center" }}>
               No tournaments configured
@@ -446,10 +452,8 @@ function RosterScreen({ roster, onAdd, onSelect, tournaments }) {
   const [name, setName] = useState("");
   const [jersey, setJersey] = useState("");
 
-  const sorted = [...roster].sort((a,b) => {
-    const order = { available:0, tomorrow:1, soon:2, resting2:3, resting:4 };
-    return order[getAvailabilityStatus(a, null, tournaments)] - order[getAvailabilityStatus(b, null, tournaments)];
-  });
+  const totalPitches = p => (p.history || []).reduce((s, g) => s + (g.pitches || 0), 0);
+  const sorted = [...roster].sort((a, b) => totalPitches(b) - totalPitches(a));
   const available = sorted.filter(p=>getAvailabilityStatus(p, null, tournaments)==="available").length;
 
   function submit() {
@@ -655,7 +659,7 @@ function EditGameModal({ entry, pitcherName, roster, tournaments, onSave, onDele
 
         {/* Game type */}
         <ContextPicker context={context} setContext={setContext}
-          tourneyDay={tourneyDay} setTourneyDay={setTourneyDay} tournaments={tournaments}/>
+          tourneyDay={tourneyDay} setTourneyDay={setTourneyDay} tournaments={tournaments} gameDate={gameDate}/>
 
         {/* Date */}
         <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME DATE</label>
@@ -846,7 +850,7 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
           <p style={sectionLabel}>LOG PITCHES</p>
           <PitcherStatusBanner pitcher={pitcher} tournaments={tournaments}/>
           <ContextPicker context={context} setContext={setContext}
-            tourneyDay={tourneyDay} setTourneyDay={setTourneyDay} tournaments={tournaments}/>
+            tourneyDay={tourneyDay} setTourneyDay={setTourneyDay} tournaments={tournaments} gameDate={gameDate}/>
           <div style={{ textAlign:"center", marginBottom:12 }}>
             <div style={{ position:"relative", display:"inline-block" }}>
               <RadialArc value={pitches} max={REG_MAX} size={120} strokeW={9} color="#38bdf8"/>
@@ -1081,7 +1085,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
             <div style={card}>
               <p style={sectionLabel}>GAME DETAILS</p>
               <ContextPicker context={context} setContext={setContext}
-                tourneyDay={tourneyDay} setTourneyDay={setTourneyDay} tournaments={tournaments}/>
+                tourneyDay={tourneyDay} setTourneyDay={setTourneyDay} tournaments={tournaments} gameDate={gameDate}/>
               <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME DATE</label>
               <input type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)}
                 style={{ ...inputStyle, marginBottom:10 }}/>
