@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <path id="topArc" d="M 18,100 A 82,82 0 0,1 182,100"/>
+    <path id="botArc" d="M 32,130 A 80,80 0 0,0 168,130"/>
+    <clipPath id="inner"><circle cx="100" cy="100" r="82"/></clipPath>
+  </defs>
+
+  <!-- Blue outer ring -->
+  <circle cx="100" cy="100" r="100" fill="#90c4e4"/>
+  <!-- Black inner circle -->
+  <circle cx="100" cy="100" r="83" fill="#0d0d0d"/>
+  <!-- Thin black divider -->
+  <circle cx="100" cy="100" r="83" fill="none" stroke="#000" stroke-width="1.5"/>
+
+  <!-- PRIME curved top text -->
+  <text font-size="17" font-weight="900" font-family="Arial Black,Impact,sans-serif"
+        fill="#90c4e4" letter-spacing="6">
+    <textPath href="#topArc" startOffset="50%" text-anchor="middle">PRIME</textPath>
+  </text>
+
+  <!-- BASEBALL curved bottom text -->
+  <text font-size="14" font-weight="900" font-family="Arial Black,Impact,sans-serif"
+        fill="#90c4e4" letter-spacing="3.5">
+    <textPath href="#botArc" startOffset="50%" text-anchor="middle">BASEBALL</textPath>
+  </text>
+
+  <!-- Crown body -->
+  <g clip-path="url(#inner)">
+    <polygon points="63,74 70,50 83,66 100,43 117,66 130,50 137,74 130,78 70,78"
+             fill="#90c4e4"/>
+    <!-- Crown band -->
+    <rect x="65" y="74" width="70" height="9" rx="2" fill="#90c4e4"/>
+    <!-- Stars row -->
+    <text x="100" y="64" text-anchor="middle" font-size="9" fill="#0d0d0d"
+          font-family="serif">★  ★  ★</text>
+
+    <!-- P shadow (gray, offset) -->
+    <text x="103" y="153" text-anchor="middle" font-family="Arial Black,Impact,sans-serif"
+          font-size="92" font-weight="900" fill="#555">P</text>
+    <!-- P white -->
+    <text x="100" y="150" text-anchor="middle" font-family="Arial Black,Impact,sans-serif"
+          font-size="92" font-weight="900" fill="#fff">P</text>
+
+    <!-- Swoosh ellipse around P -->
+    <ellipse cx="100" cy="140" rx="40" ry="13" fill="none"
+             stroke="#90c4e4" stroke-width="4" opacity="0.55"/>
+
+    <!-- Dot + CP -->
+    <circle cx="36" cy="127" r="3.5" fill="#90c4e4"/>
+    <text x="44" y="131" font-family="Arial,sans-serif" font-size="11.5"
+          font-weight="800" fill="#90c4e4">CP</text>
+
+    <!-- TX + Dot -->
+    <text x="150" y="131" font-family="Arial,sans-serif" font-size="11.5"
+          font-weight="800" fill="#90c4e4">TX</text>
+    <circle cx="164" cy="127" r="3.5" fill="#90c4e4"/>
+  </g>
+</svg>
