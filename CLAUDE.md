@@ -22,36 +22,59 @@ Only increment the minor version (after the `.`) unless explicitly told to chang
 
 ## App Architecture
 
-**Static, multi-file, still zero build step/npm.** `index.html` is the shell; all
-components/screens still live in its one `<script type="text/babel">` block.
-Pure logic, Firebase glue, and shared UI tokens were split out into small
-`lib/` files (Phase 1 of a token/loading-speed optimization) so both the
-browser and Claude/tests can load just what they need instead of one 1.6MB
-file with embedded images:
+**Static, multi-file, still zero build step/npm.** `index.html` is now just a
+small shell (~230 lines: `<head>`, a head-shell script, 12+3 `<script>` tags,
+service worker). Pure logic, Firebase glue, shared UI tokens, and every
+screen/modal component were split out of what used to be one 1.65MB file
+(Phase 1: `lib/`; Phase 2: `components/`) so both the browser and Claude/tests
+can load just what they need:
 
 | File | Contents | Loaded as |
 |------|----------|-----------|
-| `index.html` | `<head>`, all screen/modal components, `App`, bootstrap render | shell + `<script type="text/babel">` |
+| `index.html` | `<head>`, head-shell (hooks/`PitchLogic`/`UIConstants` destructures, `APP_VERSION`, `LOGO_URI`), the 12 component `<script src>` tags, bootstrap render, service worker | shell |
 | `lib/firebase-init.js` | `window.__fb*` functions (Firebase RTDB/auth setup) | plain `<script src>` |
 | `lib/pitch-logic.js` | Rest-day/eligibility/date/device-id math, `recomputeLast`, `getActiveTourney`, `getSubjectKey` — UMD module, also `require()`'d directly by `tests/logic.test.js` | plain `<script src>`, exposes `window.PitchLogic` |
-| `lib/ui-constants.js` | `STATUS`, icon set `I`, shared style objects (`card`, `inputStyle`, etc.) — contains JSX (icons) | `<script type="text/babel" src>`, exposes `window.UIConstants` |
+| `lib/ui-constants.js` | `STATUS`, icon set `I`, shared style objects (`card`, `inputStyle`, etc.) — contains JSX (icons), IIFE-wrapped | `<script type="text/babel" src>`, exposes `window.UIConstants` |
+| `components/shared.js` | `Chip`, `PitcherStatusBanner`, `RadialArc`, `ContextPicker`, `ScreenBoundary` | `<script type="text/babel" src>` |
+| `components/RosterScreen.js`, `EditGameModal.js`, `PitcherDetail.js`, `GameLogScreen.js`, `EligibilityScreen.js`, `TournamentScreen.js`, `EditGameGroupModal.js`, `SeasonHistory.js`, `TeamPickerScreen.js`, `ActivityScreen.js` | One screen/modal component each | `<script type="text/babel" src>` each |
+| `components/App.js` | `TABS`, `TEAM_ID_KEY`, `TEAM_META_KEY` consts, then `App` (root component: team selection, Firebase subscription, tab routing, all handlers) | `<script type="text/babel" src>` |
 | `assets/logo.png` | App logo/icon (was a ~500KB inline base64 blob) | referenced by `LOGO_URI`, apple-touch-icon link |
 | `manifest.json` | PWA manifest (was an inline data-URI) | referenced by the manifest `<link>` |
 | `tests/logic.test.js` | Dependency-free Node test suite for `lib/pitch-logic.js` | `node tests/logic.test.js` |
 
-`index.html` destructures `window.PitchLogic` and `window.UIConstants` near the
-top of its Babel block, so every existing call site elsewhere in the file
-(`getAvailabilityStatus(...)`, `card`, `STATUS[...]`, etc.) is unchanged.
-`currentRules` is no longer a bare mutable global — read it via
-`getCurrentRules()` and write it via `setCurrentRules(...)`, both from
-`lib/pitch-logic.js`.
+`index.html`'s head-shell destructures `window.PitchLogic` and
+`window.UIConstants` before any component script loads, so every call site
+across all 12 `components/*.js` files (`getAvailabilityStatus(...)`, `card`,
+`STATUS[...]`, `useState`, etc.) resolves as a plain free variable — classic
+`<script>` tags share one global lexical environment, so this works regardless
+of which component file loads in which order. `currentRules` is no longer a
+bare mutable global — read it via `getCurrentRules()` and write it via
+`setCurrentRules(...)`, both from `lib/pitch-logic.js`.
+
+**Component script order doesn't matter relative to each other** — they only
+reference shared globals inside their function bodies, which don't run until
+React actually calls them at render time, well after every script tag has
+executed. The one hard rule: the bootstrap script (`window.__PitchApp = App;`
++ `ReactDOM.createRoot(...).render(...)`) must come after all 12 component
+`<script>` tags, since it references `App` directly by name.
+
+**Collision rule for any new `lib/`/`components/` file:** classic `<script>`
+tags share one global lexical environment. A top-level `const`/`let` declared
+in one file collides (`SyntaxError`, crashes the whole page) with the same
+name declared at top level in *any other* script tag on the page — this bit
+`lib/ui-constants.js` for exactly this reason (it needed an IIFE wrapper) and
+is why `components/*.js` files must each contain exactly one top-level
+`function`/`class` declaration and nothing else at top level (function/class
+declarations don't collide with each other the way `const`/`let` do, since
+their names are all unique — but a stray top-level `const` sitting next to one
+would).
 
 The service worker (bottom of `index.html`) treats every same-origin request
-(the shell, all of `lib/`, `assets/`, `manifest.json`) as network-first, same
-as HTML navigation — only third-party, version-pinned CDN scripts (React,
-Babel) are cache-first. This matters now that code lives in separate files:
-without it, a deploy could update `index.html` while a stale cached
-`lib/pitch-logic.js` keeps serving old logic.
+(the shell, all of `lib/`, `components/`, `assets/`, `manifest.json`) as
+network-first, same as HTML navigation — only third-party, version-pinned CDN
+scripts (React, Babel) are cache-first. This matters now that code lives in
+separate files: without it, a deploy could update `index.html` while a stale
+cached `components/TournamentScreen.js` keeps serving old logic.
 
 **Stack:**
 - React 18 + ReactDOM loaded from CDN, rendered via `ReactDOM.createRoot`
@@ -200,26 +223,32 @@ without it, a deploy could update `index.html` while a stale cached
 
 ## Components
 
+Every component listed below lives in its own file under `components/`
+(Phase 2 of the split — see App Architecture above), except the five in
+`components/shared.js`.
+
 ### Screens (tab-level)
-| Component | Tab id | Purpose |
-|-----------|--------|---------|
-| `RosterScreen` | `roster` | Lists pitchers with availability chips; add pitcher form |
-| `PitcherDetail` | `roster` (drill-in) | Pitcher stats, season history, log single game |
-| `GameLogScreen` | `gamelog` | Log a game for multiple pitchers at once |
-| `EligibilityScreen` | `eligibility` | Grid of pitcher availability for a chosen date |
-| `TournamentScreen` | `tournament` | Create/edit/delete tournaments |
-| `SeasonHistory` | `history` | Season-level game history with leaderboard |
-| `ActivityScreen` | `activity` | Audit log with undo capability |
-| `TeamPickerScreen` | (pre-app) | Team selection / create / manage |
+| Component | File | Tab id | Purpose |
+|-----------|------|--------|---------|
+| `RosterScreen` | `components/RosterScreen.js` | `roster` | Lists pitchers with availability chips; add pitcher form |
+| `PitcherDetail` | `components/PitcherDetail.js` | `roster` (drill-in) | Pitcher stats, season history, log single game |
+| `GameLogScreen` | `components/GameLogScreen.js` | `gamelog` | Log a game for multiple pitchers at once |
+| `EligibilityScreen` | `components/EligibilityScreen.js` | `eligibility` | Grid of pitcher availability for a chosen date |
+| `TournamentScreen` | `components/TournamentScreen.js` | `tournament` | Create/edit/delete tournaments |
+| `SeasonHistory` | `components/SeasonHistory.js` | `history` | Season-level game history with leaderboard |
+| `ActivityScreen` | `components/ActivityScreen.js` | `activity` | Audit log with undo capability |
+| `TeamPickerScreen` | `components/TeamPickerScreen.js` | (pre-app) | Team selection / create / manage |
 
 ### Modals & Sub-components
-| Component | Purpose |
-|-----------|---------|
-| `EditGameModal` | Edit or delete a single HistoryEntry |
-| `ContextPicker` | Regular season vs. tournament picker (shared by log forms) |
-| `PitcherStatusBanner` | Availability banner with rest-day details |
-| `Chip` | Small colored status badge |
-| `ScreenBoundary` | React error boundary wrapping each screen; shows error + Back button |
+| Component | File | Purpose |
+|-----------|------|---------|
+| `EditGameModal` | `components/EditGameModal.js` | Edit or delete a single HistoryEntry |
+| `EditGameGroupModal` | `components/EditGameGroupModal.js` | Edit/delete a multi-pitcher (`sharedGameId`) game log entry |
+| `ContextPicker` | `components/shared.js` | Regular season vs. tournament picker (shared by log forms) |
+| `PitcherStatusBanner` | `components/shared.js` | Availability banner with rest-day details |
+| `Chip` | `components/shared.js` | Small colored status badge |
+| `RadialArc` | `components/shared.js` | SVG radial progress ring (pitch count vs. max) |
+| `ScreenBoundary` | `components/shared.js` | React error boundary wrapping each screen; shows error + Back button |
 
 ---
 
