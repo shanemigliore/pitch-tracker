@@ -1,127 +1,18 @@
 #!/usr/bin/env node
 /**
- * Dependency-free logic tests for the rest-day / pitch-eligibility engine in
- * index.html. Run with: node tests/logic.test.js
+ * Dependency-free logic tests for the rest-day / pitch-eligibility engine.
+ * Run with: node tests/logic.test.js
  *
- * How this works: index.html has no build step (React/Babel are loaded from
- * CDN and JSX is transpiled in-browser), so we can't just `require()` it.
- * Instead we read index.html as text, slice out the pure-JS logic block
- * (from `const DEFAULT_RULES = ...` down to the end of `recomputeLast`,
- * which contains no JSX and is valid plain JS), and eval that slice in a
- * fresh vm context. Because the slice is re-extracted from index.html on
- * every run, this file does not need to be rewritten once the two bugs
- * below are fixed - the same assertions will simply start passing.
- *
- * This file intentionally does NOT modify index.html.
+ * The engine lives in lib/pitch-logic.js, a small UMD module with no DOM/React/
+ * Firebase dependency, loaded by index.html via <script src="lib/pitch-logic.js">
+ * in the browser and required directly here - no HTML parsing or eval tricks
+ * needed.
  */
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
 const assert = require('assert');
-
-const INDEX_HTML_PATH = path.join(__dirname, '..', 'index.html');
-
-// ── Extract the pure-JS logic block from index.html ────────────────────────
-
-function extractBlock(src, startMarker, endMarker) {
-  const startIdx = src.indexOf(startMarker);
-  const endIdx = src.indexOf(endMarker, startIdx);
-
-  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
-    throw new Error(
-      'Could not locate a logic block in index.html (markers "' +
-        startMarker +
-        '" .. "' +
-        endMarker +
-        '" not found in expected order). The file structure may have changed - ' +
-        'update the markers in tests/logic.test.js.'
-    );
-  }
-
-  return src.slice(startIdx, endIdx);
-}
-
-function extractLogic() {
-  const src = fs.readFileSync(INDEX_HTML_PATH, 'utf8');
-
-  const code =
-    extractBlock(src, 'const DEFAULT_RULES', '// ─── Firebase storage') +
-    '\n' +
-    // getActiveTourney lives right before the (JSX-heavy) EligibilityScreen
-    // component, so it's pulled in as its own small plain-JS slice.
-    extractBlock(src, 'function getActiveTourney', 'function EligibilityScreen');
-
-  // Sanity-check that we actually captured the functions under test before
-  // we bother eval'ing anything.
-  const requiredNames = [
-    'getRegRestDays',
-    'getEligibleDate',
-    'isTourneyOver',
-    'getTourneyAdjustedRestInfo',
-    'getAvailabilityStatus',
-    'daysUntilEligible',
-    'getEligibleDateStr',
-    'recomputeLast',
-    'todayStr',
-    'addDays',
-    'newId',
-    'formatDate',
-    'getActiveTourney',
-  ];
-  for (const name of requiredNames) {
-    if (!code.includes('function ' + name)) {
-      throw new Error(
-        `Extracted logic block is missing "function ${name}" - extraction markers ` +
-          `likely no longer match the current index.html.`
-      );
-    }
-  }
-
-  // `const`/`let` top-level bindings don't attach to the vm context's global
-  // object the way `function` declarations and `var` do, so explicitly
-  // gather everything we need into a `var` at the end of the script (still
-  // inside the same lexical scope, so it can see the const/let bindings
-  // above it via normal closure rules).
-  const exportsAppendix = `
-var __extractedExports = {
-  getRegRestDays: getRegRestDays,
-  getEligibleDate: getEligibleDate,
-  isTourneyOver: isTourneyOver,
-  getTourneyAdjustedRestInfo: getTourneyAdjustedRestInfo,
-  getAvailabilityStatus: getAvailabilityStatus,
-  daysUntilEligible: daysUntilEligible,
-  getEligibleDateStr: getEligibleDateStr,
-  recomputeLast: recomputeLast,
-  todayStr: todayStr,
-  addDays: addDays,
-  newId: newId,
-  formatDate: formatDate,
-  setCurrentRules: setCurrentRules,
-  DEFAULT_RULES: DEFAULT_RULES,
-  get currentRules() { return currentRules; },
-  getActiveTourney: getActiveTourney,
-};
-`;
-
-  const fullScript = code + '\n' + exportsAppendix;
-
-  const sandbox = {};
-  vm.createContext(sandbox);
-  try {
-    vm.runInContext(fullScript, sandbox, { filename: 'index.html (extracted logic)' });
-  } catch (e) {
-    throw new Error(
-      'Failed to eval the extracted logic block from index.html: ' + e.message
-    );
-  }
-
-  return sandbox.__extractedExports;
-}
-
-const logic = extractLogic();
+const logic = require('../lib/pitch-logic.js');
 
 // ── Minimal test harness ────────────────────────────────────────────────
 
@@ -159,7 +50,7 @@ function makeEntry(overrides) {
   );
 }
 
-console.log('Extracted logic functions from index.html:', Object.keys(logic).join(', '));
+console.log('Loaded from lib/pitch-logic.js:', Object.keys(logic).join(', '));
 console.log('');
 
 // ── 1. Bug #3: doubleheader aggregation (recomputeLast) ────────────────────

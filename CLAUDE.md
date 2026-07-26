@@ -12,7 +12,7 @@ Use a clear, descriptive PR title and a brief summary of what changed and why.
 ## Version Bumping
 
 Every PR must increment the minor version (e.g. v1.1 → v1.2). Update **both** of these together:
-1. `APP_VERSION` constant in the Babel script block (near line 349)
+1. `APP_VERSION` constant in the Babel script block (near line 88)
 2. `<meta name="app-version" content="..."/>` in the `<head>` (line 12)
 
 These two must always match. The meta tag is what triggers the automatic cache-bust on the client.
@@ -22,7 +22,36 @@ Only increment the minor version (after the `.`) unless explicitly told to chang
 
 ## App Architecture
 
-**Single file:** `/home/user/pitch-tracker/index.html` — the entire app lives here.
+**Static, multi-file, still zero build step/npm.** `index.html` is the shell; all
+components/screens still live in its one `<script type="text/babel">` block.
+Pure logic, Firebase glue, and shared UI tokens were split out into small
+`lib/` files (Phase 1 of a token/loading-speed optimization) so both the
+browser and Claude/tests can load just what they need instead of one 1.6MB
+file with embedded images:
+
+| File | Contents | Loaded as |
+|------|----------|-----------|
+| `index.html` | `<head>`, all screen/modal components, `App`, bootstrap render | shell + `<script type="text/babel">` |
+| `lib/firebase-init.js` | `window.__fb*` functions (Firebase RTDB/auth setup) | plain `<script src>` |
+| `lib/pitch-logic.js` | Rest-day/eligibility/date/device-id math, `recomputeLast`, `getActiveTourney`, `getSubjectKey` — UMD module, also `require()`'d directly by `tests/logic.test.js` | plain `<script src>`, exposes `window.PitchLogic` |
+| `lib/ui-constants.js` | `STATUS`, icon set `I`, shared style objects (`card`, `inputStyle`, etc.) — contains JSX (icons) | `<script type="text/babel" src>`, exposes `window.UIConstants` |
+| `assets/logo.png` | App logo/icon (was a ~500KB inline base64 blob) | referenced by `LOGO_URI`, apple-touch-icon link |
+| `manifest.json` | PWA manifest (was an inline data-URI) | referenced by the manifest `<link>` |
+| `tests/logic.test.js` | Dependency-free Node test suite for `lib/pitch-logic.js` | `node tests/logic.test.js` |
+
+`index.html` destructures `window.PitchLogic` and `window.UIConstants` near the
+top of its Babel block, so every existing call site elsewhere in the file
+(`getAvailabilityStatus(...)`, `card`, `STATUS[...]`, etc.) is unchanged.
+`currentRules` is no longer a bare mutable global — read it via
+`getCurrentRules()` and write it via `setCurrentRules(...)`, both from
+`lib/pitch-logic.js`.
+
+The service worker (bottom of `index.html`) treats every same-origin request
+(the shell, all of `lib/`, `assets/`, `manifest.json`) as network-first, same
+as HTML navigation — only third-party, version-pinned CDN scripts (React,
+Babel) are cache-first. This matters now that code lives in separate files:
+without it, a deploy could update `index.html` while a stale cached
+`lib/pitch-logic.js` keeps serving old logic.
 
 **Stack:**
 - React 18 + ReactDOM loaded from CDN, rendered via `ReactDOM.createRoot`
@@ -30,7 +59,7 @@ Only increment the minor version (after the `.`) unless explicitly told to chang
 - Firebase Realtime Database (anonymous auth via `auth.signInAnonymously()`)
 - No build step, no bundler, no npm
 
-**Current version:** v2.15
+**Current version:** v2.21
 
 ---
 
