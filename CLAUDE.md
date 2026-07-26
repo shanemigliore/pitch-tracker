@@ -191,6 +191,10 @@ cached `components/TournamentScreen.js` keeps serving old logic.
   sharedGameId: string | null    // links multi-pitcher game logs
 }
 ```
+Client-only, never persisted to Firebase: `_local: true` marks an optimistic
+entry not yet confirmed by the Firebase listener; `_failed: true` (set if the
+`__fbPushAudit` write rejects) marks one that never will be — `ActivityScreen`
+renders it with a "⚠ Not synced" badge instead of leaving it looking normal.
 
 **GameInfo (attached to LOG_GAME audit entries):**
 ```js
@@ -212,12 +216,13 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 | `LOG_GAME` | `DELETE_GAME` | `playerId`, `gameId` |
 | `EDIT_GAME` | `RESTORE_GAME` | `playerId`, `entry` (full old HistoryEntry) |
 | `DELETE_GAME` | `RESTORE_GAME` | `playerId`, `entry` |
-| `ADD_PLAYER` | `DELETE_PITCHER` | `pitcherId` |
-| `EDIT_PLAYER` | `RESTORE_PITCHER_META` | `pitcherId`, `name`, `jersey` |
+| `ADD_PITCHER` | `DELETE_PITCHER` | `pitcherId` |
+| `EDIT_PITCHER` | `RESTORE_PITCHER_META` | `pitcherId`, `name`, `jersey` |
 | `DELETE_PITCHER` | `RESTORE_PITCHER` | `pitcher` (full Pitcher object) |
 | `ADD_TOURNEY` | `DELETE_TOURNEY` | `tourneyId` |
 | `EDIT_TOURNEY` | `RESTORE_TOURNEY` | `tourney` (full Tournament object) |
 | `DELETE_TOURNEY` | `RESTORE_TOURNEY` | `tourney` |
+| `UNDO` | *(none — `undoData:null`)* | Pushed by `executeUndo` itself on every successful undo, detail `"Undid: <original entry's detail>"`. Can't itself be undone. The handler that performed the original action has its own audit push suppressed (`{skipAudit:true}`) when invoked via undo, so exactly one entry is logged per undo instead of a mislabeled duplicate. |
 
 ---
 
@@ -257,7 +262,11 @@ Every component listed below lives in its own file under `components/`
 ```js
 teamId            // string | null — persisted to localStorage (TEAM_ID_KEY)
 teamMeta          // { name, rules, ... } | null
-connected         // boolean — Firebase .info/connected
+syncStatus        // "connecting"|"saving"|"synced"|"offline"|"error" — "error" is a
+                  // permission-denied-style write rejection (distinct purple dot/banner,
+                  // tappable to show the real error), as opposed to "offline" (dropped
+                  // connection, will retry once reconnected)
+lastSyncError     // string | null — human-readable detail shown when syncStatus is "error"
 loaded            // boolean — initial data received from Firebase
 roster            // Pitcher[] — sorted by name
 tournaments       // Tournament[]
@@ -271,19 +280,19 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 
 | Handler | What it does |
 |---------|-------------|
-| `addPlayer(p)` | Adds pitcher to roster, pushes ADD_PLAYER audit |
-| `deletePlayer(id)` | Removes pitcher, pushes DELETE_PITCHER audit |
-| `editPlayer(id, updates)` | Updates pitcher name/jersey, pushes EDIT_PLAYER audit |
+| `addPlayer(p)` | Adds pitcher to roster, pushes ADD_PITCHER audit |
+| `deletePlayer(id, opts?)` | Removes pitcher, pushes DELETE_PITCHER audit unless `opts.skipAudit`; returns whether the pitcher existed |
+| `editPlayer(id, updates, opts?)` | Updates pitcher name/jersey, pushes EDIT_PITCHER audit unless `opts.skipAudit`; returns whether the pitcher existed |
 | `logGame(playerId, gameData)` | Adds single HistoryEntry, calls `recomputeLast`, pushes LOG_GAME audit |
 | `logMultiple(playerId, gameData)` | Same as logGame but preserves `sharedGameId` for grouping |
 | `editGame(playerId, gameId, updatedData)` | Updates HistoryEntry fields, pushes EDIT_GAME audit |
-| `deleteGame(playerId, gameId)` | Removes HistoryEntry, pushes DELETE_GAME audit |
-| `restoreGame(playerId, entry)` | Re-inserts a deleted HistoryEntry |
+| `deleteGame(playerId, gameId, opts?)` | Removes HistoryEntry, pushes DELETE_GAME audit unless `opts.skipAudit`; returns whether the entry existed |
+| `restoreGame(playerId, entry)` | Re-inserts a deleted HistoryEntry; returns `false` (no-op) if the pitcher no longer exists |
 | `addTourney(t)` | Adds tournament, pushes ADD_TOURNEY audit |
-| `deleteTourney(id)` | Removes tournament, pushes DELETE_TOURNEY audit |
+| `deleteTourney(id, opts?)` | Removes tournament, pushes DELETE_TOURNEY audit unless `opts.skipAudit`; returns whether the tournament existed |
 | `updateTourney(t)` | Updates tournament, pushes EDIT_TOURNEY audit |
-| `executeUndo(undoData)` | Dispatches to correct handler based on `undoData.type` |
-| `pushAudit(action, detail, undoData, extra)` | Writes to `/auditLog/{teamId}` via `__fbPushAudit`; `extra` is spread into the entry |
+| `executeUndo(entry)` | Dispatches to the correct handler based on `entry.undoData.type` (with `{skipAudit:true}` so the handler's own audit push doesn't fire), then pushes one `UNDO` audit entry on success. Returns whether the undo actually found its target — `ActivityScreen` alerts the user instead of marking it undone when it returns `false`. Guarded by a ref (`undoneEntryIdsRef`) against a same-tick double-invocation re-running the same entry. |
+| `pushAudit(action, detail, undoData, extra)` | Writes to `/auditLog/{teamId}` via `__fbPushAudit`; `extra` is spread into the entry; on write failure, flags the optimistic local entry `_failed:true` |
 
 ---
 

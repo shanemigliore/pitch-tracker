@@ -25,6 +25,7 @@ function ActivityScreen({ auditLog, roster, onUndo, undidIds, onUndid }) {
     ADD_TOURNEY:    { label:"Tourney Added",  color:"#4ade80" },
     DELETE_TOURNEY: { label:"Tourney Deleted",color:"#f43f5e" },
     EDIT_TOURNEY:   { label:"Tourney Edited", color:"#fbbf24" },
+    UNDO:           { label:"Undone",         color:"#fbbf24" },
   };
 
   // Per subject, only the most-recent non-undone entry can be undone.
@@ -43,8 +44,12 @@ function ActivityScreen({ auditLog, roster, onUndo, undidIds, onUndid }) {
   }
 
   function handleUndo(entry) {
-    onUndid(entry.id);
-    onUndo(entry.undoData);
+    const ok = onUndo(entry);
+    if (ok) {
+      onUndid(entry.id);
+    } else {
+      alert("Can't undo — that item no longer exists.");
+    }
   }
 
   const myDeviceId = getDeviceId();
@@ -120,6 +125,7 @@ function ActivityScreen({ auditLog, roster, onUndo, undidIds, onUndid }) {
                             {e.pitches != null ? `${e.pitches}p` : ""}
                           </span>
                           {didUndo && <span style={{ fontSize:11, color:"#fbbf24", marginLeft:8, fontWeight:700 }}>↩ Undone</span>}
+                          {e._failed && <span title="This never made it to Firebase - other devices won't see it" style={{ fontSize:10, color:"#a855f7", marginLeft:8, fontWeight:700 }}>⚠ Not synced</span>}
                         </div>
                         {renderUndoBtn(e)}
                       </div>
@@ -144,6 +150,7 @@ function ActivityScreen({ auditLog, roster, onUndo, undidIds, onUndid }) {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
                   <span style={{ fontSize:12, fontWeight:700, color:meta.color, letterSpacing:0.3 }}>{meta.label}</span>
+                  {entry._failed && <span title="This never made it to Firebase - other devices won't see it" style={{ fontSize:10, color:"#a855f7", fontWeight:700 }}>⚠ Not synced</span>}
                   <span style={{ fontSize:10, color: isMyDevice ? "rgba(56,189,248,0.6)" : "rgba(255,255,255,0.3)", fontWeight:600, wordBreak:"break-word" }}>
                     {entry.device || "Another device"}{isMyDevice ? " (this device)" : ""}
                   </span>

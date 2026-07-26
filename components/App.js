@@ -127,17 +127,31 @@ function App() {
 
   // Write to Firebase whenever data changes (after initial load)
   const saveTimeoutRef = useRef(null);
+  const [lastSyncError, setLastSyncError] = useState(null);
   useEffect(()=>{
+    // Clear any pending save BEFORE the early-return below, so a team switch
+    // (which flips `loaded` back to false) can't leave a stale timeout that
+    // fires later and stomps the new team's sync status.
+    clearTimeout(saveTimeoutRef.current);
     if (!loaded || !teamId || !window.__fbSet) return;
     setSyncStatus("saving");
-    clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       Promise.all([
         window.__fbSet("roster", roster, teamId),
         window.__fbSet("tournaments", tournaments, teamId),
-      ]).then(() => setSyncStatus("synced"))
-        .catch(() => setSyncStatus("offline"));
+      ]).then(() => {
+        setLastSyncError(null);
+        setSyncStatus("synced");
+      }).catch(err => {
+        console.error("[save] Firebase write failed:", err);
+        setLastSyncError(err && err.message ? err.message : String(err));
+        // PERMISSION_DENIED (and similar rule-rejection codes) means the write
+        // is never going to succeed by itself - that's a different situation
+        // from a dropped connection, so it gets a visibly different status.
+        setSyncStatus(err && err.code === "PERMISSION_DENIED" ? "error" : "offline");
+      });
     }, 600);
+    return () => clearTimeout(saveTimeoutRef.current);
   }, [roster, tournaments, loaded]);
 
   function pushAudit(action, detail, undoData, extra) {
@@ -151,7 +165,16 @@ function App() {
         setAuditLog(prev => [{ id: pushKey, _local: true, ...entryData }, ...prev]);
       }
       window.__fbPushAudit(tid, entryData, pushKey)
-        .catch(err => console.warn("[pushAudit] Firebase write failed:", err));
+        .catch(err => {
+          console.warn("[pushAudit] Firebase write failed:", err);
+          // The optimistic local entry above will never get confirmed by the
+          // Firebase listener now - flag it so ActivityScreen can show it as
+          // failed instead of leaving it looking like a normal, eventually-
+          // synced entry forever.
+          if (pushKey) {
+            setAuditLog(prev => prev.map(e => e.id === pushKey ? { ...e, _failed: true } : e));
+          }
+        });
     } catch(e) { console.warn("[pushAudit] error:", e); }
   }
 
@@ -160,21 +183,24 @@ function App() {
     pushAudit("ADD_PITCHER", `Added ${p.name} #${p.jersey}`, { type:"DELETE_PITCHER", pitcherId: p.id });
   }, []);
 
-  const deletePlayer = useCallback(id => {
+  const deletePlayer = useCallback((id, opts) => {
     const pitcher = rosterRef.current.find(p => p.id === id);
     setRoster(r => r.filter(p => p.id !== id));
     setSelectedPlayer(null);
-    if (pitcher) pushAudit("DELETE_PITCHER", `Deleted ${pitcher.name} #${pitcher.jersey}`, { type:"RESTORE_PITCHER", pitcher });
+    if (pitcher && !opts?.skipAudit) pushAudit("DELETE_PITCHER", `Deleted ${pitcher.name} #${pitcher.jersey}`, { type:"RESTORE_PITCHER", pitcher });
+    return !!pitcher;
   }, []);
 
-  const editPlayer = useCallback((id, updates) => {
+  const editPlayer = useCallback((id, updates, opts) => {
     const pitcher = rosterRef.current.find(p => p.id === id);
+    if (!pitcher) return false;
     setRoster(r => r.map(p => p.id === id ? {...p,...updates} : p));
     setSelectedPlayer(prev => prev && prev.id === id ? {...prev,...updates} : prev);
-    if (pitcher && (updates.name !== undefined || updates.jersey !== undefined)) {
+    if (!opts?.skipAudit && (updates.name !== undefined || updates.jersey !== undefined)) {
       pushAudit("EDIT_PITCHER", `Edited ${updates.name || pitcher.name} #${updates.jersey ?? pitcher.jersey}`,
         { type:"RESTORE_PITCHER_META", pitcherId: id, name: pitcher.name, jersey: pitcher.jersey });
     }
+    return true;
   }, []);
 
   const addTourney = useCallback(t => {
@@ -182,10 +208,11 @@ function App() {
     pushAudit("ADD_TOURNEY", `Added tournament "${t.name}"`, { type:"DELETE_TOURNEY", tourneyId: t.id });
   }, []);
 
-  const deleteTourney = useCallback(id => {
+  const deleteTourney = useCallback((id, opts) => {
     const tourney = tournamentsRef.current.find(t => t.id === id);
     setTournaments(ts => ts.filter(t => t.id !== id));
-    if (tourney) pushAudit("DELETE_TOURNEY", `Deleted tournament "${tourney.name}"`, { type:"RESTORE_TOURNEY", tourney });
+    if (tourney && !opts?.skipAudit) pushAudit("DELETE_TOURNEY", `Deleted tournament "${tourney.name}"`, { type:"RESTORE_TOURNEY", tourney });
+    return !!tourney;
   }, []);
 
   const updateTourney = useCallback(t => {
@@ -247,7 +274,7 @@ function App() {
     }
   }, []);
 
-  const deleteGame = useCallback((playerId, gameId) => {
+  const deleteGame = useCallback((playerId, gameId, opts) => {
     const player = rosterRef.current.find(p => p.id === playerId);
     const entry = player?.history?.find(h => h.gameId === gameId);
     setRoster(r => r.map(p => {
@@ -260,14 +287,17 @@ function App() {
       const history = (prev.history||[]).filter(h => h.gameId !== gameId);
       return { ...prev, ...recomputeLast(history), history };
     });
-    if (entry) {
+    if (entry && !opts?.skipAudit) {
       pushAudit("DELETE_GAME",
         `Deleted game for ${player?.name || playerId} on ${entry.date} (${entry.pitches}p)`,
         { type:"RESTORE_GAME", playerId, entry });
     }
+    return !!entry;
   }, []);
 
   const restoreGame = useCallback((playerId, entry) => {
+    const player = rosterRef.current.find(p => p.id === playerId);
+    if (!player) return false;
     setRoster(r => r.map(p => {
       if (p.id !== playerId) return p;
       const exists = (p.history||[]).some(h => h.gameId === entry.gameId);
@@ -284,17 +314,55 @@ function App() {
         : [...(prev.history||[]), entry].sort((a,b) => (a.date||'').localeCompare(b.date||''));
       return { ...prev, ...recomputeLast(history), history };
     });
+    return true;
   }, []);
 
-  const executeUndo = useCallback((undoData) => {
-    if (!undoData) return;
+  // Takes the full audit entry (not just its undoData) so it can log a
+  // clean "Undid: <original detail>" entry and report back whether the
+  // undo actually found its target - callers use that to tell the user
+  // when an undo silently can't do anything (e.g. the pitcher it would
+  // restore data onto was since deleted) instead of pretending it worked.
+  // Entries already successfully undone this session, guarding against a
+  // same-tick double-invocation of executeUndo (e.g. a double-fired touch
+  // event). A plain ref, not React state: rosterRef/tournamentsRef are only
+  // reassigned during a render, which React 18 batches/defers, so a second
+  // synchronous call before any render happens would otherwise still see
+  // stale state and re-run the restore - a ref mutates immediately and
+  // executeUndo runs synchronously start-to-finish, so this is race-free
+  // regardless of render timing. (A normal UI double-click doesn't hit this
+  // path at all - React removes/relabels the Undo button after the first
+  // click's state change lands - but this closes the gap for anything that
+  // can invoke the handler twice without a render in between.)
+  const undoneEntryIdsRef = useRef(new Set());
+
+  const executeUndo = useCallback((entry) => {
+    const undoData = entry?.undoData;
+    if (!undoData) return false;
+    if (undoneEntryIdsRef.current.has(entry.id)) return true; // already done - nothing more to do, not a failure
+    let ok = true;
     switch (undoData.type) {
-      case "DELETE_GAME":          deleteGame(undoData.playerId, undoData.gameId);  break;
-      case "RESTORE_GAME":         restoreGame(undoData.playerId, undoData.entry);  break;
-      case "DELETE_PITCHER":       deletePlayer(undoData.pitcherId);                break;
-      case "RESTORE_PITCHER":      setRoster(r => [...r, undoData.pitcher]);        break;
-      case "RESTORE_PITCHER_META": editPlayer(undoData.pitcherId, { name:undoData.name, jersey:undoData.jersey }); break;
-      case "DELETE_TOURNEY":       deleteTourney(undoData.tourneyId);               break;
+      case "DELETE_GAME":
+        ok = deleteGame(undoData.playerId, undoData.gameId, { skipAudit:true });
+        break;
+      case "RESTORE_GAME":
+        ok = restoreGame(undoData.playerId, undoData.entry);
+        break;
+      case "DELETE_PITCHER":
+        ok = deletePlayer(undoData.pitcherId, { skipAudit:true });
+        break;
+      case "RESTORE_PITCHER":
+        // The exists-check runs INSIDE the updater, against React's real
+        // queued state at flush time, not a possibly-stale outer variable -
+        // safe even if this line somehow ran more than once for the same
+        // entry (defense in depth on top of the ref guard above).
+        setRoster(r => r.some(p => p.id === undoData.pitcher.id) ? r : [...r, undoData.pitcher]);
+        break;
+      case "RESTORE_PITCHER_META":
+        ok = editPlayer(undoData.pitcherId, { name:undoData.name, jersey:undoData.jersey }, { skipAudit:true });
+        break;
+      case "DELETE_TOURNEY":
+        ok = deleteTourney(undoData.tourneyId, { skipAudit:true });
+        break;
       case "RESTORE_TOURNEY":
         setTournaments(ts => {
           const exists = ts.some(t => t.id === undoData.tourney.id);
@@ -303,8 +371,17 @@ function App() {
             : [...ts, undoData.tourney];
         });
         break;
-      default: break;
+      default:
+        return false;
     }
+    if (ok) {
+      undoneEntryIdsRef.current.add(entry.id);
+      // One consistent, clearly-labeled entry per undo, in place of the
+      // mislabeled duplicate (or, for restores, the total silence) this
+      // used to produce - undoData:null so an UNDO entry can't itself be undone.
+      pushAudit("UNDO", `Undid: ${entry.detail}`, null);
+    }
+    return ok;
   }, [deleteGame, restoreGame, deletePlayer, editPlayer, deleteTourney]);
 
   // ── Team picker screen ──────────────────────────────────────────────────
@@ -346,12 +423,20 @@ function App() {
           {I.warning} Offline — changes will sync when reconnected
         </div>
       )}
+      {syncStatus==="error" && (
+        <div className="offline-banner" onClick={()=>alert(`Sync error: ${lastSyncError || "Unknown error"}\n\nYour changes are saved on this device but couldn't be written to the server. This usually means a permissions problem, not a dropped connection - it won't fix itself by waiting.`)}
+          style={{ background:"rgba(168,85,247,0.12)", borderBottom:"1px solid rgba(168,85,247,0.3)",
+          padding:"8px 16px", display:"flex", alignItems:"center", gap:8, cursor:"pointer",
+          fontSize:12, color:"#c084fc", fontWeight:600, position:"sticky", top:0, zIndex:30 }}>
+          {I.warning} Sync error — tap for details
+        </div>
+      )}
 
       {/* ── Header ── */}
       <div style={{ background:"rgba(8,12,20,0.9)", backdropFilter:"blur(16px)",
         borderBottom:"1px solid rgba(255,255,255,0.06)",
         padding:"10px 14px",
-        position:"sticky", top:syncStatus==="offline"?33:0, zIndex:20 }}>
+        position:"sticky", top:(syncStatus==="offline"||syncStatus==="error")?33:0, zIndex:20 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           {/* Logo */}
           <img src={LOGO_URI} alt="Prime Baseball" style={{ width:36, height:36, borderRadius:"50%", flexShrink:0 }}/>
@@ -365,9 +450,11 @@ function App() {
           <div style={{ display:"flex", gap:5, alignItems:"center" }}>
             {availableCount>0 && <div style={{ padding:"3px 8px", borderRadius:8, background:"rgba(74,222,128,0.15)", fontSize:11, fontWeight:700, color:"#4ade80" }}>{availableCount}✓</div>}
             {restingCount>0  && <div style={{ padding:"3px 8px", borderRadius:8, background:"rgba(244,63,94,0.15)",  fontSize:11, fontWeight:700, color:"#f43f5e" }}>{restingCount}😴</div>}
-            <div title={syncStatus} style={{ width:7, height:7, borderRadius:"50%", flexShrink:0,
-              background: syncStatus==="synced"?"#4ade80": syncStatus==="saving"?"#fbbf24": syncStatus==="offline"?"#f43f5e":"rgba(255,255,255,0.3)",
-              boxShadow:  syncStatus==="synced"?"0 0 6px #4ade80": syncStatus==="saving"?"0 0 6px #fbbf24": syncStatus==="offline"?"0 0 6px #f43f5e":"none",
+            <div title={syncStatus==="error" && lastSyncError ? `error: ${lastSyncError}` : syncStatus}
+              onClick={()=>{ if (syncStatus==="error") alert(`Sync error: ${lastSyncError || "Unknown error"}`); }}
+              style={{ width:7, height:7, borderRadius:"50%", flexShrink:0, cursor: syncStatus==="error" ? "pointer" : "default",
+              background: syncStatus==="synced"?"#4ade80": syncStatus==="saving"?"#fbbf24": syncStatus==="error"?"#a855f7": syncStatus==="offline"?"#f43f5e":"rgba(255,255,255,0.3)",
+              boxShadow:  syncStatus==="synced"?"0 0 6px #4ade80": syncStatus==="saving"?"0 0 6px #fbbf24": syncStatus==="error"?"0 0 6px #a855f7": syncStatus==="offline"?"0 0 6px #f43f5e":"none",
               transition:"background 0.4s, box-shadow 0.4s" }}/>
             <button onClick={()=>setShowTeamPicker(true)}
               style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)",

@@ -236,6 +236,17 @@ test('6b. getEligibleDate: invalid date string returns null', () => {
   assert.strictEqual(result, null);
 });
 
+// ── 7. getEligibleDateStr returns a plain local date, not a UTC instant ────
+
+test('7. getEligibleDateStr returns a plain YYYY-MM-DD string (no UTC round-trip)', () => {
+  const pitcher = { id: 'p1', name: 'Test', jersey: '1', lastPitches: 45, lastGameDate: '2026-07-20', history: [] };
+  const result = logic.getEligibleDateStr(pitcher, []);
+  assert.ok(
+    /^\d{4}-\d{2}-\d{2}$/.test(result),
+    `expected a plain YYYY-MM-DD string with no time/UTC component, got ${JSON.stringify(result)}`
+  );
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────
 
 console.log('');
