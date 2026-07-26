@@ -389,6 +389,13 @@ function getEligibleDate(gameDate, pitches, restFn) {
 // - First rest day = day after last pitch date in tournament
 // - Total tournament pitches determine rest requirement (same thresholds as regular season)
 // - ≤20 total pitches = no rest required (eligible immediately)
+// A tournament is "over" once today is past its last scheduled day.
+function isTourneyOver(tourney, refDateStr) {
+  if (!tourney || !tourney.startDate) return true;
+  const end = addDays(tourney.startDate, (tourney.days || 1) - 1);
+  return (refDateStr || todayStr()) > end;
+}
+
 function getTourneyAdjustedRestInfo(pitcher, tournaments) {
   const history = pitcher.history || [];
   if (history.length > 0 && tournaments && tournaments.length > 0) {
@@ -396,7 +403,7 @@ function getTourneyAdjustedRestInfo(pitcher, tournaments) {
     const lastGame = sorted[0];
     if (lastGame && lastGame.isTournament && lastGame.tournamentId) {
       const tourney = tournaments.find(t => t.id === lastGame.tournamentId);
-      if (tourney) {
+      if (tourney && isTourneyOver(tourney)) {
         const tourneyGames = history.filter(h => h.tournamentId === lastGame.tournamentId);
         const totalPitches = tourneyGames.reduce((s, g) => s + g.pitches, 0);
         const lastPitchDate = lastGame.date;
@@ -408,6 +415,10 @@ function getTourneyAdjustedRestInfo(pitcher, tournaments) {
         }
         return { isTourney:true, totalPitches, lastPitchDate, eligibleDate, restDays };
       }
+      // Tournament still in progress: League eligibility uses that day's
+      // real pitch total (falls through below), same as any regular-season
+      // day. The cumulative-tournament-total "recovery" rule only applies
+      // once the tournament has actually ended.
     }
   }
   // Standard regular-season rest
@@ -497,8 +508,11 @@ function getDeviceName() {
 function recomputeLast(history) {
   if (!history || history.length === 0) return { lastPitches:0, lastGameDate:null };
   const sorted = [...history].sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-  const last = sorted[sorted.length - 1];
-  return { lastPitches: last.pitches, lastGameDate: last.date };
+  const lastDate = sorted[sorted.length - 1].date;
+  const lastPitches = history
+    .filter(h => h.date === lastDate)
+    .reduce((sum, h) => sum + (h.pitches || 0), 0);
+  return { lastPitches, lastGameDate: lastDate };
 }
 
 // ─── Firebase storage (set from outside, replaced at build time) ─────────────
@@ -1572,9 +1586,17 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: ELIGIBILITY CHECKER
 // ══════════════════════════════════════════════════════════════════════════════
+function getActiveTourney(tournaments, dateStr) {
+  return (tournaments || []).find(t => t.startDate &&
+    dateStr >= t.startDate && dateStr <= addDays(t.startDate, (t.days || 1) - 1));
+}
+
 function EligibilityScreen({ roster, tournaments }) {
   const [checkDate, setCheckDate] = useState(todayStr());
-  const [viewMode, setViewMode] = useState("regular");
+  const [viewMode, setViewMode] = useState(() => {
+    const active = getActiveTourney(tournaments, todayStr());
+    return active ? active.id : "regular";
+  });
   const selectedTourney = tournaments.find(t=>t.id===viewMode);
 
   function getPitcherTourneyStats(pitcher, tourneyId) {
