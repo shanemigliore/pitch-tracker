@@ -41,21 +41,21 @@ function EditGameModal({ entry, pitcherName, roster, tournaments, onSave, onDele
             <div style={{ fontSize:16, fontWeight:800, color:"#f8fafc" }}>Edit Game Entry</div>
             <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)", marginTop:2 }}>{pitcherName}</div>
           </div>
-          <button onClick={onClose} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:8,
+          <button onClick={onClose} aria-label="Close" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:8,
             width:32, height:32, color:"rgba(255,255,255,0.6)", cursor:"pointer", fontSize:18 }}>✕</button>
         </div>
 
         {/* Pitch count */}
         <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>PITCH COUNT</label>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
-          <button onClick={()=>setPitches(p=>Math.max(0,p-1))}
+          <button onClick={()=>setPitches(p=>Math.max(0,p-1))} aria-label="Decrease pitch count"
             style={{ width:44, height:44, borderRadius:"50%", background:"rgba(255,255,255,0.07)",
               border:"1px solid rgba(255,255,255,0.12)", color:"#f8fafc", fontSize:18, fontWeight:700, cursor:"pointer" }}>−</button>
-          <input type="number" min="0" value={pitches===0?"":String(pitches)}
+          <input type="number" min="0" value={pitches===0?"":String(pitches)} aria-label="Pitch count"
             onChange={e=>{ const v=parseInt(e.target.value,10); setPitches(isNaN(v)||v<0?0:v); }}
             style={{ ...inputStyle, flex:1, textAlign:"center", fontSize:28, fontWeight:900,
               fontFamily:"'Bebas Neue',cursive", height:52, padding:"4px 8px" }}/>
-          <button onClick={()=>setPitches(p=>p+1)}
+          <button onClick={()=>setPitches(p=>p+1)} aria-label="Increase pitch count"
             style={{ width:44, height:44, borderRadius:"50%",
               background:"linear-gradient(135deg,#2563eb,#1d4ed8)", border:"none",
               color:"#fff", fontSize:18, fontWeight:700, cursor:"pointer",
@@ -63,7 +63,7 @@ function EditGameModal({ entry, pitcherName, roster, tournaments, onSave, onDele
         </div>
         <div style={{ display:"flex", gap:6, marginBottom:14 }}>
           {[-5,-1,1,5].map(d=>(
-            <button key={d} onClick={()=>setPitches(p=>Math.max(0,p+d))}
+            <button key={d} onClick={()=>setPitches(p=>Math.max(0,p+d))} aria-label={`${d>0?"Add":"Subtract"} ${Math.abs(d)} pitch${Math.abs(d)!==1?"es":""}`}
               style={{ flex:1, padding:"7px 0", borderRadius:8,
                 background: d>0 ? "rgba(37,99,235,0.15)" : "rgba(255,255,255,0.05)",
                 border:`1px solid ${d>0?"rgba(37,99,235,0.3)":"rgba(255,255,255,0.1)"}`,
@@ -110,12 +110,12 @@ function EditGameModal({ entry, pitcherName, roster, tournaments, onSave, onDele
 
         {/* Date */}
         <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME DATE</label>
-        <input type="date" value={date} onChange={e=>setDate(e.target.value)}
+        <input type="date" value={date} onChange={e=>setDate(e.target.value)} aria-label="Game date"
           style={{ ...inputStyle, marginBottom:10 }}/>
 
         {/* Opponent */}
         <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>OPPONENT</label>
-        <input placeholder="Team name (optional)" value={opponent} onChange={e=>setOpponent(e.target.value)}
+        <input placeholder="Team name (optional)" value={opponent} onChange={e=>setOpponent(e.target.value)} aria-label="Opponent"
           style={{ ...inputStyle, marginBottom:16 }}/>
 
         {/* Actions */}

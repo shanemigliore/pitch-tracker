@@ -78,7 +78,7 @@ function ContextPicker({ context, setContext, tourneyDay, setTourneyDay, tournam
       <div style={{ marginBottom:10 }}>
         <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>GAME TYPE</label>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          <button onClick={()=>setContext("regular")}
+          <button onClick={()=>setContext("regular")} aria-pressed={context==="regular"}
             style={{ flex:1, minWidth:80, padding:"9px 10px", borderRadius:10,
               border:`1px solid ${context==="regular"?"#2563eb":"rgba(255,255,255,0.1)"}`,
               background:context==="regular"?"rgba(37,99,235,0.2)":"rgba(255,255,255,0.04)",
@@ -86,7 +86,7 @@ function ContextPicker({ context, setContext, tourneyDay, setTourneyDay, tournam
             ⚾ Regular Season
           </button>
           {activeTournaments.map(t=>(
-            <button key={t.id} onClick={()=>{setContext(t.id); if(setTourneyDay) setTourneyDay(1);}}
+            <button key={t.id} onClick={()=>{setContext(t.id); if(setTourneyDay) setTourneyDay(1);}} aria-pressed={context===t.id}
               style={{ flex:1, minWidth:80, padding:"9px 10px", borderRadius:10,
                 border:`1px solid ${context===t.id?"#f59e0b":"rgba(255,255,255,0.1)"}`,
                 background:context===t.id?"rgba(245,158,11,0.15)":"rgba(255,255,255,0.04)",
@@ -107,7 +107,7 @@ function ContextPicker({ context, setContext, tourneyDay, setTourneyDay, tournam
           <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>TOURNAMENT DAY</label>
           <div style={{ display:"flex", gap:6 }}>
             {Array.from({length:selectedTourney.days},(_,i)=>i+1).map(d=>(
-              <button key={d} onClick={()=>setTourneyDay(d)}
+              <button key={d} onClick={()=>setTourneyDay(d)} aria-label={`Tournament day ${d}`} aria-pressed={tourneyDay===d}
                 style={{ width:42, height:42, borderRadius:10,
                   border:`1px solid ${tourneyDay===d?"#f59e0b":"rgba(255,255,255,0.1)"}`,
                   background:tourneyDay===d?"rgba(245,158,11,0.2)":"rgba(255,255,255,0.04)",

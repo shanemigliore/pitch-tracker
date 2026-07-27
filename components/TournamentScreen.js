@@ -57,22 +57,22 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
     return (
       <div style={{ padding:"0 16px 110px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 18px" }}>
-          <button onClick={()=>setView("list")} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
+          <button onClick={()=>setView("list")} aria-label="Back to tournaments" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
             padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>NEW TOURNAMENT</h2>
         </div>
         <div style={card}>
           <p style={sectionLabel}>DETAILS</p>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NAME</label>
-          <input placeholder="e.g. District 5 Tournament" value={name} onChange={e=>setName(e.target.value)}
+          <input placeholder="e.g. District 5 Tournament" value={name} onChange={e=>setName(e.target.value)} aria-label="Tournament name"
             style={{ ...inputStyle, marginBottom:10 }}/>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>START DATE</label>
-          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}
+          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} aria-label="Start date"
             style={{ ...inputStyle, marginBottom:10 }}/>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NUMBER OF DAYS</label>
           <div style={{ display:"flex", gap:8, marginBottom:days==="custom"?10:0 }}>
             {[["1","1"],["2","2"],["custom","Custom"]].map(([val,label])=>(
-              <button key={val} onClick={()=>setDays(val)}
+              <button key={val} onClick={()=>setDays(val)} aria-pressed={days===val}
                 style={{ flex:1, height:42, borderRadius:10,
                   border:`1px solid ${days===val?"#38bdf8":"rgba(255,255,255,0.1)"}`,
                   background:days===val?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
@@ -81,7 +81,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
             ))}
           </div>
           {days==="custom" && (
-            <input type="number" min="1" max="14" placeholder="Number of days"
+            <input type="number" min="1" max="14" placeholder="Number of days" aria-label="Number of days"
               value={customDays} onChange={e=>setCustomDays(e.target.value)}
               style={{ ...inputStyle, textAlign:"center", fontSize:18, fontWeight:800,
                 fontFamily:"'Bebas Neue',cursive" }}/>
@@ -91,7 +91,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
           <p style={sectionLabel}>PITCH RULES</p>
 
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — DAY 1</label>
-          <input type="number" min="1" placeholder="55" value={maxDay1} onChange={e=>setMaxDay1(e.target.value)}
+          <input type="number" min="1" placeholder="55" value={maxDay1} onChange={e=>setMaxDay1(e.target.value)} aria-label="Max pitches day 1"
             style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center", marginBottom:10 }}/>
 
           <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>DAY 1 LIMIT TYPE</label>
@@ -118,7 +118,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
           </p>
 
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — ENTIRE TOURNAMENT (eligibility limit)</label>
-          <input type="number" min="1" placeholder="115" value={maxTotal} onChange={e=>setMaxTotal(e.target.value)}
+          <input type="number" min="1" placeholder="115" value={maxTotal} onChange={e=>setMaxTotal(e.target.value)} aria-label="Max total pitches"
             style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center" }}/>
         </div>
         <button onClick={handleCreate} disabled={!name.trim()}
@@ -135,22 +135,22 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
     return (
       <div style={{ padding:"0 16px 110px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 18px" }}>
-          <button onClick={()=>{ setEditId(null); setView(editId); }} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
+          <button onClick={()=>{ setEditId(null); setView(editId); }} aria-label="Back to tournament" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
             padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>EDIT TOURNAMENT</h2>
         </div>
         <div style={card}>
           <p style={sectionLabel}>DETAILS</p>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NAME</label>
-          <input placeholder="e.g. District 5 Tournament" value={name} onChange={e=>setName(e.target.value)}
+          <input placeholder="e.g. District 5 Tournament" value={name} onChange={e=>setName(e.target.value)} aria-label="Tournament name"
             style={{ ...inputStyle, marginBottom:10 }}/>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>START DATE</label>
-          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}
+          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} aria-label="Start date"
             style={{ ...inputStyle, marginBottom:10 }}/>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NUMBER OF DAYS</label>
           <div style={{ display:"flex", gap:8, marginBottom:days==="custom"?10:0 }}>
             {[["1","1"],["2","2"],["custom","Custom"]].map(([val,label])=>(
-              <button key={val} onClick={()=>setDays(val)}
+              <button key={val} onClick={()=>setDays(val)} aria-pressed={days===val}
                 style={{ flex:1, height:42, borderRadius:10,
                   border:`1px solid ${days===val?"#38bdf8":"rgba(255,255,255,0.1)"}`,
                   background:days===val?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
@@ -159,7 +159,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
             ))}
           </div>
           {days==="custom" && (
-            <input type="number" min="1" max="14" placeholder="Number of days"
+            <input type="number" min="1" max="14" placeholder="Number of days" aria-label="Number of days"
               value={customDays} onChange={e=>setCustomDays(e.target.value)}
               style={{ ...inputStyle, textAlign:"center", fontSize:18, fontWeight:800,
                 fontFamily:"'Bebas Neue',cursive" }}/>
@@ -168,7 +168,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
         <div style={card}>
           <p style={sectionLabel}>PITCH RULES</p>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — DAY 1</label>
-          <input type="number" min="1" placeholder="55" value={maxDay1} onChange={e=>setMaxDay1(e.target.value)}
+          <input type="number" min="1" placeholder="55" value={maxDay1} onChange={e=>setMaxDay1(e.target.value)} aria-label="Max pitches day 1"
             style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center", marginBottom:10 }}/>
           <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>DAY 1 LIMIT TYPE</label>
           <div style={{ display:"flex", gap:8, marginBottom:14 }}>
@@ -193,7 +193,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
               : <><strong style={{color:"#4ade80"}}>Guideline:</strong> Day 1 limit is informational only and does not affect eligibility.</>}
           </p>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — ENTIRE TOURNAMENT (eligibility limit)</label>
-          <input type="number" min="1" placeholder="115" value={maxTotal} onChange={e=>setMaxTotal(e.target.value)}
+          <input type="number" min="1" placeholder="115" value={maxTotal} onChange={e=>setMaxTotal(e.target.value)} aria-label="Max total pitches"
             style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center" }}/>
         </div>
         <button onClick={handleSaveEdit} disabled={!name.trim()}
@@ -220,7 +220,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
     return (
       <div style={{ padding:"0 16px 110px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 18px" }}>
-          <button onClick={()=>setView("list")} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
+          <button onClick={()=>setView("list")} aria-label="Back to tournaments" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
             padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
           <div style={{ flex:1 }}>
             <h2 style={{ margin:0, fontSize:21, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>
@@ -228,10 +228,10 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
             </h2>
             <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>{t.days}-day tournament</div>
           </div>
-          <button onClick={()=>openEdit(t)}
+          <button onClick={()=>openEdit(t)} aria-label={`Edit ${t.name}`}
             style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8,
               padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.edit}</button>
-          <button onClick={()=>setConfirmDeleteTourney(true)}
+          <button onClick={()=>setConfirmDeleteTourney(true)} aria-label={`Delete ${t.name}`}
             style={{ background:"rgba(244,63,94,0.1)", border:"1px solid rgba(244,63,94,0.25)", borderRadius:8,
               padding:10, color:"rgba(244,63,94,0.7)", cursor:"pointer", display:"flex" }}>{I.trash}</button>
         </div>

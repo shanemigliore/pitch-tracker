@@ -56,11 +56,22 @@ function App() {
   const [syncStatus,  setSyncStatus]  = useState("connecting");
   const [auditLog,    setAuditLog]    = useState([]);
   const [undidIds,    setUndidIds]    = useState(new Set());
+  const [updateAvailable, setUpdateAvailable] = useState(false);
 
   // Refs for stale-closure-free access inside callbacks
   const rosterRef      = useRef(roster);       rosterRef.current      = roster;
   const tournamentsRef = useRef(tournaments);  tournamentsRef.current = tournaments;
   const teamIdRef      = useRef(teamId);       teamIdRef.current      = teamId;
+
+  // A new deploy doesn't force-reload the page (see index.html's version-check
+  // script) - it just flags this, and the banner below lets the user pick when
+  // it's safe to refresh instead of losing whatever they're mid-typing.
+  useEffect(() => {
+    if (window.__pendingAppUpdateVersion) setUpdateAvailable(true);
+    function onUpdateAvailable() { setUpdateAvailable(true); }
+    window.addEventListener('pt-update-available', onUpdateAvailable);
+    return () => window.removeEventListener('pt-update-available', onUpdateAvailable);
+  }, []);
 
   // Firebase real-time listener — re-subscribes when teamId changes
   useEffect(()=>{
@@ -431,12 +442,23 @@ function App() {
           {I.warning} Sync error — tap for details
         </div>
       )}
+      {updateAvailable && (
+        <div className="offline-banner" onClick={()=>window.__applyPendingAppUpdate && window.__applyPendingAppUpdate()}
+          style={{ background:"rgba(56,189,248,0.12)", borderBottom:"1px solid rgba(56,189,248,0.3)",
+          padding:"8px 16px", display:"flex", alignItems:"center", gap:8, cursor:"pointer",
+          fontSize:12, color:"#38bdf8", fontWeight:600, position:"sticky",
+          top:(syncStatus==="offline"||syncStatus==="error")?33:0, zIndex:29 }}>
+          ⬆ Update available — tap to refresh
+        </div>
+      )}
 
       {/* ── Header ── */}
       <div style={{ background:"rgba(8,12,20,0.9)", backdropFilter:"blur(16px)",
         borderBottom:"1px solid rgba(255,255,255,0.06)",
         padding:"10px 14px",
-        position:"sticky", top:(syncStatus==="offline"||syncStatus==="error")?33:0, zIndex:20 }}>
+        position:"sticky",
+        top:(((syncStatus==="offline"||syncStatus==="error")?1:0) + (updateAvailable?1:0)) * 33,
+        zIndex:20 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           {/* Logo */}
           <img src={LOGO_URI} alt="Prime Baseball" style={{ width:36, height:36, borderRadius:"50%", flexShrink:0 }}/>
@@ -504,7 +526,7 @@ function App() {
           {TABS.map(t=>{
             const active = (tab===t.id && !selectedPlayer) || (tab==="roster" && selectedPlayer && t.id==="roster");
             return (
-              <button key={t.id} onClick={()=>{ setTab(t.id); if(t.id!=="roster") setSelectedPlayer(null); }}
+              <button key={t.id} onClick={()=>{ setTab(t.id); if(t.id!=="roster") setSelectedPlayer(null); }} aria-pressed={active}
                 style={{ flex:1, background:"transparent", border:"none", cursor:"pointer",
                   padding:"9px 0 7px", display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
                 <div style={{ color:active?"#38bdf8":"rgba(255,255,255,0.3)", transition:"color 0.2s" }}>{t.icon}</div>

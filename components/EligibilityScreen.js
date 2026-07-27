@@ -63,7 +63,7 @@ function EligibilityScreen({ roster, tournaments }) {
         <p style={sectionLabel}>CHECK DATE</p>
         <div style={{ display:"flex", gap:8, marginBottom:10 }}>
           {[[todayStr(),"Today"],[addDays(todayStr(),1),"Tomorrow"],[addDays(todayStr(),2),"In 2 Days"]].map(([d,label])=>(
-            <button key={d} onClick={()=>setCheckDate(d)}
+            <button key={d} onClick={()=>setCheckDate(d)} aria-pressed={checkDate===d}
               style={{ flex:1, padding:"8px 6px", borderRadius:10,
                 border:`1px solid ${checkDate===d?"#38bdf8":"rgba(255,255,255,0.1)"}`,
                 background:checkDate===d?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
@@ -73,13 +73,13 @@ function EligibilityScreen({ roster, tournaments }) {
           ))}
         </div>
         <p style={{ ...sectionLabel, marginTop:10, marginBottom:4 }}>CHOOSE DATE</p>
-        <input type="date" value={checkDate} onChange={e=>setCheckDate(e.target.value)} style={inputStyle}/>
+        <input type="date" value={checkDate} onChange={e=>setCheckDate(e.target.value)} aria-label="Check date" style={inputStyle}/>
       </div>
 
       <div style={card}>
         <p style={sectionLabel}>VIEW FOR</p>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          <button onClick={()=>setViewMode("regular")}
+          <button onClick={()=>setViewMode("regular")} aria-pressed={viewMode==="regular"}
             style={{ flex:1, minWidth:80, padding:"9px 10px", borderRadius:10,
               border:`1px solid ${viewMode==="regular"?"#2563eb":"rgba(255,255,255,0.1)"}`,
               background:viewMode==="regular"?"rgba(37,99,235,0.2)":"rgba(255,255,255,0.04)",
@@ -87,7 +87,7 @@ function EligibilityScreen({ roster, tournaments }) {
             ⚾ Regular Season
           </button>
           {tournaments.filter(t => !t.startDate || checkDate <= addDays(t.startDate, (t.days||1)-1)).map(t=>(
-            <button key={t.id} onClick={()=>setViewMode(t.id)}
+            <button key={t.id} onClick={()=>setViewMode(t.id)} aria-pressed={viewMode===t.id}
               style={{ flex:1, minWidth:80, padding:"9px 10px", borderRadius:10,
                 border:`1px solid ${viewMode===t.id?"#f59e0b":"rgba(255,255,255,0.1)"}`,
                 background:viewMode===t.id?"rgba(245,158,11,0.15)":"rgba(255,255,255,0.04)",

@@ -77,7 +77,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
   const ruleField = (label, key, hint) => (
     <div style={{ marginBottom:10 }}>
       <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>{label}</label>
-      <input type="number" min="0" value={newRules[key]}
+      <input type="number" min="0" value={newRules[key]} aria-label={label}
         onChange={e=>setNewRules(r=>({...r,[key]:e.target.value}))}
         style={{ ...inputStyle, marginBottom:2 }}/>
       {hint && <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>{hint}</div>}
@@ -125,6 +125,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
                 </div>
               </button>
               <button onClick={()=>{ setManaging(t); setRenameName(t.name); setEditRules(t.rules||{...DEFAULT_RULES}); setDeletePhase("idle"); setDeleteText(""); }}
+                aria-label={`Manage ${t.name}`}
                 style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)",
                   borderRadius:8, padding:"5px 10px", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:12 }}>
                 ···
@@ -145,7 +146,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
           <p style={{ ...sectionLabel, color:"#38bdf8" }}>NEW TEAM</p>
           <div style={{ marginBottom:10 }}>
             <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>TEAM NAME</label>
-            <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="e.g. Prime 10U"
+            <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="e.g. Prime 10U" aria-label="Team name"
               style={inputStyle}/>
           </div>
           <p style={{ ...sectionLabel, marginTop:14, marginBottom:10 }}>PITCH COUNT RULES</p>
@@ -176,6 +177,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18 }}>
               <div style={{ fontSize:16, fontWeight:800, color:"#f8fafc" }}>{managing.name}</div>
               <button onClick={()=>{ setManaging(null); setDeletePhase("idle"); setDeleteText(""); }}
+                aria-label="Close"
                 style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:8,
                   width:32, height:32, color:"rgba(255,255,255,0.5)", cursor:"pointer" }}>✕</button>
             </div>
@@ -185,25 +187,25 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
                 <div style={{ ...card, border:"1px solid rgba(56,189,248,0.2)", marginBottom:12 }}>
                   <p style={{ ...sectionLabel, color:"#38bdf8" }}>EDIT TEAM</p>
                   <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>TEAM NAME</label>
-                  <input value={renameName} onChange={e=>setRenameName(e.target.value)}
+                  <input value={renameName} onChange={e=>setRenameName(e.target.value)} aria-label="Team name"
                     style={{ ...inputStyle, marginBottom:12 }}/>
                   <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME MAX PITCHES</label>
-                  <input type="number" min="1" value={editRules.maxPitches}
+                  <input type="number" min="1" value={editRules.maxPitches} aria-label="Game max pitches"
                     onChange={e=>setEditRules(r=>({...r,maxPitches:e.target.value}))}
                     style={{ ...inputStyle, marginBottom:4 }}/>
                   <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)", marginBottom:10 }}>Maximum pitches allowed per game</div>
                   <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>0→1 REST-DAY BREAKPOINT</label>
-                  <input type="number" min="0" value={editRules.rest1}
+                  <input type="number" min="0" value={editRules.rest1} aria-label="0 to 1 rest-day breakpoint"
                     onChange={e=>setEditRules(r=>({...r,rest1:e.target.value}))}
                     style={{ ...inputStyle, marginBottom:4 }}/>
                   <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)", marginBottom:10 }}>Pitches above this require 1 day rest</div>
                   <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>1→2 REST-DAY BREAKPOINT</label>
-                  <input type="number" min="0" value={editRules.rest2}
+                  <input type="number" min="0" value={editRules.rest2} aria-label="1 to 2 rest-day breakpoint"
                     onChange={e=>setEditRules(r=>({...r,rest2:e.target.value}))}
                     style={{ ...inputStyle, marginBottom:4 }}/>
                   <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)", marginBottom:10 }}>Pitches above this require 2 days rest</div>
                   <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>2→3 REST-DAY BREAKPOINT</label>
-                  <input type="number" min="0" value={editRules.rest3}
+                  <input type="number" min="0" value={editRules.rest3} aria-label="2 to 3 rest-day breakpoint"
                     onChange={e=>setEditRules(r=>({...r,rest3:e.target.value}))}
                     style={{ ...inputStyle, marginBottom:12 }}/>
                   <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)", marginBottom:12 }}>Pitches above this require 3 days rest</div>
@@ -232,7 +234,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
                   Type <strong style={{color:"#f87171"}}>DELETE TEAM</strong> to confirm.
                 </p>
                 <input value={deleteText} onChange={e=>setDeleteText(e.target.value)}
-                  placeholder="DELETE TEAM" style={{ ...inputStyle, marginBottom:10 }}/>
+                  placeholder="DELETE TEAM" aria-label="Type DELETE TEAM to confirm" style={{ ...inputStyle, marginBottom:10 }}/>
                 <div style={{ display:"flex", gap:8 }}>
                   <button onClick={()=>{ setDeletePhase("idle"); setDeleteText(""); }} style={cancelBtn}>Cancel</button>
                   <button onClick={handleDelete} disabled={deleteText !== "DELETE TEAM"}

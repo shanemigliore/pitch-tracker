@@ -73,7 +73,7 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
       )}
 
       <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 16px" }}>
-        <button onClick={onBack} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
+        <button onClick={onBack} aria-label="Back to roster" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
           padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
         <div style={{ flex:1 }}>
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>
@@ -81,6 +81,7 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
           </h2>
         </div>
         <button onClick={()=>{ setEditName(pitcher.name); setEditJersey(pitcher.jersey||""); setEditOpen(o=>!o); }}
+          aria-label="Edit player details" aria-pressed={editOpen}
           style={{ background:editOpen?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.07)",
             border:`1px solid ${editOpen?"rgba(56,189,248,0.4)":"rgba(255,255,255,0.1)"}`,
             borderRadius:10, padding:10, color:editOpen?"#38bdf8":"rgba(255,255,255,0.5)",
@@ -93,10 +94,10 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
         <div style={{ ...card, border:"1px solid rgba(56,189,248,0.25)", marginBottom:12 }}>
           <p style={sectionLabel}>EDIT PLAYER</p>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NAME</label>
-          <input value={editName} onChange={e=>setEditName(e.target.value)}
+          <input value={editName} onChange={e=>setEditName(e.target.value)} aria-label="Name"
             style={{ ...inputStyle, marginBottom:10 }}/>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>JERSEY #</label>
-          <input placeholder="e.g. 07 (optional)" value={editJersey}
+          <input placeholder="e.g. 07 (optional)" value={editJersey} aria-label="Jersey number"
             onChange={e=>{ const v=e.target.value.replace(/\D/g,"").slice(0,2); setEditJersey(v); setEditJerseyErr(v?validateJersey(v):""); }}
             style={{ ...inputStyle, width:120, textAlign:"center", marginBottom:editJerseyErr?4:12,
               border:editJerseyErr?"1px solid rgba(244,63,94,0.6)":inputStyle.border }}/>
@@ -169,27 +170,27 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
           </div>
           <div style={{ display:"flex", justifyContent:"center", gap:8, marginBottom:10 }}>
             {[-5,-1].map(d=>(
-              <button key={d} onClick={()=>setPitches(p=>Math.max(0,p+d))}
+              <button key={d} onClick={()=>setPitches(p=>Math.max(0,p+d))} aria-label={`Subtract ${Math.abs(d)} pitch${Math.abs(d)!==1?"es":""}`}
                 style={{ width:50, height:50, borderRadius:"50%", background:"rgba(255,255,255,0.07)",
                   border:"1px solid rgba(255,255,255,0.12)", color:"rgba(255,255,255,0.8)", fontSize:14, fontWeight:700, cursor:"pointer" }}>{d}</button>
             ))}
             {[1,5].map(d=>(
-              <button key={d} onClick={()=>setPitches(p=>p+d)}
+              <button key={d} onClick={()=>setPitches(p=>p+d)} aria-label={`Add ${d} pitch${d!==1?"es":""}`}
                 style={{ width:50, height:50, borderRadius:"50%",
                   background:"linear-gradient(135deg,#2563eb,#1d4ed8)", border:"none", color:"#fff", fontSize:14, fontWeight:800, cursor:"pointer",
                   boxShadow:"0 3px 12px rgba(37,99,235,0.4)" }}>+{d}</button>
             ))}
           </div>
-          <input type="number" min="0" placeholder="Or type exact count…"
+          <input type="number" min="0" placeholder="Or type exact count…" aria-label="Pitch count"
             value={pitches===0?"":String(pitches)}
             onChange={e=>{ const v=parseInt(e.target.value,10); setPitches(isNaN(v)||v<0?0:v); }}
             style={{ ...inputStyle, fontSize:18, fontWeight:800, fontFamily:"'Bebas Neue',cursive", textAlign:"center", marginBottom:10 }}/>
-          <input placeholder="Opponent *" value={opponent}
+          <input placeholder="Opponent *" value={opponent} aria-label="Opponent"
             onChange={e=>{ setOpponent(e.target.value); if(e.target.value.trim()) setOpponentErr(false); }}
             style={{ ...inputStyle, marginBottom:opponentErr?4:10, border:opponentErr?"1px solid rgba(244,63,94,0.6)":inputStyle.border }}/>
           {opponentErr && <div style={{ fontSize:11, color:"#f87171", marginBottom:8 }}>Opponent is required</div>}
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME DATE</label>
-          <input type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)}
+          <input type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)} aria-label="Game date"
             style={{ ...inputStyle, marginBottom:12 }}/>
           <div style={{ display:"flex", gap:8 }}>
             <button onClick={()=>{setLogOpen(false);setPitches(0);}} style={cancelBtn}>Cancel</button>

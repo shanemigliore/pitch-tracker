@@ -58,7 +58,7 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
               {formatDate(game.date)}{game.opponent ? ` · vs ${game.opponent}` : ""}
             </div>
           </div>
-          <button onClick={onClose} style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:8,
+          <button onClick={onClose} aria-label="Close" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:8,
             width:32, height:32, color:"rgba(255,255,255,0.6)", cursor:"pointer", fontSize:18 }}>✕</button>
         </div>
 
@@ -67,11 +67,11 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
           tournaments={tournaments} gameDate={editDate}/>
 
         <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME DATE</label>
-        <input type="date" value={editDate} onChange={e=>setEditDate(e.target.value)}
+        <input type="date" value={editDate} onChange={e=>setEditDate(e.target.value)} aria-label="Game date"
           style={{ ...inputStyle, marginBottom:10 }}/>
 
         <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>OPPONENT</label>
-        <input placeholder="Team name (optional)" value={editOpponent} onChange={e=>setEditOpponent(e.target.value)}
+        <input placeholder="Team name (optional)" value={editOpponent} onChange={e=>setEditOpponent(e.target.value)} aria-label="Opponent"
           style={{ ...inputStyle, marginBottom:14 }}/>
 
         <p style={sectionLabel}>PITCHER PITCH COUNTS</p>
@@ -88,7 +88,7 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
                 {p.jersey ? `#${p.jersey}` : (p.playerName||"?")[0]}
               </div>
               <span style={{ flex:1, fontSize:13, fontWeight:600, color:"rgba(255,255,255,0.85)" }}>{p.playerName}</span>
-              <input type="number" min="0"
+              <input type="number" min="0" aria-label={`${p.playerName} pitch count`}
                 value={pitcherPitches[p.pitcherId] ?? String(p.pitches)}
                 onChange={e => setPitcherPitches(m => ({ ...m, [p.pitcherId]: e.target.value }))}
                 style={{ ...inputStyle, width:64, textAlign:"center", fontSize:18, fontWeight:800,

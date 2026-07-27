@@ -12,8 +12,10 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
   const [opponent, setOpponent] = useState("");
   const [opponentErr, setOpponentErr] = useState(false);
   const [entries, setEntries] = useState({});
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const [saved, setSaved] = useState(false);
   const [warnIneligible, setWarnIneligible] = useState(false);
+  const [missingCounts, setMissingCounts] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null); // { pitcher, entry }
   const [editPitcher, setEditPitcher] = useState(null);
 
@@ -21,14 +23,27 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
 
   function setEntry(id, val) { setEntries(e=>({...e,[id]:val})); }
   function getCount(id) { const v=parseInt(entries[id]||"0",10); return isNaN(v)||v<0?0:v; }
+  function toggleSelected(id) {
+    setMissingCounts(false);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) { next.delete(id); setEntry(id, ""); }
+      else next.add(id);
+      return next;
+    });
+  }
 
   const pitcherLimit = getCurrentRules().maxPitches;
+  const seasonTotal = p => (p.history||[]).reduce((s,g)=>s+(g.pitches||0),0);
+  const sortedRoster = [...roster].sort((a,b)=>seasonTotal(b)-seasonTotal(a));
 
   function handleSave(confirmed=false) {
-    const toLog = roster.filter(p=>getCount(p.id)>0);
+    const toLog = roster.filter(p=>selectedIds.has(p.id));
     if (toLog.length===0) return;
     if (!opponent.trim()) { setOpponentErr(true); return; }
     setOpponentErr(false);
+    if (toLog.some(p=>getCount(p.id)===0)) { setMissingCounts(true); return; }
+    setMissingCounts(false);
     const ineligToLog = toLog.filter(p=>getAvailabilityStatus(p,null,tournaments)!=="available");
     if (ineligToLog.length>0 && !confirmed) { setWarnIneligible(true); return; }
     setWarnIneligible(false);
@@ -47,11 +62,11 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
       });
     });
     setSaved(true);
-    setTimeout(()=>{ setSaved(false); setEntries({}); setOpponent(""); }, 2200);
+    setTimeout(()=>{ setSaved(false); setEntries({}); setSelectedIds(new Set()); setOpponent(""); }, 2200);
   }
 
-  const hasEntries = roster.some(p=>getCount(p.id)>0);
-  const totalPitchers = roster.filter(p=>getCount(p.id)>0).length;
+  const hasEntries = selectedIds.size > 0;
+  const totalPitchers = selectedIds.size;
 
   // Gather all historical games with their pitchers for the edit tab
   const allGameDates = [...new Set(
@@ -91,7 +106,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
       {/* Mode toggle */}
       <div style={{ display:"flex", gap:8, marginBottom:14 }}>
         {[["new","+ New Game"],["edit","✏ Edit Past Games"]].map(([m,label])=>(
-          <button key={m} onClick={()=>setMode(m)}
+          <button key={m} onClick={()=>setMode(m)} aria-pressed={mode===m}
             style={{ flex:1, padding:"10px", borderRadius:12,
               border:`1px solid ${mode===m?"#38bdf8":"rgba(255,255,255,0.1)"}`,
               background:mode===m?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
@@ -117,80 +132,114 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
               <ContextPicker context={context} setContext={setContext}
                 tourneyDay={tourneyDay} setTourneyDay={setTourneyDay} tournaments={tournaments} gameDate={gameDate}/>
               <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME DATE</label>
-              <input type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)}
+              <input type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)} aria-label="Game date"
                 style={{ ...inputStyle, marginBottom:10 }}/>
               <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>OPPONENT *</label>
-              <input placeholder="Team name (required)" value={opponent}
+              <input placeholder="Team name (required)" value={opponent} aria-label="Opponent"
                 onChange={e=>{ setOpponent(e.target.value); if(e.target.value.trim()) setOpponentErr(false); }}
                 style={{ ...inputStyle, border:opponentErr?"1px solid rgba(244,63,94,0.6)":inputStyle.border, marginBottom:opponentErr?4:0 }}/>
               {opponentErr && <div style={{ fontSize:11, color:"#f87171", marginTop:4 }}>Opponent is required</div>}
             </div>
 
             <div style={card}>
-              <p style={sectionLabel}>PITCHER PITCH COUNTS</p>
-              <p style={{ margin:"0 0 12px", fontSize:12, color:"rgba(255,255,255,0.4)" }}>Leave blank if pitcher did not appear.</p>
+              <p style={sectionLabel}>WHO PITCHED?</p>
+              <p style={{ margin:"0 0 12px", fontSize:12, color:"rgba(255,255,255,0.4)" }}>Tap everyone who threw in this game.</p>
               {roster.length===0 ? (
                 <div style={{ textAlign:"center", padding:"20px 0", color:"rgba(255,255,255,0.3)", fontSize:13 }}>No players on roster yet</div>
-              ) : [...roster].sort((a,b)=>((b.history||[]).reduce((s,g)=>s+(g.pitches||0),0))-((a.history||[]).reduce((s,g)=>s+(g.pitches||0),0))).map(p=>{
-                const status = getAvailabilityStatus(p, null, tournaments);
-                const s = STATUS[status];
-                const count = getCount(p.id);
-                const overLimit = count > pitcherLimit;
-                const atWarning = context==="regular" && count >= pitcherLimit-10 && count <= pitcherLimit;
-                const rd = getRegRestDays(count);
-                return (
-                  <div key={p.id} style={{ marginBottom:6, padding:"8px 12px", borderRadius:12,
-                    background:status!=="available"?s.bg:"rgba(255,255,255,0.02)",
-                    border:`1px solid ${status!=="available"?s.ring:"rgba(255,255,255,0.07)"}` }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                      <div style={{ width:34, height:34, borderRadius:9, background:s.bg, border:`1px solid ${s.ring}`,
-                        display:"flex", alignItems:"center", justifyContent:"center",
-                        fontFamily:"'Bebas Neue',cursive", fontSize:14, color:s.color, flexShrink:0 }}>
-                        {p.jersey?`#${p.jersey}`:p.name[0]}
-                      </div>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:13, fontWeight:700, color:"#f8fafc", lineHeight:1.2 }}>{p.name}</div>
-                        {status!=="available" ? (
-                          <div style={{ fontSize:10, color:s.color, fontWeight:600 }}>
-                            {`Eligible ${formatDate(getEligibleDateStr(p, tournaments))}`}
-                          </div>
-                        ) : (
-                          <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>
-                            {p.lastPitches>0?`Last: ${p.lastPitches}p`:"No games"}
-                          </div>
-                        )}
-                      </div>
-                      <input type="number" min="0" placeholder="0"
-                        value={entries[p.id]||""}
-                        onChange={e=>setEntry(p.id,e.target.value)}
-                        style={{ ...inputStyle, width:60, flexShrink:0, textAlign:"center", fontSize:18, fontWeight:800,
-                          fontFamily:"'Bebas Neue',cursive", padding:"4px 6px",
-                          borderColor:overLimit?"rgba(244,63,94,0.5)":atWarning?"rgba(251,146,60,0.5)":"rgba(255,255,255,0.1)",
-                          background:overLimit?"rgba(244,63,94,0.1)":atWarning?"rgba(251,146,60,0.08)":"rgba(255,255,255,0.05)" }}/>
-                      <div style={{ width:82, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"flex-end" }}>
-                        {count>0 ? (
-                          <div style={{ textAlign:"right" }}>
-                            <div style={{ fontSize:10, fontWeight:700,
-                              color:rd===0?"#4ade80":rd===1?"#a3e635":rd===2?"#fb923c":"#f43f5e" }}>
-                              {rd===0?"No rest":`${rd}d rest`}
-                            </div>
-                            <div style={{ fontSize:9,
-                              color:overLimit?(context==="regular"?"#f43f5e":"#fb923c"):atWarning?"#fb923c":"rgba(255,255,255,0.35)" }}>
-                              {overLimit?(context==="regular"?`${count-pitcherLimit} over`:`${count-pitcherLimit} over`):`${pitcherLimit-count} left`}
-                            </div>
-                          </div>
-                        ) : (
-                          <Chip status={status}/>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              ) : (
+                <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                  {sortedRoster.map(p=>{
+                    const status = getAvailabilityStatus(p, null, tournaments);
+                    const s = STATUS[status];
+                    const selected = selectedIds.has(p.id);
+                    return (
+                      <button key={p.id} type="button" onClick={()=>toggleSelected(p.id)}
+                        aria-pressed={selected} aria-label={`${p.name}${selected ? ", selected" : ""}`}
+                        style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 12px", borderRadius:20,
+                          border:`1px solid ${selected?"#38bdf8":s.ring}`,
+                          background:selected?"rgba(56,189,248,0.18)":s.bg,
+                          color:selected?"#38bdf8":s.color, fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                        {selected && I.check}
+                        {p.jersey?`#${p.jersey} `:""}{p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
+            {selectedIds.size > 0 && (
+              <div style={card}>
+                <p style={sectionLabel}>PITCH COUNTS</p>
+                <p style={{ margin:"0 0 12px", fontSize:12, color:"rgba(255,255,255,0.4)" }}>Enter each pitcher's pitch count for this game.</p>
+                {sortedRoster.filter(p=>selectedIds.has(p.id)).map(p=>{
+                  const status = getAvailabilityStatus(p, null, tournaments);
+                  const s = STATUS[status];
+                  const count = getCount(p.id);
+                  const overLimit = count > pitcherLimit;
+                  const atWarning = context==="regular" && count >= pitcherLimit-10 && count <= pitcherLimit;
+                  const rd = getRegRestDays(count);
+                  return (
+                    <div key={p.id} style={{ marginBottom:6, padding:"8px 12px", borderRadius:12,
+                      background:status!=="available"?s.bg:"rgba(255,255,255,0.02)",
+                      border:`1px solid ${status!=="available"?s.ring:"rgba(255,255,255,0.07)"}` }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <div style={{ width:34, height:34, borderRadius:9, background:s.bg, border:`1px solid ${s.ring}`,
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          fontFamily:"'Bebas Neue',cursive", fontSize:14, color:s.color, flexShrink:0 }}>
+                          {p.jersey?`#${p.jersey}`:p.name[0]}
+                        </div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:13, fontWeight:700, color:"#f8fafc", lineHeight:1.2 }}>{p.name}</div>
+                          {status!=="available" ? (
+                            <div style={{ fontSize:10, color:s.color, fontWeight:600 }}>
+                              {`Eligible ${formatDate(getEligibleDateStr(p, tournaments))}`}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>
+                              {p.lastPitches>0?`Last: ${p.lastPitches}p`:"No games"}
+                            </div>
+                          )}
+                        </div>
+                        <input type="number" min="0" placeholder="0" aria-label={`${p.name} pitch count`}
+                          value={entries[p.id]||""}
+                          onChange={e=>{ setMissingCounts(false); setEntry(p.id,e.target.value); }}
+                          style={{ ...inputStyle, width:60, flexShrink:0, textAlign:"center", fontSize:18, fontWeight:800,
+                            fontFamily:"'Bebas Neue',cursive", padding:"4px 6px",
+                            borderColor:overLimit?"rgba(244,63,94,0.5)":atWarning?"rgba(251,146,60,0.5)":"rgba(255,255,255,0.1)",
+                            background:overLimit?"rgba(244,63,94,0.1)":atWarning?"rgba(251,146,60,0.08)":"rgba(255,255,255,0.05)" }}/>
+                        <div style={{ width:82, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"flex-end" }}>
+                          {count>0 ? (
+                            <div style={{ textAlign:"right" }}>
+                              <div style={{ fontSize:10, fontWeight:700,
+                                color:rd===0?"#4ade80":rd===1?"#a3e635":rd===2?"#fb923c":"#f43f5e" }}>
+                                {rd===0?"No rest":`${rd}d rest`}
+                              </div>
+                              <div style={{ fontSize:9,
+                                color:overLimit?(context==="regular"?"#f43f5e":"#fb923c"):atWarning?"#fb923c":"rgba(255,255,255,0.35)" }}>
+                                {overLimit?(context==="regular"?`${count-pitcherLimit} over`:`${count-pitcherLimit} over`):`${pitcherLimit-count} left`}
+                              </div>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={()=>toggleSelected(p.id)}
+                              aria-label={`Remove ${p.name} from this game`}
+                              style={{ background:"none", border:"none", color:"rgba(255,255,255,0.3)", cursor:"pointer", padding:4 }}>
+                              {I.xmark}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {missingCounts && (
+                  <div style={{ fontSize:11, color:"#f87171", marginTop:4 }}>Enter a pitch count for everyone selected above (or tap ✕ to remove them).</div>
+                )}
+              </div>
+            )}
+
             {warnIneligible && (()=>{
-              const toLog = roster.filter(p=>getCount(p.id)>0);
+              const toLog = roster.filter(p=>selectedIds.has(p.id));
               const inelig = toLog.filter(p=>getAvailabilityStatus(p,null,tournaments)!=="available");
               return (
                 <div style={{ ...card, border:"1px solid rgba(251,146,60,0.4)", background:"rgba(251,146,60,0.07)", marginBottom:12 }}>
@@ -217,7 +266,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, onEditGame, onDelet
               );
             })()}
             {!warnIneligible && (()=>{
-              const toLog = roster.filter(p=>getCount(p.id)>0);
+              const toLog = roster.filter(p=>selectedIds.has(p.id));
               const inelig = toLog.filter(p=>getAvailabilityStatus(p,null,tournaments)!=="available");
               const maxRest = inelig.reduce((m,p)=>Math.max(m,daysUntilEligible(p,null,tournaments)),0);
               const btnBg = !hasEntries || inelig.length===0

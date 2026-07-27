@@ -9,6 +9,7 @@ function RosterScreen({ roster, onAdd, onSelect, tournaments }) {
   const [name, setName] = useState("");
   const [jersey, setJersey] = useState("");
   const [jerseyErr, setJerseyErr] = useState("");
+  const [confirmDupeName, setConfirmDupeName] = useState(false);
 
   const totalPitches = p => (p.history || []).reduce((s, g) => s + (g.pitches || 0), 0);
   const sorted = [...roster].sort((a, b) => totalPitches(b) - totalPitches(a));
@@ -17,16 +18,23 @@ function RosterScreen({ roster, onAdd, onSelect, tournaments }) {
   function validateJersey(val) {
     if (!val) return "";
     if (!/^\d{1,2}$/.test(val)) return "Must be a number 0–99";
+    // Compare numerically, not as strings - "7" and "07" are the same number
+    if (roster.some(p => p.jersey && parseInt(p.jersey, 10) === parseInt(val, 10))) return `#${val} is already taken`;
     return "";
   }
 
-  function submit() {
+  function submit(confirmed=false) {
     if (!name.trim()) return;
     const err = validateJersey(jersey);
     if (err) { setJerseyErr(err); return; }
-    onAdd({ id:Date.now(), name:name.trim(), jersey:jersey.trim(),
+    // Duplicate jersey numbers are a hard block (above); duplicate names are
+    // plausible on a real roster (two kids can share a first name), so just
+    // confirm rather than block.
+    const dupeName = roster.some(p => p.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (dupeName && !confirmed) { setConfirmDupeName(true); return; }
+    onAdd({ id:newId(), name:name.trim(), jersey:jersey.trim(),
       lastPitches:0, lastGameDate:null, history:[] });
-    setName(""); setJersey(""); setJerseyErr(""); setOpen(false);
+    setName(""); setJersey(""); setJerseyErr(""); setConfirmDupeName(false); setOpen(false);
   }
 
   return (
@@ -46,16 +54,28 @@ function RosterScreen({ roster, onAdd, onSelect, tournaments }) {
       {open && (
         <div style={{ ...card, border:"1px solid rgba(255,255,255,0.12)", backdropFilter:"blur(12px)" }}>
           <p style={sectionLabel}>NEW PLAYER</p>
-          <input placeholder="Full name" value={name} onChange={e=>setName(e.target.value)}
+          <input aria-label="Full name" placeholder="Full name" value={name}
+            onChange={e=>{ setName(e.target.value); setConfirmDupeName(false); }}
             onKeyDown={e=>e.key==="Enter"&&submit()} style={{ ...inputStyle, marginBottom:8 }}/>
-          <input placeholder="e.g. 07 (optional)" value={jersey}
+          <input aria-label="Jersey number" placeholder="e.g. 07 (optional)" value={jersey}
             onChange={e=>{ const v=e.target.value.replace(/\D/g,"").slice(0,2); setJersey(v); setJerseyErr(v?validateJersey(v):""); }}
             style={{ ...inputStyle, marginBottom:jerseyErr?4:10, width:120, textAlign:"center",
               border:jerseyErr?"1px solid rgba(244,63,94,0.6)":inputStyle.border }}/>
           {jerseyErr && <div style={{ fontSize:11, color:"#f87171", marginBottom:8 }}>{jerseyErr}</div>}
+          {confirmDupeName && (
+            <div style={{ fontSize:12, color:"#fbbf24", marginBottom:8, padding:"8px 10px",
+              background:"rgba(251,191,36,0.08)", border:"1px solid rgba(251,191,36,0.3)", borderRadius:8 }}>
+              A pitcher named "{name.trim()}" already exists — add anyway?
+            </div>
+          )}
           <div style={{ display:"flex", gap:8 }}>
-            <button onClick={()=>setOpen(false)} style={cancelBtn}>Cancel</button>
-            <button onClick={submit} style={{ ...primaryBtn, flex:2 }}>Add to Roster</button>
+            <button onClick={()=>{ setOpen(false); setConfirmDupeName(false); }} style={cancelBtn}>Cancel</button>
+            {confirmDupeName ? (
+              <button onClick={()=>submit(true)} style={{ ...primaryBtn, flex:2,
+                background:"linear-gradient(135deg,#ea580c,#c2410c)" }}>Add Anyway</button>
+            ) : (
+              <button onClick={()=>submit()} style={{ ...primaryBtn, flex:2 }}>Add to Roster</button>
+            )}
           </div>
         </div>
       )}

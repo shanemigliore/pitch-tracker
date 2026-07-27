@@ -142,17 +142,27 @@ const { STATUS, I, inputStyle, primaryBtn, cancelBtn, card, sectionLabel } = win
   <script>
     // Version check: compare the version in the currently-running HTML against what the
     // server actually has right now. Uses a live network fetch (cache:no-store) so that
-    // iOS PWA's native page cache can't hide a new deploy. Reloads + clears caches on mismatch.
+    // iOS PWA's native page cache can't hide a new deploy.
+    //
+    // Does NOT reload on its own - a coach mid-entry during a live game shouldn't lose
+    // unsaved input to a surprise reload. Instead it stores the pending version and fires
+    // a 'pt-update-available' event; the React app (App.js) listens for that and shows a
+    // small tappable banner. window.__applyPendingAppUpdate (called from that banner) does
+    // the actual cache-clear + reload, on the user's own timing.
     (function() {
       const VERSION_KEY = 'pt_app_version';
       const running = document.querySelector('meta[name="app-version"]')?.content || '';
 
       function applyUpdate(latest) {
-        localStorage.setItem(VERSION_KEY, latest);
-        const clear = 'caches' in window
-          ? caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k))))
-          : Promise.resolve();
-        clear.then(() => location.reload(true));
+        window.__pendingAppUpdateVersion = latest;
+        window.__applyPendingAppUpdate = function() {
+          localStorage.setItem(VERSION_KEY, latest);
+          const clear = 'caches' in window
+            ? caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k))))
+            : Promise.resolve();
+          clear.then(() => location.reload(true));
+        };
+        window.dispatchEvent(new CustomEvent('pt-update-available', { detail: { version: latest } }));
       }
 
       // Always store the running version so we have a baseline.

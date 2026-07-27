@@ -81,7 +81,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
           <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>{distinctGameCount} game{distinctGameCount!==1?"s":""} · {filteredEntries.length} appearance{filteredEntries.length!==1?"s":""}</p>
         </div>
         {years.length>1 && (
-          <select value={displayYear} onChange={e=>setYear(e.target.value)}
+          <select value={displayYear} onChange={e=>setYear(e.target.value)} aria-label="Year"
             style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)",
               borderRadius:10, padding:"6px 10px", color:"#f8fafc", fontSize:14 }}>
             {years.map(y=><option key={y} value={y}>{y}</option>)}
@@ -97,7 +97,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
             <p style={{ ...sectionLabel, margin:0 }}>FILTER BY PITCHER</p>
           </div>
           <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-            <button onClick={()=>setFilterPitcherId("all")}
+            <button onClick={()=>setFilterPitcherId("all")} aria-pressed={filterPitcherId==="all"}
               style={{ padding:"6px 12px", borderRadius:20,
                 border:`1px solid ${filterPitcherId==="all"?"#38bdf8":"rgba(255,255,255,0.1)"}`,
                 background:filterPitcherId==="all"?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
@@ -106,7 +106,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
               All Pitchers
             </button>
             {pitchersWithGames.map(p=>(
-              <button key={p.id} onClick={()=>setFilterPitcherId(String(p.id))}
+              <button key={p.id} onClick={()=>setFilterPitcherId(String(p.id))} aria-pressed={String(filterPitcherId)===String(p.id)}
                 style={{ padding:"6px 12px", borderRadius:20,
                   border:`1px solid ${String(filterPitcherId)===String(p.id)?"#38bdf8":"rgba(255,255,255,0.1)"}`,
                   background:String(filterPitcherId)===String(p.id)?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
