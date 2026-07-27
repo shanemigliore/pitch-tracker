@@ -1,4 +1,6 @@
-// TournamentScreen — create/edit/delete tournaments.
+// TournamentScreen — create/edit/delete tournaments (Settings sub-section).
+// Viewing a tournament's actual games/pitch usage now lives on the Season tab,
+// grouped under that tournament, not here - this is config only.
 // Babel/JSX component, loaded via <script type="text/babel" src="components/TournamentScreen.js"></script>.
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -50,7 +52,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
       maxTotal:parseInt(maxTotal)||115,
       day1IsHardLimit });
     setEditId(null);
-    setView(editId);
+    setView("list");
   }
 
   if (view==="create") {
@@ -132,10 +134,11 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
   }
 
   if (view==="edit") {
+    const t = tournaments.find(x=>x.id===editId);
     return (
       <div style={{ padding:"0 16px 110px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 18px" }}>
-          <button onClick={()=>{ setEditId(null); setView(editId); }} aria-label="Back to tournament" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
+          <button onClick={()=>{ setEditId(null); setView("list"); setConfirmDeleteTourney(false); }} aria-label="Back to tournaments" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
             padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>EDIT TOURNAMENT</h2>
         </div>
@@ -202,217 +205,27 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
             boxShadow:"0 4px 20px rgba(29,78,216,0.35)" }}>
           Save Changes
         </button>
-      </div>
-    );
-  }
 
-  if (view!=="list") {
-    const t = tournaments.find(t=>t.id===view);
-    if (!t) { return null; }
-    const allEntries = roster.flatMap(p=>
-      (p.history||[]).filter(h=>h.tournamentId===t.id).map(h=>({...h,playerName:p.name,jersey:p.jersey,playerId:p.id}))
-    ).sort((a,b)=>a.date<b.date?-1:1);
-    const byDay = {};
-    allEntries.forEach(e=>{ const d=e.tourneyDay||1; if(!byDay[d]) byDay[d]=[]; byDay[d].push(e); });
-    const totalPitches = allEntries.reduce((s,e)=>s+e.pitches,0);
-    const uniquePlayers = [...new Map(allEntries.map(e=>[e.playerId,e])).values()];
-
-    return (
-      <div style={{ padding:"0 16px 110px" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 18px" }}>
-          <button onClick={()=>setView("list")} aria-label="Back to tournaments" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
-            padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
-          <div style={{ flex:1 }}>
-            <h2 style={{ margin:0, fontSize:21, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>
-              🏆 {t.name.toUpperCase()}
-            </h2>
-            <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>{t.days}-day tournament</div>
-          </div>
-          <button onClick={()=>openEdit(t)} aria-label={`Edit ${t.name}`}
-            style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:8,
-              padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.edit}</button>
-          <button onClick={()=>setConfirmDeleteTourney(true)} aria-label={`Delete ${t.name}`}
-            style={{ background:"rgba(244,63,94,0.1)", border:"1px solid rgba(244,63,94,0.25)", borderRadius:8,
-              padding:10, color:"rgba(244,63,94,0.7)", cursor:"pointer", display:"flex" }}>{I.trash}</button>
-        </div>
-        {confirmDeleteTourney && (
+        {!confirmDeleteTourney ? (
+          <button onClick={()=>setConfirmDeleteTourney(true)} style={{ width:"100%", background:"transparent",
+            border:"1px solid rgba(244,63,94,0.2)", borderRadius:14, padding:12, marginTop:10, color:"rgba(244,63,94,0.6)",
+            fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+            {I.trash} Delete Tournament
+          </button>
+        ) : (
           <div style={{ background:"rgba(244,63,94,0.08)", border:"1px solid rgba(244,63,94,0.25)",
-            borderRadius:14, padding:14, marginBottom:12 }}>
+            borderRadius:14, padding:14, marginTop:10 }}>
             <p style={{ margin:"0 0 10px", fontSize:13, color:"#f87171", fontWeight:600, textAlign:"center" }}>
-              Delete "{t.name}"? All pitch data logged for this tournament will be removed from history.
+              Delete "{t?.name}"? All pitch data logged for this tournament will be removed from history.
             </p>
             <div style={{ display:"flex", gap:8 }}>
               <button onClick={()=>setConfirmDeleteTourney(false)} style={{ ...cancelBtn, flex:1 }}>Keep It</button>
-              <button onClick={()=>{ onDeleteTourney(t.id); setView("list"); setConfirmDeleteTourney(false); }}
+              <button onClick={()=>{ onDeleteTourney(editId); setEditId(null); setView("list"); setConfirmDeleteTourney(false); }}
                 style={{ flex:2, background:"linear-gradient(135deg,#dc2626,#b91c1c)", border:"none",
                   borderRadius:12, padding:10, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
                 Yes, Delete
               </button>
             </div>
-          </div>
-        )}
-
-        <div style={card}>
-          <p style={sectionLabel}>PITCH RULES</p>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
-            <div style={{ textAlign:"center", padding:"10px 6px", background:"rgba(255,255,255,0.04)", borderRadius:10,
-              border:`1px solid ${t.day1IsHardLimit?"rgba(244,63,94,0.25)":"rgba(255,255,255,0.06)"}` }}>
-              <div style={{ fontSize:20, fontWeight:800, color:t.day1IsHardLimit?"#f43f5e":"#fbbf24", fontFamily:"'Bebas Neue',cursive" }}>{t.maxDay1}p</div>
-              <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>Day 1</div>
-              <div style={{ fontSize:9, color:t.day1IsHardLimit?"rgba(244,63,94,0.6)":"rgba(255,255,255,0.2)", marginTop:1 }}>{t.day1IsHardLimit?"hard limit":"guideline"}</div>
-            </div>
-            <div style={{ textAlign:"center", padding:"10px 6px", background:"rgba(255,255,255,0.04)", borderRadius:10,
-              border:"1px solid rgba(251,146,60,0.25)" }}>
-              <div style={{ fontSize:20, fontWeight:800, color:"#fb923c", fontFamily:"'Bebas Neue',cursive" }}>{t.maxTotal}p</div>
-              <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>Total</div>
-              <div style={{ fontSize:9, color:"rgba(255,255,255,0.2)", marginTop:1 }}>eligibility limit</div>
-            </div>
-          </div>
-        </div>
-        {allEntries.length>0 && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
-            {[["Appearances",allEntries.length,"#38bdf8"],["Pitchers",uniquePlayers.length,"#a78bfa"],["Total",totalPitches+"p","#fb923c"]].map(([l,v,c])=>(
-              <div key={l} style={{ textAlign:"center", padding:"12px 6px", background:"rgba(255,255,255,0.03)",
-                border:"1px solid rgba(255,255,255,0.07)", borderRadius:12 }}>
-                <div style={{ fontSize:22, fontWeight:900, color:c, fontFamily:"'Bebas Neue',cursive" }}>{v}</div>
-                <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>{l}</div>
-              </div>
-            ))}
-          </div>
-        )}
-        {/* Pitcher eligibility & remaining pitches — ALL roster players */}
-        <div style={card}>
-          <p style={sectionLabel}>PITCHER STATUS & REMAINING PITCHES</p>
-          <div style={{ display:"grid", gridTemplateColumns:t.day1IsHardLimit?"1fr auto auto":"1fr auto", gap:"4px 10px",
-            fontSize:9, color:"rgba(255,255,255,0.3)", fontWeight:700, letterSpacing:1,
-            paddingBottom:8, marginBottom:8, borderBottom:"1px solid rgba(255,255,255,0.07)" }}>
-            <span>PITCHER</span>
-            {t.day1IsHardLimit && <span style={{textAlign:"right"}}>DAY 1 REM</span>}
-            <span style={{textAlign:"right"}}>TOTAL REM</span>
-          </div>
-          {roster.map(p=>{
-            const pGames = allEntries.filter(e=>e.playerId===p.id);
-            const day1Used = pGames.filter(e=>e.tourneyDay===1).reduce((s,e)=>s+e.pitches,0);
-            const totalUsed = pGames.reduce((s,e)=>s+e.pitches,0);
-            const day1Rem = Math.max(0, t.maxDay1 - day1Used);
-            const totalRem = Math.max(0, t.maxTotal - totalUsed);
-            const exceededDay1 = t.day1IsHardLimit && day1Used > t.maxDay1;
-            const exceededTotal = totalUsed >= t.maxTotal;
-            const ineligible = exceededDay1 || exceededTotal;
-            const ineligReason = exceededTotal
-              ? `Exceeded total limit (${totalUsed}/${t.maxTotal}p)`
-              : exceededDay1
-              ? `Exceeded Day 1 limit (${day1Used}/${t.maxDay1}p)`
-              : null;
-
-            const totalPct = Math.min(totalUsed/t.maxTotal, 1);
-            const nameColor = ineligible ? "#f43f5e" : "#f8fafc";
-            const day1RemColor = exceededDay1 ? "#f43f5e" : day1Rem===0 ? "rgba(255,255,255,0.3)" : day1Rem<=10 ? "#fb923c" : "#4ade80";
-            const totalRemColor = exceededTotal ? "#f43f5e" : totalRem<=15 ? "#fb923c" : "#38bdf8";
-
-            return (
-              <div key={p.id} style={{ marginBottom:10, paddingBottom:10,
-                borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
-                {/* Row: name + remaining columns */}
-                <div style={{ display:"grid", gridTemplateColumns:t.day1IsHardLimit?"1fr auto auto":"1fr auto", gap:"4px 10px", alignItems:"center", marginBottom:6 }}>
-                  <div style={{ minWidth:0 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                      <span style={{ fontSize:13, fontWeight:700, color:nameColor, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                        {p.jersey?`#${p.jersey} `:""}{p.name}
-                      </span>
-                      {ineligible && (
-                        <span style={{ fontSize:9, padding:"1px 6px", background:"rgba(244,63,94,0.15)",
-                          border:"1px solid rgba(244,63,94,0.3)", borderRadius:20, color:"#f43f5e", fontWeight:700, flexShrink:0 }}>
-                          INELIGIBLE
-                        </span>
-                      )}
-                      {!ineligible && pGames.length===0 && (
-                        <span style={{ fontSize:9, padding:"1px 6px", background:"rgba(74,222,128,0.1)",
-                          border:"1px solid rgba(74,222,128,0.2)", borderRadius:20, color:"#4ade80", fontWeight:700, flexShrink:0 }}>
-                          NOT YET PITCHED
-                        </span>
-                      )}
-                    </div>
-                    {ineligReason && (
-                      <div style={{ fontSize:10, color:"rgba(244,63,94,0.7)", marginTop:1 }}>{ineligReason}</div>
-                    )}
-                    {!ineligible && pGames.length>0 && (
-                      <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)", marginTop:1 }}>
-                        {totalUsed}p used of {t.maxTotal}p total
-                      </div>
-                    )}
-                    {!ineligible && !t.day1IsHardLimit && day1Used>0 && day1Used>t.maxDay1 && (
-                      <div style={{ fontSize:10, color:"rgba(251,191,36,0.7)", marginTop:1 }}>
-                        ⚠ Day 1: {day1Used}/{t.maxDay1}p (over guideline)
-                      </div>
-                    )}
-                  </div>
-                  {t.day1IsHardLimit && (
-                    <div style={{ textAlign:"right", minWidth:56 }}>
-                      <div style={{ fontSize:15, fontWeight:800, color:day1RemColor, fontFamily:"'Bebas Neue',cursive", lineHeight:1 }}>
-                        {exceededDay1 ? "—" : `${day1Rem}p`}
-                      </div>
-                      <div style={{ fontSize:9, color:"rgba(255,255,255,0.25)" }}>Day 1</div>
-                    </div>
-                  )}
-                  <div style={{ textAlign:"right", minWidth:56 }}>
-                    <div style={{ fontSize:15, fontWeight:800, color:totalRemColor, fontFamily:"'Bebas Neue',cursive", lineHeight:1 }}>
-                      {exceededTotal ? "0p" : `${totalRem}p`}
-                    </div>
-                    <div style={{ fontSize:9, color:"rgba(255,255,255,0.25)" }}>Total</div>
-                  </div>
-                </div>
-                {/* Progress bar: total pitches used */}
-                <div style={{ height:4, background:"rgba(255,255,255,0.06)", borderRadius:4 }}>
-                  <div style={{ height:"100%", width:`${totalPct*100}%`, borderRadius:4,
-                    background:ineligible?"#f43f5e":totalPct>=0.8?"#fb923c":"#38bdf8", transition:"width 0.3s" }}/>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {Object.keys(byDay).length>0 && (
-          <div style={card}>
-            <p style={sectionLabel}>GAME LOG BY DAY</p>
-            {Array.from({length:t.days},(_,i)=>i+1).map(day=>{
-              const dayEntries = byDay[day]||[];
-              const day1Label = day===1 ? `${t.maxDay1}p ${t.day1IsHardLimit?"hard limit":"guideline"}` : null;
-              return (
-                <div key={day} style={{ marginBottom:day<t.days?16:0 }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:"#f59e0b", marginBottom:8, display:"flex", alignItems:"center", gap:6 }}>
-                    <div style={{ width:22, height:22, borderRadius:6, background:"rgba(245,158,11,0.15)",
-                      border:"1px solid rgba(245,158,11,0.3)", display:"flex", alignItems:"center", justifyContent:"center",
-                      fontSize:11, fontWeight:800, color:"#f59e0b" }}>{day}</div>
-                    Day {day} {day1Label && <span style={{ fontWeight:400, color:"rgba(255,255,255,0.4)", fontSize:12 }}>({day1Label})</span>}
-                    {dayEntries.length===0 && <span style={{ color:"rgba(255,255,255,0.3)", fontWeight:400 }}>— No entries</span>}
-                  </div>
-                  {dayEntries.map((e,i)=>{
-                    const rd = getRegRestDays(e.pitches);
-                    return (
-                      <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
-                        padding:"8px 10px", background:"rgba(255,255,255,0.02)", borderRadius:10, marginBottom:5 }}>
-                        <div>
-                          <div style={{ fontSize:13, color:"#f8fafc", fontWeight:600 }}>{e.jersey?`#${e.jersey} `:""}{e.playerName}</div>
-                          <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>
-                            {formatDate(e.date)}{e.opponent?` · vs ${e.opponent}`:""}
-                            {day===1 && e.pitches>t.maxDay1 && <span style={{ color:t.day1IsHardLimit?"#f43f5e":"#fb923c", marginLeft:4 }}>⚠ over Day 1 {t.day1IsHardLimit?"limit":"guideline"}</span>}
-                          </div>
-                        </div>
-                        <div style={{ textAlign:"right" }}>
-                          <div style={{ fontSize:17, fontWeight:800, color:(day===1&&e.pitches>t.maxDay1)?"#fb923c":"#38bdf8", fontFamily:"'Bebas Neue',cursive" }}>{e.pitches}p</div>
-                          <div style={{ fontSize:11, color:rd===0?"#4ade80":rd<=2?"#fb923c":"#f43f5e", fontWeight:600 }}>{rd===0?"No rest":`${rd}d`}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {allEntries.length===0 && (
-          <div style={{ textAlign:"center", padding:"30px 0", color:"rgba(255,255,255,0.3)" }}>
-            <p style={{ fontSize:13 }}>No pitches logged for this tournament yet.</p>
           </div>
         )}
       </div>
@@ -452,7 +265,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
           : tStatus==="past" ? { label:"PAST", color:"rgba(255,255,255,0.35)", bg:"rgba(255,255,255,0.05)", border:"rgba(255,255,255,0.1)" }
           : null;
         return (
-          <div key={t.id} onClick={()=>setView(t.id)}
+          <div key={t.id} onClick={()=>openEdit(t)}
             style={{ display:"flex", alignItems:"center", gap:12, padding:14, marginBottom:8,
               background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)",
               borderLeft:`3px solid ${tStatus==="active"?"#4ade80":tStatus==="upcoming"?"#38bdf8":"#f59e0b"}`, borderRadius:14, cursor:"pointer" }}>

@@ -1,18 +1,12 @@
-// PitcherDetail — pitcher stats, season history, log single game (Roster drill-in).
+// PitcherDetail — pitcher stats, editable season history (Roster drill-in).
+// Logging a new game happens on the Game Log tab, not here - one place to log,
+// not two.
 // Babel/JSX component, loaded via <script type="text/babel" src="components/PitcherDetail.js"></script>.
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: PITCHER DETAIL
 // ══════════════════════════════════════════════════════════════════════════════
-function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGame, onDeleteGame, onEditPlayer }) {
-  const [logOpen, setLogOpen] = useState(false);
-  const [pitches, setPitches] = useState(0);
-  const [gameDate, setGameDate] = useState(todayStr());
-  const [context, setContext] = useState("regular");
-  const [tourneyDay, setTourneyDay] = useState(1);
-  const [opponent, setOpponent] = useState("");
-  const [opponentErr, setOpponentErr] = useState(false);
-  const [saved, setSaved] = useState(false);
+function PitcherDetail({ pitcher, onBack, onDelete, tournaments, onEditGame, onDeleteGame, onEditPlayer }) {
   const [editingEntry, setEditingEntry] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState(pitcher.name);
@@ -34,23 +28,7 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
   const restRemaining = restInfo.isTourney
     ? daysLeft
     : daysLeft - (pitcher.lastGameDate === todayStr() ? 1 : 0);
-  const selectedTourney = tournaments.find(t=>t.id===context);
   const seasons = [...new Set((pitcher.history||[]).map(h=>(h.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
-
-  function handleLog() {
-    if (pitches < 1) return;
-    if (!opponent.trim()) { setOpponentErr(true); return; }
-    setOpponentErr(false);
-    onLog(pitcher.id, {
-      pitches, date:gameDate, opponent,
-      isTournament: context!=="regular",
-      tournamentId: context!=="regular" ? context : null,
-      tournamentName: context!=="regular" ? selectedTourney?.name : null,
-      tourneyDay: context!=="regular" ? tourneyDay : null,
-    });
-    setSaved(true);
-    setTimeout(()=>{ setSaved(false); setLogOpen(false); setPitches(0); setOpponent(""); }, 1800);
-  }
 
   const seasonStats = seasons.map(yr => {
     const games = (pitcher.history||[]).filter(h=>h.date.startsWith(yr));
@@ -140,65 +118,6 @@ function PitcherDetail({ pitcher, onBack, onLog, onDelete, tournaments, onEditGa
           </div>}
         </div>
       </div>
-
-      {/* Log new pitches */}
-      {saved ? (
-        <div style={{ padding:20, textAlign:"center", background:"rgba(74,222,128,0.08)",
-          border:"1px solid rgba(74,222,128,0.25)", borderRadius:16, marginBottom:12 }}>
-          <div style={{ fontSize:32 }}>✅</div>
-          <div style={{ color:"#4ade80", fontWeight:700, marginTop:6 }}>Pitches logged!</div>
-        </div>
-      ) : !logOpen ? (
-        <button onClick={()=>setLogOpen(true)} style={{ ...primaryBtn, width:"100%", marginBottom:12, padding:14 }}>
-          + Log Game Pitches
-        </button>
-      ) : (
-        <div style={{ ...card, border:"1px solid rgba(255,255,255,0.12)" }}>
-          <p style={sectionLabel}>LOG PITCHES</p>
-          <PitcherStatusBanner pitcher={pitcher} tournaments={tournaments}/>
-          <ContextPicker context={context} setContext={setContext}
-            tourneyDay={tourneyDay} setTourneyDay={setTourneyDay} tournaments={tournaments} gameDate={gameDate}/>
-          <div style={{ textAlign:"center", marginBottom:12 }}>
-            <div style={{ position:"relative", display:"inline-block" }}>
-              <RadialArc value={pitches} max={getCurrentRules().maxPitches} size={120} strokeW={9} color="#38bdf8"/>
-              <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", textAlign:"center" }}>
-                <div style={{ fontSize:36, fontWeight:900, lineHeight:1, fontFamily:"'Bebas Neue',cursive",
-                  color:pitches>getCurrentRules().maxPitches?"#f43f5e":"#f8fafc" }}>{pitches}</div>
-                <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>pitches</div>
-              </div>
-            </div>
-          </div>
-          <div style={{ display:"flex", justifyContent:"center", gap:8, marginBottom:10 }}>
-            {[-5,-1].map(d=>(
-              <button key={d} onClick={()=>setPitches(p=>Math.max(0,p+d))} aria-label={`Subtract ${Math.abs(d)} pitch${Math.abs(d)!==1?"es":""}`}
-                style={{ width:50, height:50, borderRadius:"50%", background:"rgba(255,255,255,0.07)",
-                  border:"1px solid rgba(255,255,255,0.12)", color:"rgba(255,255,255,0.8)", fontSize:14, fontWeight:700, cursor:"pointer" }}>{d}</button>
-            ))}
-            {[1,5].map(d=>(
-              <button key={d} onClick={()=>setPitches(p=>p+d)} aria-label={`Add ${d} pitch${d!==1?"es":""}`}
-                style={{ width:50, height:50, borderRadius:"50%",
-                  background:"linear-gradient(135deg,#2563eb,#1d4ed8)", border:"none", color:"#fff", fontSize:14, fontWeight:800, cursor:"pointer",
-                  boxShadow:"0 3px 12px rgba(37,99,235,0.4)" }}>+{d}</button>
-            ))}
-          </div>
-          <input type="number" min="0" placeholder="Or type exact count…" aria-label="Pitch count"
-            value={pitches===0?"":String(pitches)}
-            onChange={e=>{ const v=parseInt(e.target.value,10); setPitches(isNaN(v)||v<0?0:v); }}
-            style={{ ...inputStyle, fontSize:18, fontWeight:800, fontFamily:"'Bebas Neue',cursive", textAlign:"center", marginBottom:10 }}/>
-          <input placeholder="Opponent *" value={opponent} aria-label="Opponent"
-            onChange={e=>{ setOpponent(e.target.value); if(e.target.value.trim()) setOpponentErr(false); }}
-            style={{ ...inputStyle, marginBottom:opponentErr?4:10, border:opponentErr?"1px solid rgba(244,63,94,0.6)":inputStyle.border }}/>
-          {opponentErr && <div style={{ fontSize:11, color:"#f87171", marginBottom:8 }}>Opponent is required</div>}
-          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME DATE</label>
-          <input type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)} aria-label="Game date"
-            style={{ ...inputStyle, marginBottom:12 }}/>
-          <div style={{ display:"flex", gap:8 }}>
-            <button onClick={()=>{setLogOpen(false);setPitches(0);}} style={cancelBtn}>Cancel</button>
-            <button onClick={handleLog} disabled={pitches<1}
-              style={{ ...primaryBtn, flex:2, opacity:pitches<1?0.4:1 }}>Save {pitches>0?`${pitches}p`:""}</button>
-          </div>
-        </div>
-      )}
 
       {/* Season Stats */}
       {seasonStats.filter(s=>s.games>0).length > 0 && (

@@ -1,10 +1,12 @@
-// EligibilityScreen — grid of pitcher availability for a chosen date.
+// EligibilityScreen — the Roster tab: pitcher list grouped by availability for a
+// chosen date, with drill-in to PitcherDetail. (Filename predates the merge with
+// the old roster list - see CLAUDE.md's Components table for the current mapping.)
 // Babel/JSX component, loaded via <script type="text/babel" src="components/EligibilityScreen.js"></script>.
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SCREEN: ELIGIBILITY CHECKER
+// SCREEN: ROSTER (pitcher list + eligibility)
 // ══════════════════════════════════════════════════════════════════════════════
-function EligibilityScreen({ roster, tournaments }) {
+function EligibilityScreen({ roster, tournaments, onSelect }) {
   const [checkDate, setCheckDate] = useState(todayStr());
   const [viewMode, setViewMode] = useState(() => {
     const active = getActiveTourney(tournaments, todayStr());
@@ -55,7 +57,7 @@ function EligibilityScreen({ roster, tournaments }) {
   return (
     <div style={{ padding:"0 16px 110px" }}>
       <div style={{ padding:"16px 0 14px" }}>
-        <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>ELIGIBILITY</h2>
+        <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>ROSTER</h2>
         <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>Check who can pitch on any date</p>
       </div>
 
@@ -119,8 +121,8 @@ function EligibilityScreen({ roster, tournaments }) {
             {eligibleList.length===0 ? (
               <p style={{ fontSize:13, color:"rgba(255,255,255,0.3)", margin:0 }}>No pitchers available on this date</p>
             ) : eligibleList.map(p=>(
-              <div key={p.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
-                borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
+              <div key={p.id} onClick={()=>onSelect(p)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
+                borderBottom:"1px solid rgba(255,255,255,0.04)", cursor:"pointer" }}>
                 <div style={{ width:36, height:36, borderRadius:9, background:"rgba(74,222,128,0.12)",
                   border:"1px solid rgba(74,222,128,0.3)", display:"flex", alignItems:"center", justifyContent:"center",
                   fontFamily:"'Bebas Neue',cursive", fontSize:14, color:"#4ade80", flexShrink:0 }}>
@@ -132,6 +134,7 @@ function EligibilityScreen({ roster, tournaments }) {
                   {viewMode==="regular" && p.lastPitches>0 && <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>Last: {p.lastPitches}p on {formatDate(p.lastGameDate)}</div>}
                 </div>
                 <span style={{ fontSize:11, color:"#4ade80", fontWeight:600 }}>Ready</span>
+                <div style={{ color:"rgba(255,255,255,0.2)" }}>{I.chevron}</div>
               </div>
             ))}
           </div>
@@ -150,8 +153,8 @@ function EligibilityScreen({ roster, tournaments }) {
               const restLeft = left - (p.lastGameDate === checkDate ? 1 : 0);
               const eligStr = getEligibleDateStr(p, tournaments);
               return (
-                <div key={p.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
-                  borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
+                <div key={p.id} onClick={()=>onSelect(p)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
+                  borderBottom:"1px solid rgba(255,255,255,0.04)", cursor:"pointer" }}>
                   <div style={{ width:36, height:36, borderRadius:9, background:"rgba(244,63,94,0.1)",
                     border:"1px solid rgba(244,63,94,0.3)", display:"flex", alignItems:"center", justifyContent:"center",
                     fontFamily:"'Bebas Neue',cursive", fontSize:14, color:"#f43f5e", flexShrink:0 }}>
@@ -171,12 +174,49 @@ function EligibilityScreen({ roster, tournaments }) {
                     )}
                   </div>
                   <Chip status={p.status}/>
+                  <div style={{ color:"rgba(255,255,255,0.2)" }}>{I.chevron}</div>
                 </div>
               );
             })}
           </div>
         </>
       )}
+
+      {roster.length>0 && (
+        <div style={{ ...card, marginTop:4 }}>
+          <p style={sectionLabel}>AVAILABILITY KEY</p>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>
+            {Object.entries(STATUS).map(([k,v])=>(
+              <span key={k} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:"rgba(255,255,255,0.5)" }}>
+                <span style={{ width:7, height:7, borderRadius:"50%", background:v.color }}/>{v.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ ...card, marginTop:4 }}>
+        <p style={sectionLabel}>REST REQUIREMENTS</p>
+        {(()=>{
+          const r = getCurrentRules();
+          const rows = [
+            [`0–${r.rest1} pitches`, "No rest",  "#4ade80"],
+            [`${r.rest1+1}–${r.rest2} pitches`, "1 day",   "#a3e635"],
+            [`${r.rest2+1}–${r.rest3} pitches`, "2 days",  "#fb923c"],
+            [`${r.rest3+1}+ pitches`,                "3 days",  "#f43f5e"],
+          ];
+          return rows.map(([range, rest, c], i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"7px 0",
+              borderBottom:i<3?"1px solid rgba(255,255,255,0.05)":"none", fontSize:13 }}>
+              <span style={{ color:"rgba(255,255,255,0.6)", fontFamily:"'DM Mono',monospace" }}>{range}</span>
+              <span style={{ color:c, fontWeight:600 }}>{rest}</span>
+            </div>
+          ));
+        })()}
+        <p style={{ margin:"8px 0 0", fontSize:11, color:"rgba(255,255,255,0.3)", display:"flex", alignItems:"center", gap:5 }}>
+          {I.warning} Max {getCurrentRules().maxPitches} — may finish batter already in progress
+        </p>
+      </div>
     </div>
   );
 }

@@ -1,8 +1,12 @@
-// SeasonHistory — season-level game history with leaderboard, grouped by game.
+// SeasonHistory — the Season tab: chronological game history with leaderboard.
+// Tournament games are grouped under a single container per tournament
+// (not one card per day) so it's clear which games belong together, but the
+// container still sits in its normal chronological position among regular
+// season games rather than in a separate section/tab.
 // Babel/JSX component, loaded via <script type="text/babel" src="components/SeasonHistory.js"></script>.
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SCREEN: SEASON HISTORY — grouped by game
+// SCREEN: SEASON — grouped by game, tournaments grouped as one container
 // ══════════════════════════════════════════════════════════════════════════════
 function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
   const [year, setYear] = useState(new Date().getFullYear().toString());
@@ -18,7 +22,8 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
       .map(h=>({ ...h, playerName:p.name, jersey:p.jersey, pitcherId:p.id }))
   );
 
-  // Group entries into games using sharedGameId when present, else date+opponent+context
+  // Group entries into per-day games using sharedGameId when present, else
+  // date+opponent+context
   const allGameGroups = (() => {
     const groups = new Map();
     allEntries.forEach(entry => {
@@ -38,20 +43,66 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
       }
       groups.get(key).pitchers.push(entry);
     });
-    return [...groups.values()].sort((a,b) => b.date.localeCompare(a.date));
+    return [...groups.values()];
   })();
 
-  // When a pitcher is filtered, show only games where that pitcher appeared
-  const gameGroups = filterPitcherId==="all"
-    ? allGameGroups
-    : allGameGroups.filter(g => g.pitchers.some(p => String(p.pitcherId)===String(filterPitcherId)));
+  const distinctGameCount = allGameGroups.length;
+
+  // Regular-season games stay as individual chronological cards. Tournament
+  // day-groups collapse into one container per tournament, positioned by its
+  // most recent game date, so all of a tournament's games sit together.
+  const regularGames = allGameGroups.filter(g=>!g.tournamentId);
+  const tournamentContainers = (() => {
+    const byTourney = new Map();
+    allGameGroups.filter(g=>g.tournamentId).forEach(g=>{
+      if (!byTourney.has(g.tournamentId)) {
+        byTourney.set(g.tournamentId, { tournamentId:g.tournamentId, tournamentName:g.tournamentName, days:[] });
+      }
+      byTourney.get(g.tournamentId).days.push(g);
+    });
+    return [...byTourney.values()].map(t=>{
+      const days = [...t.days].sort((a,b)=> a.date<b.date?-1 : a.date>b.date?1 : (a.tourneyDay||0)-(b.tourneyDay||0));
+      const lastDate = days.reduce((m,d)=>d.date>m?d.date:m, days[0].date);
+      const allPitches = days.flatMap(d=>d.pitchers);
+      return {
+        tournamentId: t.tournamentId,
+        tournamentName: t.tournamentName,
+        days,
+        date: lastDate,
+        totalPitches: allPitches.reduce((s,p)=>s+p.pitches,0),
+        uniquePitchers: new Set(allPitches.map(p=>p.pitcherId)).size,
+      };
+    });
+  })();
+
+  const allDisplayItems = [
+    ...regularGames.map(g=>({ kind:"game", ...g })),
+    ...tournamentContainers.map(t=>({ kind:"tournament", ...t })),
+  ].sort((a,b)=>b.date.localeCompare(a.date));
+
+  // When a pitcher is filtered, show only their games/days, and only within
+  // a tournament container, only the days they actually appeared in.
+  const displayItems = filterPitcherId==="all" ? allDisplayItems : allDisplayItems.map(item=>{
+    if (item.kind==="game") {
+      return item.pitchers.some(p=>String(p.pitcherId)===String(filterPitcherId)) ? item : null;
+    }
+    const days = item.days
+      .map(d=>({ ...d, pitchers: d.pitchers.filter(p=>String(p.pitcherId)===String(filterPitcherId)) }))
+      .filter(d=>d.pitchers.length>0);
+    if (days.length===0) return null;
+    const allPitches = days.flatMap(d=>d.pitchers);
+    return { ...item, days, totalPitches: allPitches.reduce((s,p)=>s+p.pitches,0), uniquePitchers:1 };
+  }).filter(Boolean);
 
   // Stats scoped to filtered pitcher (or all)
   const filteredEntries = filterPitcherId==="all"
     ? allEntries
     : allEntries.filter(e => String(e.pitcherId)===String(filterPitcherId));
   const totalPitches = filteredEntries.reduce((s,g)=>s+g.pitches, 0);
-  const distinctGameCount = gameGroups.length;
+  const filteredGameCount = filterPitcherId==="all" ? distinctGameCount : allGameGroups.filter(g=>g.pitchers.some(p=>String(p.pitcherId)===String(filterPitcherId))).length;
+  const filteredTourneyGameCount = filterPitcherId==="all"
+    ? allGameGroups.filter(g=>g.isTournament).length
+    : allGameGroups.filter(g=>g.isTournament && g.pitchers.some(p=>String(p.pitcherId)===String(filterPitcherId))).length;
 
   const pitchersWithGames = roster.filter(p=>(p.history||[]).some(h=>h.date?.startsWith(displayYear)));
 
@@ -63,6 +114,28 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
   }).filter(p=>p.games>0).sort((a,b)=>b.total-a.total);
 
   const activePitcher = filterPitcherId!=="all" ? roster.find(p=>String(p.id)===String(filterPitcherId)) : null;
+
+  function renderPitcherRow(p) {
+    const rd = getRegRestDays(p.pitches);
+    return (
+      <div key={p.gameId||p.pitcherId} style={{ display:"flex", alignItems:"center", gap:8,
+        padding:"7px 10px", borderRadius:9, marginBottom:4,
+        background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.05)" }}>
+        <div style={{ width:28, height:28, borderRadius:7,
+          background:"rgba(56,189,248,0.1)", border:"1px solid rgba(56,189,248,0.2)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontFamily:"'Bebas Neue',cursive", fontSize:11, color:"#38bdf8", flexShrink:0 }}>
+          {p.jersey?`#${p.jersey}`:(p.playerName||"?")[0]}
+        </div>
+        <span style={{ flex:1, fontSize:13, fontWeight:600, color:"rgba(255,255,255,0.85)" }}>{p.playerName}</span>
+        <span style={{ fontSize:15, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive" }}>{p.pitches}p</span>
+        <span style={{ fontSize:11, fontWeight:600, minWidth:44, textAlign:"right",
+          color:rd===0?"#4ade80":rd===1?"#a3e635":rd===2?"#fb923c":"#f43f5e" }}>
+          {rd===0?"No rest":`${rd}d rest`}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding:"0 16px 110px" }}>
@@ -77,8 +150,8 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
 
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"16px 0 14px" }}>
         <div>
-          <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>HISTORY</h2>
-          <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>{distinctGameCount} game{distinctGameCount!==1?"s":""} · {filteredEntries.length} appearance{filteredEntries.length!==1?"s":""}</p>
+          <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>SEASON</h2>
+          <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>{filteredGameCount} game{filteredGameCount!==1?"s":""} · {filteredEntries.length} appearance{filteredEntries.length!==1?"s":""}</p>
         </div>
         {years.length>1 && (
           <select value={displayYear} onChange={e=>setYear(e.target.value)} aria-label="Year"
@@ -119,7 +192,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
         </div>
       )}
 
-      {gameGroups.length===0 ? (
+      {displayItems.length===0 ? (
         <div style={{ textAlign:"center", padding:"60px 0", color:"rgba(255,255,255,0.2)" }}>
           <div style={{ fontSize:56, marginBottom:12 }}>📊</div>
           <p style={{ fontSize:15, fontWeight:600 }}>
@@ -131,8 +204,8 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
           {/* Summary stats */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:12 }}>
             {[["Total",totalPitches+"p","#38bdf8"],
-              ["Games",distinctGameCount,"#4ade80"],
-              ["Tourney",gameGroups.filter(g=>g.isTournament).length,"#f59e0b"]
+              ["Games",filteredGameCount,"#4ade80"],
+              ["Tourney",filteredTourneyGameCount,"#f59e0b"]
             ].map(([l,v,c])=>(
               <div key={l} style={{ textAlign:"center", padding:"12px 6px", background:"rgba(255,255,255,0.03)",
                 border:"1px solid rgba(255,255,255,0.07)", borderRadius:12 }}>
@@ -194,7 +267,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
                 <div>
                   <div style={{ fontSize:15, fontWeight:800, color:"#38bdf8" }}>{activePitcher.jersey?`#${activePitcher.jersey} `:""}{activePitcher.name}</div>
                   <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)", marginTop:2 }}>
-                    {distinctGameCount} game{distinctGameCount!==1?"s":""} · {totalPitches}p total · avg {distinctGameCount?Math.round(totalPitches/distinctGameCount):0}p/game
+                    {filteredGameCount} game{filteredGameCount!==1?"s":""} · {totalPitches}p total · avg {filteredGameCount?Math.round(totalPitches/filteredGameCount):0}p/game
                   </div>
                 </div>
                 <Chip status={getAvailabilityStatus(activePitcher, null, tournaments)} size="lg"/>
@@ -202,66 +275,63 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
             </div>
           )}
 
-          {/* Games — one card per game, tap to edit */}
-          {gameGroups.map((g,gi) => {
-            const gameTotalPitches = g.pitchers.reduce((s,p)=>s+p.pitches, 0);
-            return (
-              <div key={g.key||gi} style={card}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:14, fontWeight:700, color:"#f8fafc" }}>
-                      {formatDate(g.date)}
-                      {g.opponent && <span style={{ fontWeight:400, color:"rgba(255,255,255,0.5)" }}> · vs {g.opponent}</span>}
-                    </div>
-                    {g.isTournament ? (
-                      <span style={{ fontSize:10, padding:"2px 7px", background:"rgba(245,158,11,0.15)",
-                        border:"1px solid rgba(245,158,11,0.3)", borderRadius:6, color:"#f59e0b", fontWeight:700,
-                        display:"inline-block", marginTop:4 }}>
-                        🏆 {g.tournamentName||"TOURNAMENT"}{g.tourneyDay?` · DAY ${g.tourneyDay}`:""}
-                      </span>
-                    ) : (
-                      <span style={{ fontSize:10, color:"rgba(255,255,255,0.3)", marginTop:2, display:"block" }}>
-                        Regular Season
-                      </span>
-                    )}
+          {/* Games and tournament containers — one card per item, chronological */}
+          {displayItems.map((item,ii) => item.kind==="tournament" ? (
+            <div key={"t_"+item.tournamentId} style={{ ...card, border:"1px solid rgba(245,158,11,0.2)" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:700, color:"#f8fafc" }}>🏆 {item.tournamentName||"Tournament"}</div>
+                  <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)", marginTop:2 }}>
+                    {item.days.length} day{item.days.length!==1?"s":""} · {item.uniquePitchers} pitcher{item.uniquePitchers!==1?"s":""}
                   </div>
-                  <button onClick={()=>setEditingGame(g)}
-                    style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px",
-                      background:"rgba(56,189,248,0.08)", border:"1px solid rgba(56,189,248,0.2)",
-                      borderRadius:8, color:"#38bdf8", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0 }}>
-                    {I.edit} Edit
-                  </button>
                 </div>
-                {g.pitchers.map((p,pi) => {
-                  const rd = getRegRestDays(p.pitches);
-                  return (
-                    <div key={p.gameId||pi} style={{ display:"flex", alignItems:"center", gap:8,
-                      padding:"7px 10px", borderRadius:9, marginBottom:4,
-                      background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.05)" }}>
-                      <div style={{ width:28, height:28, borderRadius:7,
-                        background:"rgba(56,189,248,0.1)", border:"1px solid rgba(56,189,248,0.2)",
-                        display:"flex", alignItems:"center", justifyContent:"center",
-                        fontFamily:"'Bebas Neue',cursive", fontSize:11, color:"#38bdf8", flexShrink:0 }}>
-                        {p.jersey?`#${p.jersey}`:(p.playerName||"?")[0]}
-                      </div>
-                      <span style={{ flex:1, fontSize:13, fontWeight:600, color:"rgba(255,255,255,0.85)" }}>{p.playerName}</span>
-                      <span style={{ fontSize:15, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive" }}>{p.pitches}p</span>
-                      <span style={{ fontSize:11, fontWeight:600, minWidth:44, textAlign:"right",
-                        color:rd===0?"#4ade80":rd===1?"#a3e635":rd===2?"#fb923c":"#f43f5e" }}>
-                        {rd===0?"No rest":`${rd}d rest`}
-                      </span>
-                    </div>
-                  );
-                })}
-                {g.pitchers.length > 1 && (
-                  <div style={{ paddingTop:6, marginTop:2, borderTop:"1px solid rgba(255,255,255,0.05)",
-                    fontSize:11, color:"rgba(255,255,255,0.3)", textAlign:"right" }}>
-                    {gameTotalPitches}p combined
-                  </div>
-                )}
+                <div style={{ fontSize:13, color:"rgba(255,255,255,0.4)" }}>{item.totalPitches}p total</div>
               </div>
-            );
-          })}
+              {item.days.map((d,di)=>(
+                <div key={d.key||di} style={{ marginBottom:di<item.days.length-1?14:0 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:"#f59e0b" }}>
+                      {d.tourneyDay?`Day ${d.tourneyDay}`:formatDate(d.date)} <span style={{ fontWeight:400, color:"rgba(255,255,255,0.35)" }}>· {formatDate(d.date)}{d.opponent?` · vs ${d.opponent}`:""}</span>
+                    </div>
+                    <button onClick={()=>setEditingGame(d)}
+                      style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 8px",
+                        background:"rgba(56,189,248,0.08)", border:"1px solid rgba(56,189,248,0.2)",
+                        borderRadius:7, color:"#38bdf8", fontSize:11, fontWeight:700, cursor:"pointer", flexShrink:0 }}>
+                      {I.edit} Edit
+                    </button>
+                  </div>
+                  {d.pitchers.map(p=>renderPitcherRow(p))}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div key={item.key||ii} style={card}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:"#f8fafc" }}>
+                    {formatDate(item.date)}
+                    {item.opponent && <span style={{ fontWeight:400, color:"rgba(255,255,255,0.5)" }}> · vs {item.opponent}</span>}
+                  </div>
+                  <span style={{ fontSize:10, color:"rgba(255,255,255,0.3)", marginTop:2, display:"block" }}>
+                    Regular Season
+                  </span>
+                </div>
+                <button onClick={()=>setEditingGame(item)}
+                  style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px",
+                    background:"rgba(56,189,248,0.08)", border:"1px solid rgba(56,189,248,0.2)",
+                    borderRadius:8, color:"#38bdf8", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0 }}>
+                  {I.edit} Edit
+                </button>
+              </div>
+              {item.pitchers.map(p=>renderPitcherRow(p))}
+              {item.pitchers.length > 1 && (
+                <div style={{ paddingTop:6, marginTop:2, borderTop:"1px solid rgba(255,255,255,0.05)",
+                  fontSize:11, color:"rgba(255,255,255,0.3)", textAlign:"right" }}>
+                  {item.pitchers.reduce((s,p)=>s+p.pitches,0)}p combined
+                </div>
+              )}
+            </div>
+          ))}
         </>
       )}
     </div>

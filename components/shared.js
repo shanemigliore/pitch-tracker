@@ -1,4 +1,4 @@
-// Shared UI: Chip, PitcherStatusBanner, RadialArc, ContextPicker, ScreenBoundary.
+// Shared UI: Chip, RadialArc, ContextPicker, ScreenBoundary.
 // Babel/JSX component, loaded via <script type="text/babel" src="components/shared.js"></script>.
 
 // ─── Shared UI ───────────────────────────────────────────────────────────────
@@ -12,39 +12,6 @@ function Chip({ status, size="sm" }) {
       <span style={{ width:6, height:6, borderRadius:"50%", background:s.color, flexShrink:0 }}/>
       {s.label}
     </span>
-  );
-}
-
-function PitcherStatusBanner({ pitcher, tournaments }) {
-  const status = getAvailabilityStatus(pitcher, null, tournaments);
-  const s = STATUS[status];
-  const eligStr = getEligibleDateStr(pitcher, tournaments);
-  if (status === "available") {
-    return (
-      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
-        background:"rgba(74,222,128,0.07)", border:"1px solid rgba(74,222,128,0.25)", borderRadius:12, marginBottom:12 }}>
-        <span style={{ fontSize:18 }}>✅</span>
-        <div>
-          <div style={{ fontSize:13, fontWeight:700, color:"#4ade80" }}>Available to pitch today</div>
-          {pitcher.lastPitches > 0 && <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>Last game: {pitcher.lastPitches}p on {formatDate(pitcher.lastGameDate)}</div>}
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
-      background:s.bg, border:`1px solid ${s.ring}`, borderRadius:12, marginBottom:12 }}>
-      <span style={{ fontSize:18 }}>{status==="resting" || status==="resting2" ? "🚫" : "⚠️"}</span>
-      <div style={{ flex:1 }}>
-        <div style={{ fontSize:13, fontWeight:700, color:s.color }}>
-          {`Eligible ${formatDate(eligStr)}`}
-        </div>
-        <div style={{ fontSize:11, color:"rgba(255,255,255,0.5)" }}>
-          {pitcher.lastPitches}p on {formatDate(pitcher.lastGameDate)}
-        </div>
-      </div>
-      <Chip status={status}/>
-    </div>
   );
 }
 

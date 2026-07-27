@@ -31,12 +31,12 @@ can load just what they need:
 
 | File | Contents | Loaded as |
 |------|----------|-----------|
-| `index.html` | `<head>`, head-shell (hooks/`PitchLogic`/`UIConstants` destructures, `APP_VERSION`, `LOGO_URI`), the 12 component `<script src>` tags, bootstrap render, service worker | shell |
+| `index.html` | `<head>`, head-shell (hooks/`PitchLogic`/`UIConstants` destructures, `APP_VERSION`, `LOGO_URI`), the component `<script src>` tags, bootstrap render, service worker | shell |
 | `lib/firebase-init.js` | `window.__fb*` functions (Firebase RTDB/auth setup) | plain `<script src>` |
 | `lib/pitch-logic.js` | Rest-day/eligibility/date/device-id math, `recomputeLast`, `getActiveTourney`, `getSubjectKey` — UMD module, also `require()`'d directly by `tests/logic.test.js` | plain `<script src>`, exposes `window.PitchLogic` |
-| `lib/ui-constants.js` | `STATUS`, icon set `I`, shared style objects (`card`, `inputStyle`, etc.) — contains JSX (icons), IIFE-wrapped | `<script type="text/babel" src>`, exposes `window.UIConstants` |
-| `components/shared.js` | `Chip`, `PitcherStatusBanner`, `RadialArc`, `ContextPicker`, `ScreenBoundary` | `<script type="text/babel" src>` |
-| `components/RosterScreen.js`, `EditGameModal.js`, `PitcherDetail.js`, `GameLogScreen.js`, `EligibilityScreen.js`, `TournamentScreen.js`, `EditGameGroupModal.js`, `SeasonHistory.js`, `TeamPickerScreen.js`, `ActivityScreen.js` | One screen/modal component each | `<script type="text/babel" src>` each |
+| `lib/ui-constants.js` | `STATUS`, icon set `I` (includes `settings`), shared style objects (`card`, `inputStyle`, etc.) — contains JSX (icons), IIFE-wrapped | `<script type="text/babel" src>`, exposes `window.UIConstants` |
+| `components/shared.js` | `Chip`, `RadialArc`, `ContextPicker`, `ScreenBoundary` | `<script type="text/babel" src>` |
+| `components/EditGameModal.js`, `PitcherDetail.js`, `GameLogScreen.js`, `EligibilityScreen.js`, `TournamentScreen.js`, `EditGameGroupModal.js`, `SeasonHistory.js`, `TeamPickerScreen.js`, `ActivityScreen.js`, `Settings.js` | One screen/modal component each | `<script type="text/babel" src>` each |
 | `components/App.js` | `TABS`, `TEAM_ID_KEY`, `TEAM_META_KEY` consts, then `App` (root component: team selection, Firebase subscription, tab routing, all handlers) | `<script type="text/babel" src>` |
 | `assets/logo.png` | App logo/icon (was a ~500KB inline base64 blob) | referenced by `LOGO_URI`, apple-touch-icon link |
 | `manifest.json` | PWA manifest (was an inline data-URI) | referenced by the manifest `<link>` |
@@ -164,7 +164,9 @@ cached `components/TournamentScreen.js` keeps serving old logic.
   name: string,
   startDate: string,    // "YYYY-MM-DD"
   days: number,
-  day1IsHardLimit: boolean
+  maxDay1: number,          // pitch cap for tourneyDay 1
+  maxTotal: number,         // pitch cap for the whole tournament (eligibility limit)
+  day1IsHardLimit: boolean  // true = exceeding maxDay1 makes a pitcher ineligible for the rest of the tournament; false = guideline only
 }
 ```
 
@@ -229,28 +231,34 @@ renders it with a "⚠ Not synced" badge instead of leaving it looking normal.
 ## Components
 
 Every component listed below lives in its own file under `components/`
-(Phase 2 of the split — see App Architecture above), except the five in
+(Phase 2 of the split — see App Architecture above), except the four in
 `components/shared.js`.
+
+The bottom nav has 4 tabs. This is a deliberate consolidation (originally 6
+tabs) so related information isn't split across screens the coach has to flip
+between, and so info that's only relevant in one context (e.g. pre-game
+eligibility) doesn't linger where it isn't — see "Key Patterns" below for the
+specific principle.
 
 ### Screens (tab-level)
 | Component | File | Tab id | Purpose |
 |-----------|------|--------|---------|
-| `RosterScreen` | `components/RosterScreen.js` | `roster` | Lists pitchers with availability chips; add pitcher form |
-| `PitcherDetail` | `components/PitcherDetail.js` | `roster` (drill-in) | Pitcher stats, season history, log single game |
-| `GameLogScreen` | `components/GameLogScreen.js` | `gamelog` | Log a game for multiple pitchers at once |
-| `EligibilityScreen` | `components/EligibilityScreen.js` | `eligibility` | Grid of pitcher availability for a chosen date |
-| `TournamentScreen` | `components/TournamentScreen.js` | `tournament` | Create/edit/delete tournaments |
-| `SeasonHistory` | `components/SeasonHistory.js` | `history` | Season-level game history with leaderboard |
-| `ActivityScreen` | `components/ActivityScreen.js` | `activity` | Audit log with undo capability |
-| `TeamPickerScreen` | `components/TeamPickerScreen.js` | (pre-app) | Team selection / create / manage |
+| `EligibilityScreen` | `components/EligibilityScreen.js` | `roster` | **The Roster tab.** Pitcher list grouped by availability for a chosen date (regular season or a specific tournament's budget), tap a pitcher to drill into `PitcherDetail`. (Filename predates the merge with the old standalone roster list.) |
+| `PitcherDetail` | `components/PitcherDetail.js` | `roster` (drill-in) | Pitcher stats, editable season history, edit name/jersey, remove from roster. Logging a new game happens on the Game Log tab, not here. |
+| `GameLogScreen` | `components/GameLogScreen.js` | `gamelog` | Log a **new** game for multiple pitchers at once (two-step: who pitched, then pitch counts). Entry-only — browsing/editing past games moved to the Season tab. |
+| `SeasonHistory` | `components/SeasonHistory.js` | `season` | **The Season tab.** Chronological game history with leaderboard. Tournament games collapse into one container per tournament (day-by-day breakdown inside), positioned by its most recent game date, so the whole season is browsable as one continuous list without switching to a separate tournament view. |
+| `Settings` | `components/Settings.js` | `settings` | **The Settings tab.** Sub-nav over three sections: Roster (add a pitcher — `AddPitcherSection`, same file), Tournaments (renders `TournamentScreen`), Activity (renders `ActivityScreen`). |
+| `TournamentScreen` | `components/TournamentScreen.js` | (Settings sub-section) | Create/edit/delete tournaments — config only. Viewing a tournament's actual games/pitch usage lives on the Season tab now, grouped under that tournament. |
+| `ActivityScreen` | `components/ActivityScreen.js` | (Settings sub-section) | Audit log with undo capability |
+| `TeamPickerScreen` | `components/TeamPickerScreen.js` | (pre-app) | Team selection / create / manage — reached via the header's TEAM button, not a tab |
 
 ### Modals & Sub-components
 | Component | File | Purpose |
 |-----------|------|---------|
 | `EditGameModal` | `components/EditGameModal.js` | Edit or delete a single HistoryEntry |
-| `EditGameGroupModal` | `components/EditGameGroupModal.js` | Edit/delete a multi-pitcher (`sharedGameId`) game log entry |
+| `EditGameGroupModal` | `components/EditGameGroupModal.js` | Edit/delete a multi-pitcher (`sharedGameId`) game log entry — also used for a single day within a Season-tab tournament container |
+| `AddPitcherSection` | `components/Settings.js` | New-pitcher form (duplicate jersey blocked, duplicate name soft-warned) — Settings' Roster sub-section |
 | `ContextPicker` | `components/shared.js` | Regular season vs. tournament picker (shared by log forms) |
-| `PitcherStatusBanner` | `components/shared.js` | Availability banner with rest-day details |
 | `Chip` | `components/shared.js` | Small colored status badge |
 | `RadialArc` | `components/shared.js` | SVG radial progress ring (pitch count vs. max) |
 | `ScreenBoundary` | `components/shared.js` | React error boundary wrapping each screen; shows error + Back button |
@@ -270,7 +278,7 @@ lastSyncError     // string | null — human-readable detail shown when syncStat
 loaded            // boolean — initial data received from Firebase
 roster            // Pitcher[] — sorted by name
 tournaments       // Tournament[]
-tab               // "roster"|"gamelog"|"eligibility"|"tournament"|"history"|"activity"
+tab               // "roster"|"gamelog"|"season"|"settings"
 selectedPlayer    // Pitcher | null — active drill-in on Roster tab
 auditLog          // AuditEntry[] — last 50, newest first
 undidIds          // Set<string> — audit entry IDs that have been undone (persists across tab changes)
@@ -283,8 +291,7 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 | `addPlayer(p)` | Adds pitcher to roster, pushes ADD_PITCHER audit |
 | `deletePlayer(id, opts?)` | Removes pitcher, pushes DELETE_PITCHER audit unless `opts.skipAudit`; returns whether the pitcher existed |
 | `editPlayer(id, updates, opts?)` | Updates pitcher name/jersey, pushes EDIT_PITCHER audit unless `opts.skipAudit`; returns whether the pitcher existed |
-| `logGame(playerId, gameData)` | Adds single HistoryEntry, calls `recomputeLast`, pushes LOG_GAME audit |
-| `logMultiple(playerId, gameData)` | Same as logGame but preserves `sharedGameId` for grouping |
+| `logMultiple(playerId, gameData)` | Adds single HistoryEntry (one call per pitcher in the game), calls `recomputeLast`, pushes LOG_GAME audit, preserves `sharedGameId` for grouping. The only game-logging path now — GameLogScreen is the single place to log a new game. |
 | `editGame(playerId, gameId, updatedData)` | Updates HistoryEntry fields, pushes EDIT_GAME audit |
 | `deleteGame(playerId, gameId, opts?)` | Removes HistoryEntry, pushes DELETE_GAME audit unless `opts.skipAudit`; returns whether the entry existed |
 | `restoreGame(playerId, entry)` | Re-inserts a deleted HistoryEntry; returns `false` (no-op) if the pitcher no longer exists |
@@ -336,3 +343,7 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 **Data persistence:** Roster and tournaments are saved to Firebase on every change via a `useEffect` that watches both arrays. The audit log is written directly in each handler via `pushAudit`.
 
 **Team selection:** Stored in `localStorage` under `TEAM_ID_KEY = "pt_selected_team_id"`. On load, if a stored ID exists the app skips `TeamPickerScreen` and goes straight to the team.
+
+**Repeat info only where it's contextually useful:** `GameLogScreen` deliberately does not show a pitcher's pre-game eligibility/rest status while picking who pitched or entering counts — the game already happened, so "were they allowed to start" isn't the question at that point. What it does check, once counts are entered: a rest-day rule violation (`getAvailabilityStatus`) or a tournament pitch-limit violation (`getViolation` in `GameLogScreen.js`, checking a tournament's `maxDay1`/`maxTotal` against that pitcher's prior-plus-this-game total) — either blocks Save behind a warn-and-override screen, same pattern as the old ineligible-pitcher warning. If you're tempted to add a status chip back into the entry flow, check whether it's answering a question that's actually relevant post-hoc before doing so.
+
+**`window.__pendingAppUpdateVersion` / `window.__applyPendingAppUpdate`:** set by the version-check script in `index.html` on a deploy mismatch, instead of reloading immediately (which could wipe unsaved input mid-entry). `App.js` listens for the `pt-update-available` window event (and checks the flag on mount, in case the event fired before the listener attached) and shows a tappable banner; the banner calls `window.__applyPendingAppUpdate()` to actually clear caches and reload, on the user's own timing.

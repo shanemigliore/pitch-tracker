@@ -5,12 +5,10 @@
 // ROOT APP
 // ══════════════════════════════════════════════════════════════════════════════
 const TABS = [
-  { id:"roster",      label:"Roster",      icon:I.roster      },
-  { id:"gamelog",     label:"Game Log",    icon:I.gamelog     },
-  { id:"eligibility", label:"Eligibility", icon:I.eligibility },
-  { id:"tournament",  label:"Tourney",     icon:I.tournament  },
-  { id:"history",     label:"History",     icon:I.history     },
-  { id:"activity",    label:"Activity",    icon:I.activity    },
+  { id:"roster",   label:"Roster",   icon:I.roster   },
+  { id:"gamelog",  label:"Game Log", icon:I.gamelog  },
+  { id:"season",   label:"Season",   icon:I.history  },
+  { id:"settings", label:"Settings", icon:I.settings },
 ];
 
 const TEAM_ID_KEY = "pt_selected_team_id";
@@ -230,25 +228,6 @@ function App() {
     const old = tournamentsRef.current.find(x => x.id === t.id);
     setTournaments(ts => ts.map(x => x.id === t.id ? t : x));
     if (old) pushAudit("EDIT_TOURNEY", `Edited tournament "${t.name}"`, { type:"RESTORE_TOURNEY", tourney: old });
-  }, []);
-
-  const logGame = useCallback((playerId, gameData) => {
-    const entry = { ...gameData, gameId: gameData.gameId || newId() };
-    const player = rosterRef.current.find(p => p.id === playerId);
-    setRoster(r => r.map(p => {
-      if (p.id !== playerId) return p;
-      const history = [...(p.history||[]), entry];
-      return { ...p, ...recomputeLast(history), history };
-    }));
-    setSelectedPlayer(prev => {
-      if (!prev || prev.id !== playerId) return prev;
-      const history = [...(prev.history||[]), entry];
-      return { ...prev, ...recomputeLast(history), history };
-    });
-    const gi = { date:entry.date, opponent:entry.opponent||null, isTournament:!!entry.isTournament, tournamentName:entry.tournamentName||null, tourneyDay:entry.tourneyDay||null };
-    pushAudit("LOG_GAME", `${player?.name||playerId}: ${entry.pitches}p`,
-      { type:"DELETE_GAME", playerId, gameId: entry.gameId },
-      { gameInfo: gi, pitcherName: player?.name||playerId, pitches: entry.pitches });
   }, []);
 
   const logMultiple = useCallback((playerId, gameData) => {
@@ -493,27 +472,26 @@ function App() {
         {tab==="roster" && selectedPlayer ? (
           <ScreenBoundary onBack={()=>setSelectedPlayer(null)}>
             <PitcherDetail pitcher={selectedPlayer} onBack={()=>setSelectedPlayer(null)}
-              onLog={logGame} onDelete={deletePlayer} tournaments={tournaments}
+              onDelete={deletePlayer} tournaments={tournaments}
               onEditGame={editGame} onDeleteGame={deleteGame} onEditPlayer={editPlayer}/>
           </ScreenBoundary>
         ) : tab==="roster" ? (
-          <RosterScreen roster={roster} tournaments={tournaments} onAdd={addPlayer} onSelect={p=>setSelectedPlayer(p)} onEditPlayer={editPlayer}/>
+          <EligibilityScreen roster={roster} tournaments={tournaments} onSelect={p=>setSelectedPlayer(p)}/>
         ) : tab==="gamelog" ? (
-          <GameLogScreen roster={roster} onLogMultiple={logMultiple} tournaments={tournaments}
-            onEditGame={editGame} onDeleteGame={deleteGame}/>
-        ) : tab==="eligibility" ? (
-          <EligibilityScreen roster={roster} tournaments={tournaments}/>
-        ) : tab==="tournament" ? (
-          <TournamentScreen roster={roster} tournaments={tournaments} onAddTourney={addTourney} onDeleteTourney={deleteTourney} onUpdateTourney={updateTourney}/>
-        ) : tab==="activity" ? (
-          <ActivityScreen auditLog={auditLog} roster={roster} onUndo={executeUndo}
-            undidIds={undidIds} onUndid={id => {
-              setUndidIds(s => new Set([...s, id]));
-              if (window.__fbMarkAuditUndone) window.__fbMarkAuditUndone(teamId, id);
-            }}/>
-        ) : (
+          <GameLogScreen roster={roster} onLogMultiple={logMultiple} tournaments={tournaments}/>
+        ) : tab==="season" ? (
           <ScreenBoundary>
             <SeasonHistory roster={roster} tournaments={tournaments} onEditGame={editGame} onDeleteGame={deleteGame}/>
+          </ScreenBoundary>
+        ) : (
+          <ScreenBoundary>
+            <Settings roster={roster} onAddPlayer={addPlayer}
+              tournaments={tournaments} onAddTourney={addTourney} onDeleteTourney={deleteTourney} onUpdateTourney={updateTourney}
+              auditLog={auditLog} onUndo={executeUndo}
+              undidIds={undidIds} onUndid={id => {
+                setUndidIds(s => new Set([...s, id]));
+                if (window.__fbMarkAuditUndone) window.__fbMarkAuditUndone(teamId, id);
+              }}/>
           </ScreenBoundary>
         )}
       </div>
