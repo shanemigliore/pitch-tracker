@@ -21,6 +21,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
   const [cloneEnabled, setCloneEnabled]   = useState(false);
   const [cloneSourceId, setCloneSourceId] = useState("");
   const [saving, setSaving]     = useState(false);
+  const [createError, setCreateError] = useState("");
   const [renameName, setRenameName] = useState("");
   const [editRules, setEditRules]   = useState({ ...DEFAULT_RULES });
   const [editSeasonId, setEditSeasonId]     = useState("");
@@ -36,16 +37,15 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
       window.__fbMigrateIfNeeded(),
       window.__fbCreatePrime12U(),
       window.__fbCreatePrime10U(),
-      window.__fbMigrateSeasonIfNeeded(),
-    ]).then(() =>
-      Promise.all([window.__fbListTeams(), window.__fbListSeasons()])
-    ).then(([teamList, seasonList]) => {
-      setTeams(teamList);
-      setSeasons(seasonList);
-      const sorted = [...seasonList].sort(compareSeasonsDesc);
-      setNewSeasonId(sorted[0]?.id || NEW_SEASON);
-      setLoading(false);
-    });
+    ]).then(() => window.__fbMigrateSeasonIfNeeded()) // runs after the seeds so it sees their teamsMeta writes
+      .then(() => Promise.all([window.__fbListTeams(), window.__fbListSeasons()]))
+      .then(([teamList, seasonList]) => {
+        setTeams(teamList);
+        setSeasons(seasonList);
+        const sorted = [...seasonList].sort(compareSeasonsDesc);
+        setNewSeasonId(sorted[0]?.id || NEW_SEASON);
+        setLoading(false);
+      });
   }, []);
 
   function refreshAll() {
@@ -68,6 +68,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
     setNewRules({ ...DEFAULT_RULES });
     setCloneEnabled(false);
     setCloneSourceId("");
+    setCreateError("");
     const sorted = [...seasons].sort(compareSeasonsDesc);
     setNewSeasonId(sorted[0]?.id || NEW_SEASON);
     setNewSeasonTerm("Spring");
@@ -85,22 +86,38 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
     };
     const teamId = newId();
     setSaving(true);
+    setCreateError("");
+    // Team creation isn't a single atomic write (season lookup/create, then the
+    // team, then optionally the cloned roster) - once __fbCreateTeam succeeds
+    // the team is real and shouldn't be silently abandoned on a later failure
+    // (that would both orphan it and let a form retry mint a duplicate via a
+    // fresh newId()). So a failure before team creation keeps the form open
+    // for retry; a failure after it still hands off to the created team, just
+    // with a heads-up that the roster clone didn't make it.
+    let teamCreated = false;
     resolveSeasonId(newSeasonId, newSeasonTerm, newSeasonYear)
+      .catch(() => { throw new Error("Couldn't save the season — please try again."); })
       .then(seasonId => {
         const meta = { name: newName.trim(), rules, createdAt: todayStr(), seasonId };
-        return window.__fbCreateTeam(teamId, meta).then(() => meta);
+        return window.__fbCreateTeam(teamId, meta)
+          .catch(() => { throw new Error("Couldn't create the team — please try again."); })
+          .then(() => { teamCreated = true; return meta; });
       })
       .then(meta => {
         if (!cloneEnabled || !cloneSourceId) return meta;
-        return window.__fbGetRoster(cloneSourceId).then(sourceRoster => {
-          const cloned = {};
-          (sourceRoster || []).forEach(p => {
-            const id = newId();
-            cloned[id] = { id, name: p.name, jersey: p.jersey, lastPitches: 0, lastGameDate: "", history: [] };
+        return window.__fbGetRoster(cloneSourceId)
+          .catch(() => { throw new Error(`"${meta.name}" was created, but the roster couldn't be read to clone — add pitchers manually from the Roster tab.`); })
+          .then(sourceRoster => {
+            const cloned = {};
+            (sourceRoster || []).forEach(p => {
+              const id = newId();
+              cloned[id] = { id, name: p.name, jersey: p.jersey, lastPitches: 0, lastGameDate: "", history: [] };
+            });
+            if (Object.keys(cloned).length === 0) return meta;
+            return window.__fbSet("roster", cloned, teamId)
+              .catch(() => { throw new Error(`"${meta.name}" was created, but the cloned roster couldn't be saved — add pitchers manually from the Roster tab.`); })
+              .then(() => meta);
           });
-          if (Object.keys(cloned).length === 0) return meta;
-          return window.__fbSet("roster", cloned, teamId).then(() => meta);
-        });
       })
       .then(meta => {
         setSaving(false);
@@ -108,7 +125,19 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
         resetCreateForm();
         onSelect(teamId, meta);
       })
-      .catch(() => setSaving(false));
+      .catch(err => {
+        setSaving(false);
+        if (teamCreated) {
+          // The team itself exists in Firebase - drop the user into it rather
+          // than leaving it stranded off-screen with the form still open.
+          alert(err.message);
+          setCreating(false);
+          resetCreateForm();
+          onSelect(teamId, { name: newName.trim(), rules, createdAt: todayStr() });
+        } else {
+          setCreateError(err.message || "Something went wrong creating the team — please try again.");
+        }
+      });
   }
 
   function openManage(t) {
@@ -325,6 +354,9 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
           {ruleField(newRules, setNewRules, "0→1 rest-day breakpoint", "rest1", "Pitches above this require 1 day rest")}
           {ruleField(newRules, setNewRules, "1→2 rest-day breakpoint", "rest2", "Pitches above this require 2 days rest")}
           {ruleField(newRules, setNewRules, "2→3 rest-day breakpoint", "rest3", "Pitches above this require 3 days rest")}
+          {createError && (
+            <div style={{ fontSize:12, color:"#f87171", marginBottom:10, lineHeight:1.4 }}>{createError}</div>
+          )}
           <div style={{ display:"flex", gap:8, marginTop:4 }}>
             <button onClick={()=>{ setCreating(false); resetCreateForm(); }} style={cancelBtn}>Cancel</button>
             <button onClick={handleCreate}
