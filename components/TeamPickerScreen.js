@@ -5,31 +5,78 @@
 // TEAM PICKER — Select or create a team
 // ══════════════════════════════════════════════════════════════════════════════
 function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
+  const TERM_OPTIONS = ["Winter", "Spring", "Summer", "Fall"];
+  const NEW_SEASON = "__NEW__";
+
   const [teams, setTeams]       = useState([]);
+  const [seasons, setSeasons]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [creating, setCreating] = useState(false);
   const [managing, setManaging] = useState(null); // team object being managed
   const [newName, setNewName]   = useState("");
   const [newRules, setNewRules] = useState({ ...DEFAULT_RULES });
+  const [newSeasonId, setNewSeasonId]     = useState("");
+  const [newSeasonTerm, setNewSeasonTerm] = useState("Spring");
+  const [newSeasonYear, setNewSeasonYear] = useState(new Date().getFullYear());
+  const [cloneEnabled, setCloneEnabled]   = useState(false);
+  const [cloneSourceId, setCloneSourceId] = useState("");
   const [saving, setSaving]     = useState(false);
   const [renameName, setRenameName] = useState("");
   const [editRules, setEditRules]   = useState({ ...DEFAULT_RULES });
+  const [editSeasonId, setEditSeasonId]     = useState("");
+  const [editSeasonTerm, setEditSeasonTerm] = useState("Spring");
+  const [editSeasonYear, setEditSeasonYear] = useState(new Date().getFullYear());
+  const [editSaving, setEditSaving] = useState(false);
   const [deletePhase, setDeletePhase] = useState("idle");
   const [deleteText, setDeleteText]   = useState("");
   const [hoveredTeamId, setHoveredTeamId] = useState(null);
 
   useEffect(() => {
-    Promise.all([window.__fbMigrateIfNeeded(), window.__fbCreatePrime12U(), window.__fbCreatePrime10U()]).then(() =>
-      window.__fbListTeams().then(list => { setTeams(list); setLoading(false); })
-    );
+    Promise.all([
+      window.__fbMigrateIfNeeded(),
+      window.__fbCreatePrime12U(),
+      window.__fbCreatePrime10U(),
+      window.__fbMigrateSeasonIfNeeded(),
+    ]).then(() =>
+      Promise.all([window.__fbListTeams(), window.__fbListSeasons()])
+    ).then(([teamList, seasonList]) => {
+      setTeams(teamList);
+      setSeasons(seasonList);
+      const sorted = [...seasonList].sort(compareSeasonsDesc);
+      setNewSeasonId(sorted[0]?.id || NEW_SEASON);
+      setLoading(false);
+    });
   }, []);
 
-  function refreshTeams() {
-    window.__fbListTeams().then(list => setTeams(list));
+  function refreshAll() {
+    Promise.all([window.__fbListTeams(), window.__fbListSeasons()]).then(([teamList, seasonList]) => {
+      setTeams(teamList);
+      setSeasons(seasonList);
+    });
+  }
+
+  function resolveSeasonId(selectedId, term, year) {
+    if (selectedId === NEW_SEASON) {
+      const y = Math.max(2000, parseInt(year) || new Date().getFullYear());
+      return window.__fbCreateSeason(term, y);
+    }
+    return Promise.resolve(selectedId);
+  }
+
+  function resetCreateForm() {
+    setNewName("");
+    setNewRules({ ...DEFAULT_RULES });
+    setCloneEnabled(false);
+    setCloneSourceId("");
+    const sorted = [...seasons].sort(compareSeasonsDesc);
+    setNewSeasonId(sorted[0]?.id || NEW_SEASON);
+    setNewSeasonTerm("Spring");
+    setNewSeasonYear(new Date().getFullYear());
   }
 
   function handleCreate() {
-    if (!newName.trim() || saving) return;
+    if (!newName.trim() || saving || !newSeasonId) return;
+    if (cloneEnabled && !cloneSourceId) return;
     const rules = {
       maxPitches: Math.max(1, parseInt(newRules.maxPitches)||55),
       rest1: Math.max(0, parseInt(newRules.rest1)||20),
@@ -37,50 +84,190 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
       rest3: Math.max(0, parseInt(newRules.rest3)||60),
     };
     const teamId = newId();
-    const meta   = { name: newName.trim(), rules, createdAt: todayStr() };
     setSaving(true);
-    window.__fbCreateTeam(teamId, meta).then(() => {
-      setSaving(false);
-      setCreating(false);
-      setNewName("");
-      setNewRules({ ...DEFAULT_RULES });
-      onSelect(teamId, meta);
-    }).catch(() => setSaving(false));
+    resolveSeasonId(newSeasonId, newSeasonTerm, newSeasonYear)
+      .then(seasonId => {
+        const meta = { name: newName.trim(), rules, createdAt: todayStr(), seasonId };
+        return window.__fbCreateTeam(teamId, meta).then(() => meta);
+      })
+      .then(meta => {
+        if (!cloneEnabled || !cloneSourceId) return meta;
+        return window.__fbGetRoster(cloneSourceId).then(sourceRoster => {
+          const cloned = {};
+          (sourceRoster || []).forEach(p => {
+            const id = newId();
+            cloned[id] = { id, name: p.name, jersey: p.jersey, lastPitches: 0, lastGameDate: "", history: [] };
+          });
+          if (Object.keys(cloned).length === 0) return meta;
+          return window.__fbSet("roster", cloned, teamId).then(() => meta);
+        });
+      })
+      .then(meta => {
+        setSaving(false);
+        setCreating(false);
+        resetCreateForm();
+        onSelect(teamId, meta);
+      })
+      .catch(() => setSaving(false));
+  }
+
+  function openManage(t) {
+    setManaging(t);
+    setRenameName(t.name);
+    setEditRules(t.rules || { ...DEFAULT_RULES });
+    const sorted = [...seasons].sort(compareSeasonsDesc);
+    setEditSeasonId(t.seasonId || sorted[0]?.id || NEW_SEASON);
+    setEditSeasonTerm("Spring");
+    setEditSeasonYear(new Date().getFullYear());
+    setDeletePhase("idle");
+    setDeleteText("");
   }
 
   function handleSaveChanges() {
-    if (!renameName.trim() || !managing) return;
+    if (!renameName.trim() || !managing || !editSeasonId || editSaving) return;
     const rules = {
       maxPitches: Math.max(1, parseInt(editRules.maxPitches)||55),
       rest1: Math.max(0, parseInt(editRules.rest1)||20),
       rest2: Math.max(0, parseInt(editRules.rest2)||40),
       rest3: Math.max(0, parseInt(editRules.rest3)||60),
     };
-    const updatedMeta = { name: renameName.trim(), rules };
-    window.__fbUpdateTeamMeta(managing.id, updatedMeta).then(() => {
-      if (onTeamMetaUpdate) onTeamMetaUpdate(managing.id, updatedMeta);
-      refreshTeams();
-      setManaging(null);
-    });
+    setEditSaving(true);
+    resolveSeasonId(editSeasonId, editSeasonTerm, editSeasonYear)
+      .then(seasonId => {
+        const updatedMeta = { name: renameName.trim(), rules, seasonId };
+        return window.__fbUpdateTeamMeta(managing.id, updatedMeta).then(() => updatedMeta);
+      })
+      .then(updatedMeta => {
+        if (onTeamMetaUpdate) onTeamMetaUpdate(managing.id, updatedMeta);
+        setEditSaving(false);
+        refreshAll();
+        setManaging(null);
+      })
+      .catch(() => setEditSaving(false));
   }
 
   function handleDelete() {
     if (deleteText !== "DELETE TEAM" || !managing) return;
     window.__fbDeleteTeam(managing.id).then(() => {
-      refreshTeams();
+      refreshAll();
       setManaging(null);
       setDeletePhase("idle");
       setDeleteText("");
     });
   }
 
-  const ruleField = (label, key, hint) => (
+  function startCloneFromManaged() {
+    if (!managing) return;
+    setNewName(managing.name);
+    setNewRules(managing.rules || { ...DEFAULT_RULES });
+    setCloneEnabled(true);
+    setCloneSourceId(managing.id);
+    const sorted = [...seasons].sort(compareSeasonsDesc);
+    setNewSeasonId(sorted[0]?.id || NEW_SEASON);
+    setNewSeasonTerm("Spring");
+    setNewSeasonYear(new Date().getFullYear());
+    setManaging(null);
+    setDeletePhase("idle");
+    setDeleteText("");
+    setCreating(true);
+  }
+
+  const ruleField = (rules, setRules, label, key, hint) => (
     <div style={{ marginBottom:10 }}>
       <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>{label}</label>
-      <input type="number" min="0" value={newRules[key]} aria-label={label}
-        onChange={e=>setNewRules(r=>({...r,[key]:e.target.value}))}
+      <input type="number" min="0" value={rules[key]} aria-label={label}
+        onChange={e=>setRules(r=>({...r,[key]:e.target.value}))}
         style={{ ...inputStyle, marginBottom:2 }}/>
       {hint && <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>{hint}</div>}
+    </div>
+  );
+
+  // Shared "pick a season, or spin up a new one inline" control used by both
+  // the create-team form and the edit-team modal.
+  const seasonField = (label, seasonId, onSeasonId, term, onTerm, year, onYear) => {
+    const sorted = [...seasons].sort(compareSeasonsDesc);
+    return (
+      <div style={{ marginBottom:10 }}>
+        <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>{label}</label>
+        <select value={seasonId} onChange={e=>onSeasonId(e.target.value)} aria-label={label}
+          style={{ ...inputStyle, marginBottom: seasonId===NEW_SEASON ? 8 : 2 }}>
+          <option value="" disabled>Select a season…</option>
+          {sorted.map(s => <option key={s.id} value={s.id}>{getSeasonName(s)}</option>)}
+          <option value={NEW_SEASON}>+ New Season</option>
+        </select>
+        {seasonId === NEW_SEASON && (
+          <div style={{ display:"flex", gap:8 }}>
+            <select value={term} onChange={e=>onTerm(e.target.value)} aria-label="New season term"
+              style={{ ...inputStyle, flex:1 }}>
+              {TERM_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <input type="number" value={year} onChange={e=>onYear(e.target.value)} aria-label="New season year"
+              style={{ ...inputStyle, flex:1 }}/>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const cloneRosterField = () => {
+    const seasonNameById = {};
+    seasons.forEach(s => { seasonNameById[s.id] = getSeasonName(s); });
+    return (
+      <div style={{ marginBottom:10 }}>
+        <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:13,
+          color:"rgba(255,255,255,0.7)", cursor:"pointer", marginBottom: cloneEnabled?8:0 }}>
+          <input type="checkbox" checked={cloneEnabled} onChange={e=>setCloneEnabled(e.target.checked)}/>
+          Clone roster from an existing team
+        </label>
+        {cloneEnabled && (
+          <select value={cloneSourceId} onChange={e=>setCloneSourceId(e.target.value)} aria-label="Clone roster from"
+            style={inputStyle}>
+            <option value="" disabled>Select a team…</option>
+            {teams.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.name}{seasonNameById[t.seasonId] ? " — " + seasonNameById[t.seasonId] : ""}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+    );
+  };
+
+  // Group teams under their season header, newest season first; teams whose
+  // season is missing/unknown fall into a trailing "Unassigned" group.
+  const seasonsSorted = [...seasons].sort(compareSeasonsDesc);
+  const knownSeasonIds = new Set(seasonsSorted.map(s => s.id));
+  const groupedTeams = [];
+  seasonsSorted.forEach(s => {
+    const inSeason = teams.filter(t => t.seasonId === s.id).sort((a,b)=>a.name.localeCompare(b.name));
+    if (inSeason.length) groupedTeams.push({ key:s.id, label:getSeasonName(s), teams:inSeason });
+  });
+  const orphanTeams = teams.filter(t => !t.seasonId || !knownSeasonIds.has(t.seasonId))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  if (orphanTeams.length) groupedTeams.push({ key:"__unassigned__", label:"Unassigned", teams:orphanTeams });
+
+  const teamRow = (t) => (
+    <div key={t.id}
+      onMouseEnter={()=>setHoveredTeamId(t.id)} onMouseLeave={()=>setHoveredTeamId(null)}
+      style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 8px", margin:"0 -8px",
+        borderRadius:10, borderBottom:"1px solid rgba(255,255,255,0.05)",
+        background:hoveredTeamId===t.id?"rgba(255,255,255,0.05)":"transparent",
+        transition:"background 0.15s" }}>
+      <button onClick={()=>onSelect(t.id, t)}
+        style={{ flex:1, textAlign:"left", background:"transparent", border:"none",
+          cursor:"pointer", padding:0 }}>
+        <div style={{ fontSize:15, fontWeight:700, color:hoveredTeamId===t.id?"#fff":"#f8fafc" }}>{t.name}</div>
+        <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)", marginTop:2 }}>
+          Max {t.rules?.maxPitches||55}p · Rest: {t.rules?.rest1||20}/{t.rules?.rest2||40}/{t.rules?.rest3||60}
+        </div>
+      </button>
+      <button onClick={()=>openManage(t)}
+        aria-label={`Manage ${t.name}`}
+        style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)",
+          borderRadius:8, padding:"5px 10px", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:12 }}>
+        ···
+      </button>
     </div>
   );
 
@@ -100,39 +287,21 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
         </div>
       </div>
 
-      {/* Team list */}
+      {/* Team list, grouped by season */}
       {loading ? (
         <div style={{ textAlign:"center", padding:"40px 0", color:"rgba(255,255,255,0.3)", fontSize:14 }}>Loading teams…</div>
-      ) : (
+      ) : teams.length === 0 ? (
         <div style={{ ...card, marginBottom:12 }}>
           <p style={sectionLabel}>TEAMS</p>
-          {teams.length === 0 && (
-            <div style={{ fontSize:13, color:"rgba(255,255,255,0.3)", paddingBottom:4 }}>No teams yet — create one below.</div>
-          )}
-          {teams.map(t => (
-            <div key={t.id}
-              onMouseEnter={()=>setHoveredTeamId(t.id)} onMouseLeave={()=>setHoveredTeamId(null)}
-              style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 8px", margin:"0 -8px",
-                borderRadius:10, borderBottom:"1px solid rgba(255,255,255,0.05)",
-                background:hoveredTeamId===t.id?"rgba(255,255,255,0.05)":"transparent",
-                transition:"background 0.15s" }}>
-              <button onClick={()=>onSelect(t.id, t)}
-                style={{ flex:1, textAlign:"left", background:"transparent", border:"none",
-                  cursor:"pointer", padding:0 }}>
-                <div style={{ fontSize:15, fontWeight:700, color:hoveredTeamId===t.id?"#fff":"#f8fafc" }}>{t.name}</div>
-                <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)", marginTop:2 }}>
-                  Max {t.rules?.maxPitches||55}p · Rest: {t.rules?.rest1||20}/{t.rules?.rest2||40}/{t.rules?.rest3||60}
-                </div>
-              </button>
-              <button onClick={()=>{ setManaging(t); setRenameName(t.name); setEditRules(t.rules||{...DEFAULT_RULES}); setDeletePhase("idle"); setDeleteText(""); }}
-                aria-label={`Manage ${t.name}`}
-                style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)",
-                  borderRadius:8, padding:"5px 10px", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:12 }}>
-                ···
-              </button>
-            </div>
-          ))}
+          <div style={{ fontSize:13, color:"rgba(255,255,255,0.3)", paddingBottom:4 }}>No teams yet — create one below.</div>
         </div>
+      ) : (
+        groupedTeams.map(group => (
+          <div key={group.key} style={{ ...card, marginBottom:12 }}>
+            <p style={sectionLabel}>{group.label.toUpperCase()}</p>
+            {group.teams.map(teamRow)}
+          </div>
+        ))
       )}
 
       {/* Create new team */}
@@ -149,15 +318,18 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
             <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="e.g. Prime 10U" aria-label="Team name"
               style={inputStyle}/>
           </div>
+          {seasonField("SEASON", newSeasonId, setNewSeasonId, newSeasonTerm, setNewSeasonTerm, newSeasonYear, setNewSeasonYear)}
+          {cloneRosterField()}
           <p style={{ ...sectionLabel, marginTop:14, marginBottom:10 }}>PITCH COUNT RULES</p>
-          {ruleField("Game max pitches", "maxPitches", "Maximum pitches allowed per game")}
-          {ruleField("0→1 rest-day breakpoint", "rest1", "Pitches above this require 1 day rest")}
-          {ruleField("1→2 rest-day breakpoint", "rest2", "Pitches above this require 2 days rest")}
-          {ruleField("2→3 rest-day breakpoint", "rest3", "Pitches above this require 3 days rest")}
+          {ruleField(newRules, setNewRules, "Game max pitches", "maxPitches", "Maximum pitches allowed per game")}
+          {ruleField(newRules, setNewRules, "0→1 rest-day breakpoint", "rest1", "Pitches above this require 1 day rest")}
+          {ruleField(newRules, setNewRules, "1→2 rest-day breakpoint", "rest2", "Pitches above this require 2 days rest")}
+          {ruleField(newRules, setNewRules, "2→3 rest-day breakpoint", "rest3", "Pitches above this require 3 days rest")}
           <div style={{ display:"flex", gap:8, marginTop:4 }}>
-            <button onClick={()=>{ setCreating(false); setNewName(""); setNewRules({...DEFAULT_RULES}); }} style={cancelBtn}>Cancel</button>
-            <button onClick={handleCreate} disabled={!newName.trim()||saving}
-              style={{ ...primaryBtn, flex:2, opacity:!newName.trim()||saving?0.5:1 }}>
+            <button onClick={()=>{ setCreating(false); resetCreateForm(); }} style={cancelBtn}>Cancel</button>
+            <button onClick={handleCreate}
+              disabled={!newName.trim()||saving||!newSeasonId||(cloneEnabled&&!cloneSourceId)}
+              style={{ ...primaryBtn, flex:2, opacity:(!newName.trim()||saving||!newSeasonId||(cloneEnabled&&!cloneSourceId))?0.5:1 }}>
               {saving ? "Creating…" : "Create Team"}
             </button>
           </div>
@@ -189,6 +361,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
                   <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>TEAM NAME</label>
                   <input value={renameName} onChange={e=>setRenameName(e.target.value)} aria-label="Team name"
                     style={{ ...inputStyle, marginBottom:12 }}/>
+                  {seasonField("SEASON", editSeasonId, setEditSeasonId, editSeasonTerm, setEditSeasonTerm, editSeasonYear, setEditSeasonYear)}
                   <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME MAX PITCHES</label>
                   <input type="number" min="1" value={editRules.maxPitches} aria-label="Game max pitches"
                     onChange={e=>setEditRules(r=>({...r,maxPitches:e.target.value}))}
@@ -209,8 +382,22 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
                     onChange={e=>setEditRules(r=>({...r,rest3:e.target.value}))}
                     style={{ ...inputStyle, marginBottom:12 }}/>
                   <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)", marginBottom:12 }}>Pitches above this require 3 days rest</div>
-                  <button onClick={handleSaveChanges} disabled={!renameName.trim()}
-                    style={{ ...primaryBtn, width:"100%", opacity:!renameName.trim()?0.5:1 }}>Save Changes</button>
+                  <button onClick={handleSaveChanges} disabled={!renameName.trim()||!editSeasonId||editSaving}
+                    style={{ ...primaryBtn, width:"100%", opacity:(!renameName.trim()||!editSeasonId||editSaving)?0.5:1 }}>
+                    {editSaving ? "Saving…" : "Save Changes"}
+                  </button>
+                </div>
+                <div style={{ ...card, border:"1px solid rgba(255,255,255,0.08)" }}>
+                  <p style={sectionLabel}>DUPLICATE</p>
+                  <p style={{ fontSize:12, color:"rgba(255,255,255,0.4)", marginBottom:10, lineHeight:1.4 }}>
+                    Start a new team with this roster — for example, carrying this team into next season.
+                    Stats and game history start fresh; only the pitcher names/jerseys copy over.
+                  </p>
+                  <button onClick={startCloneFromManaged}
+                    style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)",
+                      borderRadius:8, padding:"8px 14px", color:"#f8fafc", cursor:"pointer", fontSize:12, fontWeight:600 }}>
+                    Clone Roster to New Team
+                  </button>
                 </div>
                 <div style={{ ...card, border:"1px solid rgba(244,63,94,0.15)" }}>
                   <p style={{ ...sectionLabel, color:"#f43f5e" }}>DANGER ZONE</p>

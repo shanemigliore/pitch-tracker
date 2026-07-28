@@ -87,6 +87,7 @@ function App() {
       window.__fbMigrateIfNeeded?.() || Promise.resolve(),
       window.__fbCreatePrime12U?.()  || Promise.resolve(),
       window.__fbCreatePrime10U?.()  || Promise.resolve(),
+      window.__fbMigrateSeasonIfNeeded?.() || Promise.resolve(),
     ]).then(() => window.__fbListTeams()).then(list => {
       const fresh = list.find(t => t.id === teamId);
       if (fresh) {
