@@ -182,28 +182,32 @@ function PitcherDetail({ pitcher, onBack, onDelete, tournaments, onEditGame, onD
         </div>
       )}
 
-      {!confirmRemove ? (
-        <button onClick={()=>setConfirmRemove(true)} style={{ width:"100%", background:"transparent",
-          border:"1px solid rgba(244,63,94,0.2)", borderRadius:14, padding:12, color:"rgba(244,63,94,0.6)",
-          fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-          {I.trash} Remove from Roster
-        </button>
-      ) : (
-        <div style={{ background:"rgba(244,63,94,0.08)", border:"1px solid rgba(244,63,94,0.25)",
-          borderRadius:14, padding:14 }}>
-          <p style={{ margin:"0 0 10px", fontSize:13, color:"#f87171", fontWeight:600, textAlign:"center" }}>
-            Remove {pitcher.name} from the roster? This will delete all their pitch history.
-          </p>
-          <div style={{ display:"flex", gap:8 }}>
-            <button onClick={()=>setConfirmRemove(false)} style={{ ...cancelBtn, flex:1 }}>Keep Player</button>
-            <button onClick={()=>onDelete(pitcher.id)}
-              style={{ flex:2, background:"linear-gradient(135deg,#dc2626,#b91c1c)", border:"none",
-                borderRadius:12, padding:10, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-              Yes, Remove
-            </button>
+      {/* Separated from the history list above so it can't be fat-fingered while scrolling. */}
+      <div style={{ borderTop:"1px solid rgba(255,255,255,0.07)", marginTop:24, paddingTop:16 }}>
+        <p style={{ ...sectionLabel, color:"rgba(244,63,94,0.5)" }}>DANGER ZONE</p>
+        {!confirmRemove ? (
+          <button onClick={()=>setConfirmRemove(true)} style={{ width:"100%", background:"transparent",
+            border:"1px solid rgba(244,63,94,0.2)", borderRadius:14, padding:12, color:"rgba(244,63,94,0.6)",
+            fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+            {I.trash} Remove from Roster
+          </button>
+        ) : (
+          <div style={{ background:"rgba(244,63,94,0.08)", border:"1px solid rgba(244,63,94,0.25)",
+            borderRadius:14, padding:14 }}>
+            <p style={{ margin:"0 0 10px", fontSize:13, color:"#f87171", fontWeight:600, textAlign:"center" }}>
+              Remove {pitcher.name} from the roster? This will delete all their pitch history.
+            </p>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={()=>setConfirmRemove(false)} style={{ ...cancelBtn, flex:1 }}>Keep Player</button>
+              <button onClick={()=>onDelete(pitcher.id)}
+                style={{ flex:2, background:"linear-gradient(135deg,#dc2626,#b91c1c)", border:"none",
+                  borderRadius:12, padding:10, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                Yes, Remove
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

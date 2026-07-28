@@ -5,11 +5,12 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // ADD PITCHER (Settings sub-section) — ported from the old standalone Roster tab
 // ══════════════════════════════════════════════════════════════════════════════
-function AddPitcherSection({ roster, onAdd }) {
+function AddPitcherSection({ roster, onAdd, onDelete }) {
   const [name, setName] = useState("");
   const [jersey, setJersey] = useState("");
   const [jerseyErr, setJerseyErr] = useState("");
   const [confirmDupeName, setConfirmDupeName] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(null);
 
   function validateJersey(val) {
     if (!val) return "";
@@ -64,12 +65,34 @@ function AddPitcherSection({ roster, onAdd }) {
           <p style={sectionLabel}>CURRENT ROSTER ({roster.length})</p>
           <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
             {[...roster].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>(
-              <span key={p.id} style={{ fontSize:12, padding:"5px 10px", borderRadius:20,
+              <span key={p.id} style={{ display:"flex", alignItems:"center", gap:5, fontSize:12,
+                padding:"5px 6px 5px 10px", borderRadius:20,
                 background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.6)" }}>
                 {p.jersey?`#${p.jersey} `:""}{p.name}
+                <button type="button" onClick={()=>setConfirmRemove(p)} aria-label={`Remove ${p.name} from roster`}
+                  style={{ background:"rgba(244,63,94,0.12)", border:"none", borderRadius:"50%", width:18, height:18,
+                    color:"#f87171", fontSize:11, lineHeight:"16px", cursor:"pointer", padding:0 }}>
+                  ✕
+                </button>
               </span>
             ))}
           </div>
+          {confirmRemove && (
+            <div style={{ marginTop:12, padding:12, borderRadius:12,
+              background:"rgba(244,63,94,0.08)", border:"1px solid rgba(244,63,94,0.25)" }}>
+              <p style={{ margin:"0 0 10px", fontSize:13, color:"#f87171", fontWeight:600, textAlign:"center" }}>
+                Remove {confirmRemove.name} from the roster? This will delete all their pitch history.
+              </p>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={()=>setConfirmRemove(null)} style={{ ...cancelBtn, flex:1 }}>Keep Player</button>
+                <button onClick={()=>{ onDelete(confirmRemove.id); setConfirmRemove(null); }}
+                  style={{ flex:2, background:"linear-gradient(135deg,#dc2626,#b91c1c)", border:"none",
+                    borderRadius:12, padding:10, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                  Yes, Remove
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -79,7 +102,7 @@ function AddPitcherSection({ roster, onAdd }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: SETTINGS
 // ══════════════════════════════════════════════════════════════════════════════
-function Settings({ roster, onAddPlayer, tournaments, onAddTourney, onDeleteTourney, onUpdateTourney,
+function Settings({ roster, onAddPlayer, onDeletePlayer, tournaments, onAddTourney, onDeleteTourney, onUpdateTourney,
   auditLog, onUndo, undidIds, onUndid }) {
   const [section, setSection] = useState("roster");
 
@@ -107,7 +130,7 @@ function Settings({ roster, onAddPlayer, tournaments, onAddTourney, onDeleteTour
         ))}
       </div>
 
-      {section==="roster" && <AddPitcherSection roster={roster} onAdd={onAddPlayer}/>}
+      {section==="roster" && <AddPitcherSection roster={roster} onAdd={onAddPlayer} onDelete={onDeletePlayer}/>}
       {section==="tournaments" && (
         <TournamentScreen roster={roster} tournaments={tournaments}
           onAddTourney={onAddTourney} onDeleteTourney={onDeleteTourney} onUpdateTourney={onUpdateTourney}/>

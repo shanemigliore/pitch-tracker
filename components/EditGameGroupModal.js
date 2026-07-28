@@ -78,27 +78,55 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
         {game.pitchers.map(p => {
           const pitches = parseInt(pitcherPitches[p.pitcherId], 10) || 0;
           const rd = getRegRestDays(pitches);
+          const eligDate = editDate && pitches > 0 ? getEligibleDate(editDate, pitches, getRegRestDays) : null;
+          function bump(delta) {
+            setPitcherPitches(m => ({ ...m, [p.pitcherId]: String(Math.max(0, pitches + delta)) }));
+          }
           return (
-            <div key={p.pitcherId} style={{ display:"flex", alignItems:"center", gap:8,
-              padding:"8px 10px", borderRadius:10, marginBottom:6,
+            <div key={p.pitcherId} style={{ padding:"10px 12px", borderRadius:10, marginBottom:8,
               background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)" }}>
-              <div style={{ width:32, height:32, borderRadius:8, background:"rgba(56,189,248,0.1)",
-                border:"1px solid rgba(56,189,248,0.2)", display:"flex", alignItems:"center",
-                justifyContent:"center", fontFamily:"'Bebas Neue',cursive", fontSize:12, color:"#38bdf8", flexShrink:0 }}>
-                {p.jersey ? `#${p.jersey}` : (p.playerName||"?")[0]}
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                <div style={{ width:32, height:32, borderRadius:8, background:"rgba(56,189,248,0.1)",
+                  border:"1px solid rgba(56,189,248,0.2)", display:"flex", alignItems:"center",
+                  justifyContent:"center", fontFamily:"'Bebas Neue',cursive", fontSize:12, color:"#38bdf8", flexShrink:0 }}>
+                  {p.jersey ? `#${p.jersey}` : (p.playerName||"?")[0]}
+                </div>
+                <span style={{ flex:1, fontSize:13, fontWeight:600, color:"rgba(255,255,255,0.85)" }}>{p.playerName}</span>
+                {pitches > 0 && (
+                  <div style={{ textAlign:"right" }}>
+                    <div style={{ fontSize:11, fontWeight:700,
+                      color:rd===0?"#4ade80":rd===1?"#a3e635":rd===2?"#fb923c":"#f43f5e" }}>
+                      {rd===0?"No rest":`${rd}d rest`}
+                    </div>
+                    {eligDate && (
+                      <div style={{ fontSize:9, color:"rgba(255,255,255,0.35)" }}>Elig. {formatDate(eligDate.toISOString())}</div>
+                    )}
+                  </div>
+                )}
               </div>
-              <span style={{ flex:1, fontSize:13, fontWeight:600, color:"rgba(255,255,255,0.85)" }}>{p.playerName}</span>
-              <input type="number" min="0" aria-label={`${p.playerName} pitch count`}
-                value={pitcherPitches[p.pitcherId] ?? String(p.pitches)}
-                onChange={e => setPitcherPitches(m => ({ ...m, [p.pitcherId]: e.target.value }))}
-                style={{ ...inputStyle, width:64, textAlign:"center", fontSize:18, fontWeight:800,
-                  fontFamily:"'Bebas Neue',cursive", padding:"4px 6px" }}/>
-              {pitches > 0 && (
-                <span style={{ fontSize:11, fontWeight:600, minWidth:48, textAlign:"right",
-                  color:rd===0?"#4ade80":rd===1?"#a3e635":rd===2?"#fb923c":"#f43f5e" }}>
-                  {rd===0?"No rest":`${rd}d rest`}
-                </span>
-              )}
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                {[-5,-1].map(d=>(
+                  <button key={d} type="button" onClick={()=>bump(d)}
+                    aria-label={`Subtract ${Math.abs(d)} pitch${Math.abs(d)!==1?"es":""} for ${p.playerName}`}
+                    style={{ flex:1, padding:"7px 0", borderRadius:8, background:"rgba(255,255,255,0.05)",
+                      border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.6)", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                    {d}
+                  </button>
+                ))}
+                <input type="number" min="0" aria-label={`${p.playerName} pitch count`}
+                  value={pitcherPitches[p.pitcherId] ?? String(p.pitches)}
+                  onChange={e => setPitcherPitches(m => ({ ...m, [p.pitcherId]: e.target.value }))}
+                  style={{ ...inputStyle, width:60, flexShrink:0, textAlign:"center", fontSize:18, fontWeight:800,
+                    fontFamily:"'Bebas Neue',cursive", padding:"4px 6px" }}/>
+                {[1,5].map(d=>(
+                  <button key={d} type="button" onClick={()=>bump(d)}
+                    aria-label={`Add ${d} pitch${d!==1?"es":""} for ${p.playerName}`}
+                    style={{ flex:1, padding:"7px 0", borderRadius:8, background:"rgba(37,99,235,0.15)",
+                      border:"1px solid rgba(37,99,235,0.3)", color:"#60a5fa", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                    +{d}
+                  </button>
+                ))}
+              </div>
             </div>
           );
         })}
