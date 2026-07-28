@@ -1,22 +1,39 @@
 # Pitch Tracker — Claude Instructions
 
-## Git Workflow
+## Development Workflow
 
-After pushing code changes to the feature branch, automatically complete the full PR flow without asking for confirmation:
+For any nontrivial request, follow this sequence. Truly trivial changes
+(a typo, a copy tweak, a single-line fix with no ambiguity) can skip straight
+to implementation — this process is for anything with real scope or judgment
+calls involved.
 
-1. Create a PR with `gh pr create`
-2. Immediately merge it with `gh pr merge --merge`
-
-Use a clear, descriptive PR title and a brief summary of what changed and why.
+1. **Understand the goal, then interview.** Before proposing anything, understand
+   the overarching goal behind the request, not just its literal wording — then
+   ask clarifying questions to fully pin down requirements scope (edge cases,
+   what's explicitly out of scope, which existing patterns/files to reuse).
+2. **Propose a plan and get approval.** Present the plan and get explicit
+   approval before making any code changes. No implementation starts until
+   the plan is approved.
+3. **Implement** the approved plan.
+4. **Independent verification.** Once changes are complete, spin up an
+   independent sub-agent (fresh context, doesn't just trust the implementer's
+   summary) to write a test suite and verify the change. Cover, at minimum:
+   functionality, usability, stability, and security.
+5. **Ask before pushing.** Once implemented and verified, ask for explicit
+   permission before pushing to GitHub or opening/merging a PR. Never
+   auto-push or auto-merge without that go-ahead.
 
 ## Version Bumping
 
-Every PR must increment the minor version (e.g. v1.1 → v1.2). Update **both** of these together:
+Every push to `main` must increment the minor version (e.g. v1.1 → v1.2).
+Update **both** of these together:
 1. `APP_VERSION` constant in the Babel script block (near line 88)
 2. `<meta name="app-version" content="..."/>` in the `<head>` (line 12)
 
-These two must always match. The meta tag is what triggers the automatic cache-bust on the client.
-Only increment the minor version (after the `.`) unless explicitly told to change the major version.
+These two must always match. The meta tag is what triggers the automatic
+cache-bust on the client.
+Only increment the minor version (after the `.`) — bump the major version
+only when the user explicitly asks for it.
 
 ---
 
