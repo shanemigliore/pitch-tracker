@@ -12,7 +12,7 @@ Use a clear, descriptive PR title and a brief summary of what changed and why.
 ## Version Bumping
 
 Every PR must increment the minor version (e.g. v1.1 → v1.2). Update **both** of these together:
-1. `APP_VERSION` constant in the Babel script block (near line 349)
+1. `APP_VERSION` constant in the Babel script block (near line 88)
 2. `<meta name="app-version" content="..."/>` in the `<head>` (line 12)
 
 These two must always match. The meta tag is what triggers the automatic cache-bust on the client.
@@ -22,7 +22,59 @@ Only increment the minor version (after the `.`) unless explicitly told to chang
 
 ## App Architecture
 
-**Single file:** `/home/user/pitch-tracker/index.html` — the entire app lives here.
+**Static, multi-file, still zero build step/npm.** `index.html` is now just a
+small shell (~230 lines: `<head>`, a head-shell script, 12+3 `<script>` tags,
+service worker). Pure logic, Firebase glue, shared UI tokens, and every
+screen/modal component were split out of what used to be one 1.65MB file
+(Phase 1: `lib/`; Phase 2: `components/`) so both the browser and Claude/tests
+can load just what they need:
+
+| File | Contents | Loaded as |
+|------|----------|-----------|
+| `index.html` | `<head>`, head-shell (hooks/`PitchLogic`/`UIConstants` destructures, `APP_VERSION`, `LOGO_URI`), the component `<script src>` tags, bootstrap render, service worker | shell |
+| `lib/firebase-init.js` | `window.__fb*` functions (Firebase RTDB/auth setup) | plain `<script src>` |
+| `lib/pitch-logic.js` | Rest-day/eligibility/date/device-id math, `recomputeLast`, `getActiveTourney`, `getSubjectKey` — UMD module, also `require()`'d directly by `tests/logic.test.js` | plain `<script src>`, exposes `window.PitchLogic` |
+| `lib/ui-constants.js` | `STATUS`, icon set `I` (includes `settings`), shared style objects (`card`, `inputStyle`, etc.) — contains JSX (icons), IIFE-wrapped | `<script type="text/babel" src>`, exposes `window.UIConstants` |
+| `components/shared.js` | `Chip`, `RadialArc`, `ContextPicker`, `ScreenBoundary` | `<script type="text/babel" src>` |
+| `components/EditGameModal.js`, `PitcherDetail.js`, `GameLogScreen.js`, `EligibilityScreen.js`, `TournamentScreen.js`, `EditGameGroupModal.js`, `SeasonHistory.js`, `TeamPickerScreen.js`, `ActivityScreen.js`, `Settings.js` | One screen/modal component each | `<script type="text/babel" src>` each |
+| `components/App.js` | `TABS`, `TEAM_ID_KEY`, `TEAM_META_KEY` consts, then `App` (root component: team selection, Firebase subscription, tab routing, all handlers) | `<script type="text/babel" src>` |
+| `assets/logo.png` | App logo/icon (was a ~500KB inline base64 blob) | referenced by `LOGO_URI`, apple-touch-icon link |
+| `manifest.json` | PWA manifest (was an inline data-URI) | referenced by the manifest `<link>` |
+| `tests/logic.test.js` | Dependency-free Node test suite for `lib/pitch-logic.js` | `node tests/logic.test.js` |
+
+`index.html`'s head-shell destructures `window.PitchLogic` and
+`window.UIConstants` before any component script loads, so every call site
+across all 12 `components/*.js` files (`getAvailabilityStatus(...)`, `card`,
+`STATUS[...]`, `useState`, etc.) resolves as a plain free variable — classic
+`<script>` tags share one global lexical environment, so this works regardless
+of which component file loads in which order. `currentRules` is no longer a
+bare mutable global — read it via `getCurrentRules()` and write it via
+`setCurrentRules(...)`, both from `lib/pitch-logic.js`.
+
+**Component script order doesn't matter relative to each other** — they only
+reference shared globals inside their function bodies, which don't run until
+React actually calls them at render time, well after every script tag has
+executed. The one hard rule: the bootstrap script (`window.__PitchApp = App;`
++ `ReactDOM.createRoot(...).render(...)`) must come after all 12 component
+`<script>` tags, since it references `App` directly by name.
+
+**Collision rule for any new `lib/`/`components/` file:** classic `<script>`
+tags share one global lexical environment. A top-level `const`/`let` declared
+in one file collides (`SyntaxError`, crashes the whole page) with the same
+name declared at top level in *any other* script tag on the page — this bit
+`lib/ui-constants.js` for exactly this reason (it needed an IIFE wrapper) and
+is why `components/*.js` files must each contain exactly one top-level
+`function`/`class` declaration and nothing else at top level (function/class
+declarations don't collide with each other the way `const`/`let` do, since
+their names are all unique — but a stray top-level `const` sitting next to one
+would).
+
+The service worker (bottom of `index.html`) treats every same-origin request
+(the shell, all of `lib/`, `components/`, `assets/`, `manifest.json`) as
+network-first, same as HTML navigation — only third-party, version-pinned CDN
+scripts (React, Babel) are cache-first. This matters now that code lives in
+separate files: without it, a deploy could update `index.html` while a stale
+cached `components/TournamentScreen.js` keeps serving old logic.
 
 **Stack:**
 - React 18 + ReactDOM loaded from CDN, rendered via `ReactDOM.createRoot`
@@ -30,7 +82,7 @@ Only increment the minor version (after the `.`) unless explicitly told to chang
 - Firebase Realtime Database (anonymous auth via `auth.signInAnonymously()`)
 - No build step, no bundler, no npm
 
-**Current version:** v2.15
+**Current version:** v3.0
 
 ---
 
@@ -112,7 +164,9 @@ Only increment the minor version (after the `.`) unless explicitly told to chang
   name: string,
   startDate: string,    // "YYYY-MM-DD"
   days: number,
-  day1IsHardLimit: boolean
+  maxDay1: number,          // pitch cap for tourneyDay 1
+  maxTotal: number,         // pitch cap for the whole tournament (eligibility limit)
+  day1IsHardLimit: boolean  // true = exceeding maxDay1 makes a pitcher ineligible for the rest of the tournament; false = guideline only
 }
 ```
 
@@ -139,6 +193,10 @@ Only increment the minor version (after the `.`) unless explicitly told to chang
   sharedGameId: string | null    // links multi-pitcher game logs
 }
 ```
+Client-only, never persisted to Firebase: `_local: true` marks an optimistic
+entry not yet confirmed by the Firebase listener; `_failed: true` (set if the
+`__fbPushAudit` write rejects) marks one that never will be — `ActivityScreen`
+renders it with a "⚠ Not synced" badge instead of leaving it looking normal.
 
 **GameInfo (attached to LOG_GAME audit entries):**
 ```js
@@ -160,37 +218,50 @@ Only increment the minor version (after the `.`) unless explicitly told to chang
 | `LOG_GAME` | `DELETE_GAME` | `playerId`, `gameId` |
 | `EDIT_GAME` | `RESTORE_GAME` | `playerId`, `entry` (full old HistoryEntry) |
 | `DELETE_GAME` | `RESTORE_GAME` | `playerId`, `entry` |
-| `ADD_PLAYER` | `DELETE_PITCHER` | `pitcherId` |
-| `EDIT_PLAYER` | `RESTORE_PITCHER_META` | `pitcherId`, `name`, `jersey` |
+| `ADD_PITCHER` | `DELETE_PITCHER` | `pitcherId` |
+| `EDIT_PITCHER` | `RESTORE_PITCHER_META` | `pitcherId`, `name`, `jersey` |
 | `DELETE_PITCHER` | `RESTORE_PITCHER` | `pitcher` (full Pitcher object) |
 | `ADD_TOURNEY` | `DELETE_TOURNEY` | `tourneyId` |
 | `EDIT_TOURNEY` | `RESTORE_TOURNEY` | `tourney` (full Tournament object) |
 | `DELETE_TOURNEY` | `RESTORE_TOURNEY` | `tourney` |
+| `UNDO` | *(none — `undoData:null`)* | Pushed by `executeUndo` itself on every successful undo, detail `"Undid: <original entry's detail>"`. Can't itself be undone. The handler that performed the original action has its own audit push suppressed (`{skipAudit:true}`) when invoked via undo, so exactly one entry is logged per undo instead of a mislabeled duplicate. |
 
 ---
 
 ## Components
 
+Every component listed below lives in its own file under `components/`
+(Phase 2 of the split — see App Architecture above), except the four in
+`components/shared.js`.
+
+The bottom nav has 4 tabs. This is a deliberate consolidation (originally 6
+tabs) so related information isn't split across screens the coach has to flip
+between, and so info that's only relevant in one context (e.g. pre-game
+eligibility) doesn't linger where it isn't — see "Key Patterns" below for the
+specific principle.
+
 ### Screens (tab-level)
-| Component | Tab id | Purpose |
-|-----------|--------|---------|
-| `RosterScreen` | `roster` | Lists pitchers with availability chips; add pitcher form |
-| `PitcherDetail` | `roster` (drill-in) | Pitcher stats, season history, log single game |
-| `GameLogScreen` | `gamelog` | Log a game for multiple pitchers at once |
-| `EligibilityScreen` | `eligibility` | Grid of pitcher availability for a chosen date |
-| `TournamentScreen` | `tournament` | Create/edit/delete tournaments |
-| `SeasonHistory` | `history` | Season-level game history with leaderboard |
-| `ActivityScreen` | `activity` | Audit log with undo capability |
-| `TeamPickerScreen` | (pre-app) | Team selection / create / manage |
+| Component | File | Tab id | Purpose |
+|-----------|------|--------|---------|
+| `EligibilityScreen` | `components/EligibilityScreen.js` | `roster` | **The Roster tab.** Pitcher list grouped by availability for a chosen date (regular season or a specific tournament's budget), tap a pitcher to drill into `PitcherDetail`. (Filename predates the merge with the old standalone roster list.) |
+| `PitcherDetail` | `components/PitcherDetail.js` | `roster` (drill-in) | Pitcher stats, editable season history, edit name/jersey, remove from roster. Logging a new game happens on the Game Log tab, not here. |
+| `GameLogScreen` | `components/GameLogScreen.js` | `gamelog` | Log a **new** game for multiple pitchers at once (two-step: who pitched, then pitch counts). Entry-only — browsing/editing past games moved to the Season tab. |
+| `SeasonHistory` | `components/SeasonHistory.js` | `season` | **The Season tab.** Chronological game history with leaderboard. Tournament games collapse into one container per tournament (day-by-day breakdown inside), positioned by its most recent game date, so the whole season is browsable as one continuous list without switching to a separate tournament view. |
+| `Settings` | `components/Settings.js` | `settings` | **The Settings tab.** Sub-nav over three sections: Roster (add a pitcher — `AddPitcherSection`, same file), Tournaments (renders `TournamentScreen`), Activity (renders `ActivityScreen`). |
+| `TournamentScreen` | `components/TournamentScreen.js` | (Settings sub-section) | Create/edit/delete tournaments — config only. Viewing a tournament's actual games/pitch usage lives on the Season tab now, grouped under that tournament. |
+| `ActivityScreen` | `components/ActivityScreen.js` | (Settings sub-section) | Audit log with undo capability |
+| `TeamPickerScreen` | `components/TeamPickerScreen.js` | (pre-app) | Team selection / create / manage — reached via the header's TEAM button, not a tab |
 
 ### Modals & Sub-components
-| Component | Purpose |
-|-----------|---------|
-| `EditGameModal` | Edit or delete a single HistoryEntry |
-| `ContextPicker` | Regular season vs. tournament picker (shared by log forms) |
-| `PitcherStatusBanner` | Availability banner with rest-day details |
-| `Chip` | Small colored status badge |
-| `ScreenBoundary` | React error boundary wrapping each screen; shows error + Back button |
+| Component | File | Purpose |
+|-----------|------|---------|
+| `EditGameModal` | `components/EditGameModal.js` | Edit or delete a single HistoryEntry |
+| `EditGameGroupModal` | `components/EditGameGroupModal.js` | Edit/delete a multi-pitcher (`sharedGameId`) game log entry — also used for a single day within a Season-tab tournament container |
+| `AddPitcherSection` | `components/Settings.js` | New-pitcher form (duplicate jersey blocked, duplicate name soft-warned) — Settings' Roster sub-section |
+| `ContextPicker` | `components/shared.js` | Regular season vs. tournament picker (shared by log forms) |
+| `Chip` | `components/shared.js` | Small colored status badge |
+| `RadialArc` | `components/shared.js` | SVG radial progress ring (pitch count vs. max) |
+| `ScreenBoundary` | `components/shared.js` | React error boundary wrapping each screen; shows error + Back button |
 
 ---
 
@@ -199,11 +270,15 @@ Only increment the minor version (after the `.`) unless explicitly told to chang
 ```js
 teamId            // string | null — persisted to localStorage (TEAM_ID_KEY)
 teamMeta          // { name, rules, ... } | null
-connected         // boolean — Firebase .info/connected
+syncStatus        // "connecting"|"saving"|"synced"|"offline"|"error" — "error" is a
+                  // permission-denied-style write rejection (distinct purple dot/banner,
+                  // tappable to show the real error), as opposed to "offline" (dropped
+                  // connection, will retry once reconnected)
+lastSyncError     // string | null — human-readable detail shown when syncStatus is "error"
 loaded            // boolean — initial data received from Firebase
 roster            // Pitcher[] — sorted by name
 tournaments       // Tournament[]
-tab               // "roster"|"gamelog"|"eligibility"|"tournament"|"history"|"activity"
+tab               // "roster"|"gamelog"|"season"|"settings"
 selectedPlayer    // Pitcher | null — active drill-in on Roster tab
 auditLog          // AuditEntry[] — last 50, newest first
 undidIds          // Set<string> — audit entry IDs that have been undone (persists across tab changes)
@@ -213,19 +288,18 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 
 | Handler | What it does |
 |---------|-------------|
-| `addPlayer(p)` | Adds pitcher to roster, pushes ADD_PLAYER audit |
-| `deletePlayer(id)` | Removes pitcher, pushes DELETE_PITCHER audit |
-| `editPlayer(id, updates)` | Updates pitcher name/jersey, pushes EDIT_PLAYER audit |
-| `logGame(playerId, gameData)` | Adds single HistoryEntry, calls `recomputeLast`, pushes LOG_GAME audit |
-| `logMultiple(playerId, gameData)` | Same as logGame but preserves `sharedGameId` for grouping |
+| `addPlayer(p)` | Adds pitcher to roster, pushes ADD_PITCHER audit |
+| `deletePlayer(id, opts?)` | Removes pitcher, pushes DELETE_PITCHER audit unless `opts.skipAudit`; returns whether the pitcher existed |
+| `editPlayer(id, updates, opts?)` | Updates pitcher name/jersey, pushes EDIT_PITCHER audit unless `opts.skipAudit`; returns whether the pitcher existed |
+| `logMultiple(playerId, gameData)` | Adds single HistoryEntry (one call per pitcher in the game), calls `recomputeLast`, pushes LOG_GAME audit, preserves `sharedGameId` for grouping. The only game-logging path now — GameLogScreen is the single place to log a new game. |
 | `editGame(playerId, gameId, updatedData)` | Updates HistoryEntry fields, pushes EDIT_GAME audit |
-| `deleteGame(playerId, gameId)` | Removes HistoryEntry, pushes DELETE_GAME audit |
-| `restoreGame(playerId, entry)` | Re-inserts a deleted HistoryEntry |
+| `deleteGame(playerId, gameId, opts?)` | Removes HistoryEntry, pushes DELETE_GAME audit unless `opts.skipAudit`; returns whether the entry existed |
+| `restoreGame(playerId, entry)` | Re-inserts a deleted HistoryEntry; returns `false` (no-op) if the pitcher no longer exists |
 | `addTourney(t)` | Adds tournament, pushes ADD_TOURNEY audit |
-| `deleteTourney(id)` | Removes tournament, pushes DELETE_TOURNEY audit |
+| `deleteTourney(id, opts?)` | Removes tournament, pushes DELETE_TOURNEY audit unless `opts.skipAudit`; returns whether the tournament existed |
 | `updateTourney(t)` | Updates tournament, pushes EDIT_TOURNEY audit |
-| `executeUndo(undoData)` | Dispatches to correct handler based on `undoData.type` |
-| `pushAudit(action, detail, undoData, extra)` | Writes to `/auditLog/{teamId}` via `__fbPushAudit`; `extra` is spread into the entry |
+| `executeUndo(entry)` | Dispatches to the correct handler based on `entry.undoData.type` (with `{skipAudit:true}` so the handler's own audit push doesn't fire), then pushes one `UNDO` audit entry on success. Returns whether the undo actually found its target — `ActivityScreen` alerts the user instead of marking it undone when it returns `false`. Guarded by a ref (`undoneEntryIdsRef`) against a same-tick double-invocation re-running the same entry. |
+| `pushAudit(action, detail, undoData, extra)` | Writes to `/auditLog/{teamId}` via `__fbPushAudit`; `extra` is spread into the entry; on write failure, flags the optimistic local entry `_failed:true` |
 
 ---
 
@@ -269,3 +343,7 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 **Data persistence:** Roster and tournaments are saved to Firebase on every change via a `useEffect` that watches both arrays. The audit log is written directly in each handler via `pushAudit`.
 
 **Team selection:** Stored in `localStorage` under `TEAM_ID_KEY = "pt_selected_team_id"`. On load, if a stored ID exists the app skips `TeamPickerScreen` and goes straight to the team.
+
+**Repeat info only where it's contextually useful:** `GameLogScreen` deliberately does not show a pitcher's pre-game eligibility/rest status while picking who pitched or entering counts — the game already happened, so "were they allowed to start" isn't the question at that point. What it does check, once counts are entered: a rest-day rule violation (`getAvailabilityStatus`) or a tournament pitch-limit violation (`getViolation` in `GameLogScreen.js`, checking a tournament's `maxDay1`/`maxTotal` against that pitcher's prior-plus-this-game total) — either blocks Save behind a warn-and-override screen, same pattern as the old ineligible-pitcher warning. If you're tempted to add a status chip back into the entry flow, check whether it's answering a question that's actually relevant post-hoc before doing so.
+
+**`window.__pendingAppUpdateVersion` / `window.__applyPendingAppUpdate`:** set by the version-check script in `index.html` on a deploy mismatch, instead of reloading immediately (which could wipe unsaved input mid-entry). `App.js` listens for the `pt-update-available` window event (and checks the flag on mount, in case the event fired before the listener attached) and shows a tappable banner; the banner calls `window.__applyPendingAppUpdate()` to actually clear caches and reload, on the user's own timing.
