@@ -136,7 +136,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
             <input type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)} aria-label="Game date"
               style={{ ...inputStyle, marginBottom:10 }}/>
             <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>OPPONENT *</label>
-            <input placeholder="Team name (required)" value={opponent} aria-label="Opponent"
+            <input placeholder="Team name" value={opponent} aria-label="Opponent"
               onChange={e=>{ setOpponent(e.target.value); if(e.target.value.trim()) setOpponentErr(false); }}
               style={{ ...inputStyle, border:opponentErr?"1px solid rgba(244,63,94,0.6)":inputStyle.border, marginBottom:opponentErr?4:0 }}/>
             {opponentErr && <div style={{ fontSize:11, color:"#f87171", marginTop:4 }}>Opponent is required</div>}
@@ -269,19 +269,18 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
               </div>
             );
           })()}
-          {!warnViolations && (()=>{
+          {hasEntries && !warnViolations && (()=>{
             const toLog = roster.filter(p=>selectedIds.has(p.id));
             const hasViolation = toLog.some(p=>getViolation(p));
-            const btnBg = !hasEntries || !hasViolation
+            const btnBg = !hasViolation
               ? "linear-gradient(135deg,#16a34a,#15803d)"
               : "linear-gradient(135deg,#ea580c,#c2410c)";
-            const btnShadow = !hasEntries || !hasViolation
+            const btnShadow = !hasViolation
               ? "0 4px 20px rgba(22,163,74,0.4)"
               : "0 4px 20px rgba(234,88,12,0.4)";
             return (
-              <button onClick={()=>handleSave(false)} disabled={!hasEntries}
-                style={{ ...primaryBtn, width:"100%", padding:14, opacity:hasEntries?1:0.4,
-                  background:hasEntries?btnBg:undefined, boxShadow:hasEntries?btnShadow:undefined }}>
+              <button onClick={()=>handleSave(false)}
+                style={{ ...primaryBtn, width:"100%", padding:14, background:btnBg, boxShadow:btnShadow }}>
                 {I.check} Save Game — {totalPitchers} pitcher{totalPitchers!==1?"s":""}
               </button>
             );
