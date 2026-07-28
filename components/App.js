@@ -388,7 +388,7 @@ function App() {
 
   // ── Loading splash ──────────────────────────────────────────────────────
   if (!loaded) return (
-    <div style={{ background:"#080c14", minHeight:"100vh", display:"flex", flexDirection:"column",
+    <div style={{ background:"#080c14", minHeight:"100dvh", display:"flex", flexDirection:"column",
       alignItems:"center", justifyContent:"center", gap:16 }}>
       <img src={LOGO_URI} alt="Prime Baseball" style={{ width:64, height:64, borderRadius:"50%" }}/>
       <div style={{ fontSize:20, fontWeight:800, color:"rgba(255,255,255,0.85)", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>PRIME PITCHING</div>
@@ -402,7 +402,7 @@ function App() {
   const restingCount   = roster.filter(p=>getAvailabilityStatus(p, null, tournaments)!=="available").length;
 
   return (
-    <div style={{ background:"#080c14", minHeight:"100vh", maxWidth:430, margin:"0 auto",
+    <div style={{ background:"#080c14", minHeight:"100dvh", maxWidth:430, margin:"0 auto",
       fontFamily:"'Barlow',sans-serif", color:"#f8fafc", position:"relative", overflowX:"hidden",
       backgroundImage:"radial-gradient(ellipse at 20% 0%,rgba(30,58,138,0.25) 0%,transparent 60%),radial-gradient(ellipse at 80% 100%,rgba(22,101,52,0.15) 0%,transparent 60%)" }}>
 
@@ -485,7 +485,7 @@ function App() {
           </ScreenBoundary>
         ) : (
           <ScreenBoundary>
-            <Settings roster={roster} onAddPlayer={addPlayer}
+            <Settings roster={roster} onAddPlayer={addPlayer} onDeletePlayer={deletePlayer}
               tournaments={tournaments} onAddTourney={addTourney} onDeleteTourney={deleteTourney} onUpdateTourney={updateTourney}
               auditLog={auditLog} onUndo={executeUndo}
               undidIds={undidIds} onUndid={id => {

@@ -179,7 +179,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
               All Pitchers
             </button>
             {pitchersWithGames.map(p=>(
-              <button key={p.id} onClick={()=>setFilterPitcherId(String(p.id))} aria-pressed={String(filterPitcherId)===String(p.id)}
+              <button key={p.id} onClick={()=>setFilterPitcherId(String(filterPitcherId)===String(p.id)?"all":String(p.id))} aria-pressed={String(filterPitcherId)===String(p.id)}
                 style={{ padding:"6px 12px", borderRadius:20,
                   border:`1px solid ${String(filterPitcherId)===String(p.id)?"#38bdf8":"rgba(255,255,255,0.1)"}`,
                   background:String(filterPitcherId)===String(p.id)?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
@@ -215,15 +215,17 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
             ))}
           </div>
 
-          {/* Leaderboard — only when showing all pitchers */}
-          {filterPitcherId==="all" && leaderboard.length===0 && (
+          {/* Leaderboard — stays visible even while filtered, with the active
+              pitcher's row highlighted, so it's clear the chip row above and
+              this list drive the same filter rather than two separate things. */}
+          {leaderboard.length===0 && (
             <div style={{ ...card, textAlign:"center", padding:"28px 16px", color:"rgba(255,255,255,0.3)" }}>
               <div style={{ fontSize:32, marginBottom:8 }}>📊</div>
               <p style={{ margin:0, fontSize:13, fontWeight:600 }}>No games logged for {displayYear}</p>
               <p style={{ margin:"4px 0 0", fontSize:12 }}>Log a game to see the leaderboard</p>
             </div>
           )}
-          {filterPitcherId==="all" && leaderboard.length>0 && (
+          {leaderboard.length>0 && (
             <div style={card}>
               <p style={sectionLabel}>LEADERBOARD</p>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 54px 48px 54px", columnGap:8,
@@ -234,29 +236,34 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
                 <span style={{ fontSize:10, color:"rgba(255,255,255,0.35)", fontWeight:700, letterSpacing:1, textAlign:"right" }}>TOT</span>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 54px 48px 54px", columnGap:8 }}>
-                {leaderboard.map((p,i)=>(
-                  <React.Fragment key={p.id}>
-                    <div onClick={()=>setFilterPitcherId(String(p.id))}
-                      style={{ display:"flex", alignItems:"center", gap:7, cursor:"pointer",
-                        padding:"7px 0", borderBottom:i<leaderboard.length-1?"1px solid rgba(255,255,255,0.04)":"none" }}>
-                      <span style={{ width:20, height:20, borderRadius:6,
-                        background:i===0?"rgba(251,191,36,0.2)":i===1?"rgba(156,163,175,0.15)":i===2?"rgba(180,120,60,0.15)":"rgba(255,255,255,0.04)",
-                        display:"flex", alignItems:"center", justifyContent:"center",
-                        fontSize:10, fontWeight:800, color:i===0?"#fbbf24":i===1?"#9ca3af":i===2?"#b47a3c":"rgba(255,255,255,0.3)", flexShrink:0 }}>
-                        {i+1}
-                      </span>
-                      <span style={{ fontSize:13, color:"rgba(255,255,255,0.8)", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.jersey?`#${p.jersey} `:""}{p.name}</span>
-                    </div>
-                    <span onClick={()=>setFilterPitcherId(String(p.id))} style={{ fontSize:13, color:"rgba(255,255,255,0.5)", fontFamily:"'DM Mono',monospace", textAlign:"right", cursor:"pointer",
-                      padding:"7px 0", borderBottom:i<leaderboard.length-1?"1px solid rgba(255,255,255,0.04)":"none", display:"flex", alignItems:"center", justifyContent:"flex-end" }}>{p.games}</span>
-                    <span onClick={()=>setFilterPitcherId(String(p.id))} style={{ fontSize:13, color:"#38bdf8", fontFamily:"'DM Mono',monospace", textAlign:"right", cursor:"pointer",
-                      padding:"7px 0", borderBottom:i<leaderboard.length-1?"1px solid rgba(255,255,255,0.04)":"none", display:"flex", alignItems:"center", justifyContent:"flex-end" }}>{p.avg}p</span>
-                    <span onClick={()=>setFilterPitcherId(String(p.id))} style={{ fontSize:13, color:"#f8fafc", fontFamily:"'DM Mono',monospace", fontWeight:700, textAlign:"right", cursor:"pointer",
-                      padding:"7px 0", borderBottom:i<leaderboard.length-1?"1px solid rgba(255,255,255,0.04)":"none", display:"flex", alignItems:"center", justifyContent:"flex-end" }}>{p.total}p</span>
-                  </React.Fragment>
-                ))}
+                {leaderboard.map((p,i)=>{
+                  const isActive = String(filterPitcherId)===String(p.id);
+                  const cellStyle = { padding:"7px 0", borderBottom:i<leaderboard.length-1?"1px solid rgba(255,255,255,0.04)":"none",
+                    background:isActive?"rgba(56,189,248,0.07)":"transparent" };
+                  return (
+                    <React.Fragment key={p.id}>
+                      <div onClick={()=>setFilterPitcherId(isActive?"all":String(p.id))}
+                        style={{ ...cellStyle, display:"flex", alignItems:"center", gap:7, cursor:"pointer", paddingLeft:isActive?6:0,
+                          borderLeft:isActive?"2px solid #38bdf8":"2px solid transparent" }}>
+                        <span style={{ width:20, height:20, borderRadius:6,
+                          background:i===0?"rgba(251,191,36,0.2)":i===1?"rgba(156,163,175,0.15)":i===2?"rgba(180,120,60,0.15)":"rgba(255,255,255,0.04)",
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          fontSize:10, fontWeight:800, color:i===0?"#fbbf24":i===1?"#9ca3af":i===2?"#b47a3c":"rgba(255,255,255,0.3)", flexShrink:0 }}>
+                          {i+1}
+                        </span>
+                        <span style={{ fontSize:13, color:isActive?"#38bdf8":"rgba(255,255,255,0.8)", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.jersey?`#${p.jersey} `:""}{p.name}</span>
+                      </div>
+                      <span onClick={()=>setFilterPitcherId(isActive?"all":String(p.id))} style={{ ...cellStyle, fontSize:13, color:"rgba(255,255,255,0.5)", fontFamily:"'DM Mono',monospace", textAlign:"right", cursor:"pointer",
+                        display:"flex", alignItems:"center", justifyContent:"flex-end" }}>{p.games}</span>
+                      <span onClick={()=>setFilterPitcherId(isActive?"all":String(p.id))} style={{ ...cellStyle, fontSize:13, color:"#38bdf8", fontFamily:"'DM Mono',monospace", textAlign:"right", cursor:"pointer",
+                        display:"flex", alignItems:"center", justifyContent:"flex-end" }}>{p.avg}p</span>
+                      <span onClick={()=>setFilterPitcherId(isActive?"all":String(p.id))} style={{ ...cellStyle, fontSize:13, color:"#f8fafc", fontFamily:"'DM Mono',monospace", fontWeight:700, textAlign:"right", cursor:"pointer",
+                        display:"flex", alignItems:"center", justifyContent:"flex-end" }}>{p.total}p</span>
+                    </React.Fragment>
+                  );
+                })}
               </div>
-              <p style={{ margin:"8px 0 0", fontSize:10, color:"rgba(255,255,255,0.25)" }}>Tap a player to filter their games</p>
+              <p style={{ margin:"8px 0 0", fontSize:10, color:"rgba(255,255,255,0.25)" }}>Tap a player to filter their games, tap again to clear</p>
             </div>
           )}
 

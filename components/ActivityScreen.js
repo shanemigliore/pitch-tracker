@@ -4,6 +4,14 @@
 // ── Activity Screen ───────────────────────────────────────────────────────────
 
 function ActivityScreen({ auditLog, roster, onUndo, undidIds, onUndid }) {
+  const [undoError, setUndoError] = useState(null);
+
+  useEffect(() => {
+    if (!undoError) return;
+    const t = setTimeout(() => setUndoError(null), 3500);
+    return () => clearTimeout(t);
+  }, [undoError]);
+
   function formatTs(ts) {
     if (!ts) return "";
     const d = new Date(ts);
@@ -48,7 +56,7 @@ function ActivityScreen({ auditLog, roster, onUndo, undidIds, onUndid }) {
     if (ok) {
       onUndid(entry.id);
     } else {
-      alert("Can't undo — that item no longer exists.");
+      setUndoError("Can't undo — that item no longer exists.");
     }
   }
 
@@ -85,6 +93,17 @@ function ActivityScreen({ auditLog, roster, onUndo, undidIds, onUndid }) {
 
   return (
     <div style={{ padding:"16px 16px 120px" }}>
+      {undoError && (
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
+          marginBottom:12, padding:"10px 12px", borderRadius:12,
+          background:"rgba(244,63,94,0.1)", border:"1px solid rgba(244,63,94,0.3)" }}>
+          <span style={{ fontSize:13, color:"#f87171", fontWeight:600 }}>{undoError}</span>
+          <button onClick={()=>setUndoError(null)} aria-label="Dismiss"
+            style={{ background:"none", border:"none", color:"rgba(255,255,255,0.4)", cursor:"pointer", flexShrink:0, display:"flex" }}>
+            {I.xmark}
+          </button>
+        </div>
+      )}
       <p style={sectionLabel}>RECENT ACTIVITY</p>
       {auditLog.length === 0 ? (
         <div style={{ textAlign:"center", padding:"40px 0", color:"rgba(255,255,255,0.3)", fontSize:14 }}>
