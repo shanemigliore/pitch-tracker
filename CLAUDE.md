@@ -99,7 +99,7 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - Firebase Realtime Database (anonymous auth via `auth.signInAnonymously()`)
 - No build step, no bundler, no npm
 
-**Current version:** v3.1
+**Current version:** v3.2
 
 ---
 
@@ -111,7 +111,8 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 ```
 /teams/{teamId}/roster        — object keyed by pitcherId → Pitcher
 /teams/{teamId}/tournaments   — object keyed by tourneyId → Tournament
-/teamsMeta/{teamId}           — { name, rules, createdAt }
+/teamsMeta/{teamId}           — { name, rules, createdAt, seasonId }
+/seasonsMeta/{seasonId}       — { term, year, createdAt } — see Seasons below
 /auditLog/{teamId}/{pushKey}  — AuditEntry (limitToLast 50)
 /archive/{teamId}/meta        — saved on team delete
 /archive/{teamId}/data        — saved on team delete
@@ -126,6 +127,10 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - `__fbSet(key, value, teamId)` — sets `/teams/{teamId}/{key}`
 - `__fbPushAudit(teamId, entry)` — pushes to `/auditLog/{teamId}`
 - `__fbWatchAudit(teamId, onData)` — live listener on audit log (last 50, ordered by key)
+- `__fbMigrateSeasonIfNeeded()` — one-time: ensures a `Spring 2026` season exists (`seasonId: "2026_spring"`) and backfills that `seasonId` onto any `teamsMeta` entry missing one (covers teams created before seasons existed)
+- `__fbListSeasons()` — reads `/seasonsMeta` (parent-level read, requires read rule at `seasonsMeta`)
+- `__fbCreateSeason(term, year)` — `seasonId` is deterministic (`${year}_${term.toLowerCase()}`), so creating the same term+year twice returns the existing season instead of duplicating it; resolves with the `seasonId`
+- `__fbGetRoster(teamId)` — one-time read of another team's roster (used for roster cloning at team-creation time)
 
 **Security Rules (current recommended):**
 ```json
@@ -136,12 +141,16 @@ cached `components/TournamentScreen.js` keeps serving old logic.
       ".read": "auth != null",
       "$teamId": { ".write": "auth != null" }
     },
+    "seasonsMeta": {
+      ".read": "auth != null",
+      "$seasonId": { ".write": "auth != null" }
+    },
     "auditLog": { "$teamId": { ".read": "auth != null", ".write": "auth != null" } },
     "archive": { "$teamId": { ".read": "auth != null", ".write": "auth != null" } }
   }
 }
 ```
-`teamsMeta` needs `.read` at the collection level because `__fbListTeams` reads the parent node.
+`teamsMeta` and `seasonsMeta` both need `.read` at the collection level because `__fbListTeams`/`__fbListSeasons` read the parent node.
 
 ---
 
@@ -192,6 +201,23 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 { maxPitches: 55, rest1: 20, rest2: 40, rest3: 60 }
 // rest1/2/3 = pitch thresholds that trigger 1/2/3 rest days
 ```
+
+**Season (stored at `/seasonsMeta/{seasonId}`):**
+```js
+{
+  term: "Winter" | "Spring" | "Summer" | "Fall",
+  year: number,
+  createdAt: number   // Date.now()
+}
+```
+`seasonId` is deterministic (`${year}_${term.toLowerCase()}`, e.g. `2026_spring`)
+so picking the same term+year twice reuses the existing season instead of
+creating a duplicate — `__fbCreateSeason` looks up before writing. Display
+name ("Spring 2026") is computed via `getSeasonName(season)`, never stored.
+A team belongs to exactly one season via `teamsMeta/{teamId}.seasonId`; a
+team's roster/tournaments/history do not carry over when it's reassigned or
+when a new team is created for a new season — each `teamId` is its own
+isolated dataset (see "Roster cloning" under Key Patterns below).
 
 **AuditEntry (stored in Firebase, received in auditLog array):**
 ```js
@@ -267,7 +293,7 @@ specific principle.
 | `Settings` | `components/Settings.js` | `settings` | **The Settings tab.** Sub-nav over three sections: Roster (add a pitcher — `AddPitcherSection`, same file), Tournaments (renders `TournamentScreen`), Activity (renders `ActivityScreen`). |
 | `TournamentScreen` | `components/TournamentScreen.js` | (Settings sub-section) | Create/edit/delete tournaments — config only. Viewing a tournament's actual games/pitch usage lives on the Season tab now, grouped under that tournament. |
 | `ActivityScreen` | `components/ActivityScreen.js` | (Settings sub-section) | Audit log with undo capability |
-| `TeamPickerScreen` | `components/TeamPickerScreen.js` | (pre-app) | Team selection / create / manage — reached via the header's TEAM button, not a tab |
+| `TeamPickerScreen` | `components/TeamPickerScreen.js` | (pre-app) | Team selection / create / manage — reached via the header's TEAM button, not a tab. Teams are grouped under season headers (newest season first); create/edit forms let you pick a season or spin up a new one inline (`+ New Season`), and optionally clone another team's roster (fresh id per pitcher, stats/history reset) either while creating a team or via "Clone Roster to New Team" from an existing team's manage modal |
 
 ### Modals & Sub-components
 | Component | File | Purpose |
@@ -338,6 +364,8 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 | `newId()` | Returns a unique ID string (timestamp + random) |
 | `getDeviceId()` / `getDeviceName()` | Device fingerprint for audit log attribution |
 | `load(key)` / `save(key, val)` | localStorage helpers; `save` also calls `__fbSet` |
+| `getSeasonName(season)` | Formats `{term,year}` as `"Spring 2026"` |
+| `compareSeasonsDesc(a, b)` | Array-sort comparator: newest season first (year desc, then term rank Winter<Spring<Summer<Fall within a year) |
 
 ---
 
@@ -360,6 +388,8 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 **Data persistence:** Roster and tournaments are saved to Firebase on every change via a `useEffect` that watches both arrays. The audit log is written directly in each handler via `pushAudit`.
 
 **Team selection:** Stored in `localStorage` under `TEAM_ID_KEY = "pt_selected_team_id"`. On load, if a stored ID exists the app skips `TeamPickerScreen` and goes straight to the team.
+
+**Season-scoped isolation / roster cloning:** Two teams can share a name (e.g. "Prime 10U" in both `Fall 2026` and `Spring 2027`) because each is its own `teamId` with its own `/teams/{teamId}/roster`, `/teams/{teamId}/tournaments`, and history — nothing carries over automatically between seasons. To start a new season's team with last season's roster, `TeamPickerScreen` reads the source team's roster via `__fbGetRoster`, assigns each pitcher a **new id** via `newId()`, and resets `lastPitches: 0, lastGameDate: "", history: []` — only `name`/`jersey` copy over. Tournaments are never cloned (they're season-specific by nature).
 
 **Repeat info only where it's contextually useful:** `GameLogScreen` deliberately does not show a pitcher's pre-game eligibility/rest status while picking who pitched or entering counts — the game already happened, so "were they allowed to start" isn't the question at that point. What it does check, once counts are entered: a rest-day rule violation (`getAvailabilityStatus`) or a tournament pitch-limit violation (`getViolation` in `GameLogScreen.js`, checking a tournament's `maxDay1`/`maxTotal` against that pitcher's prior-plus-this-game total) — either blocks Save behind a warn-and-override screen, same pattern as the old ineligible-pitcher warning. If you're tempted to add a status chip back into the entry flow, check whether it's answering a question that's actually relevant post-hoc before doing so.
 

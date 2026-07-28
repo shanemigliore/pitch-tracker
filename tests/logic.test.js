@@ -247,6 +247,45 @@ test('7. getEligibleDateStr returns a plain YYYY-MM-DD string (no UTC round-trip
   );
 });
 
+// ── 8. Season helpers ───────────────────────────────────────────────────────
+
+test('8a. getSeasonName formats term + year', () => {
+  assert.strictEqual(logic.getSeasonName({ term: 'Spring', year: 2026 }), 'Spring 2026');
+});
+
+test('8b. getSeasonName returns empty string for missing season', () => {
+  assert.strictEqual(logic.getSeasonName(null), '');
+});
+
+test('8c. compareSeasonsDesc: later year sorts before earlier year', () => {
+  const seasons = [
+    { term: 'Spring', year: 2026 },
+    { term: 'Fall', year: 2026 },
+    { term: 'Spring', year: 2027 },
+  ];
+  const sorted = [...seasons].sort(logic.compareSeasonsDesc);
+  assert.deepStrictEqual(
+    sorted.map(logic.getSeasonName),
+    ['Spring 2027', 'Fall 2026', 'Spring 2026'],
+    `expected newest-first order, got ${JSON.stringify(sorted.map(logic.getSeasonName))}`
+  );
+});
+
+test('8d. compareSeasonsDesc: within same year, later term sorts first', () => {
+  const seasons = [
+    { term: 'Winter', year: 2026 },
+    { term: 'Summer', year: 2026 },
+    { term: 'Fall', year: 2026 },
+    { term: 'Spring', year: 2026 },
+  ];
+  const sorted = [...seasons].sort(logic.compareSeasonsDesc);
+  assert.deepStrictEqual(
+    sorted.map(s => s.term),
+    ['Fall', 'Summer', 'Spring', 'Winter'],
+    `expected Fall>Summer>Spring>Winter within the same year, got ${JSON.stringify(sorted.map(s => s.term))}`
+  );
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────
 
 console.log('');
