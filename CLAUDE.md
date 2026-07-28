@@ -99,7 +99,7 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - Firebase Realtime Database (anonymous auth via `auth.signInAnonymously()`)
 - No build step, no bundler, no npm
 
-**Current version:** v3.1
+**Current version:** v3.2
 
 ---
 
