@@ -10,7 +10,16 @@ function AddPitcherSection({ roster, onAdd, onDelete }) {
   const [jersey, setJersey] = useState("");
   const [jerseyErr, setJerseyErr] = useState("");
   const [confirmDupeName, setConfirmDupeName] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(null);
+  // "idle" -> "select" (pick who) -> "confirm" (type DELETE) -> back to "idle".
+  // Deliberately slower than a single tap+confirm: this is the only place in
+  // the app a pitcher can be removed at all (see PitcherDetail.js).
+  const [deletePhase, setDeletePhase] = useState("idle");
+  const [selectedDeleteId, setSelectedDeleteId] = useState(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  function resetDeleteFlow() {
+    setDeletePhase("idle"); setSelectedDeleteId(null); setDeleteConfirmText("");
+  }
 
   function validateJersey(val) {
     if (!val) return "";
@@ -38,10 +47,10 @@ function AddPitcherSection({ roster, onAdd, onDelete }) {
     <div style={{ padding:"0 16px 110px" }}>
       <div style={{ ...card, border:"1px solid rgba(255,255,255,0.12)" }}>
         <p style={sectionLabel}>NEW PLAYER</p>
-        <input aria-label="Full name" placeholder="Full name" value={name}
+        <input aria-label="Name" placeholder="Name" value={name}
           onChange={e=>{ setName(e.target.value); setConfirmDupeName(false); }}
           onKeyDown={e=>e.key==="Enter"&&submit()} style={{ ...inputStyle, marginBottom:8 }}/>
-        <input aria-label="Jersey number" placeholder="e.g. 07 (optional)" value={jersey}
+        <input aria-label="Jersey number" placeholder="Jersey #" value={jersey} inputMode="numeric"
           onChange={e=>{ const v=e.target.value.replace(/\D/g,"").slice(0,2); setJersey(v); setJerseyErr(v?validateJersey(v):""); }}
           style={{ ...inputStyle, marginBottom:jerseyErr?4:10, width:120, textAlign:"center",
             border:jerseyErr?"1px solid rgba(244,63,94,0.6)":inputStyle.border }}/>
@@ -65,34 +74,95 @@ function AddPitcherSection({ roster, onAdd, onDelete }) {
           <p style={sectionLabel}>CURRENT ROSTER ({roster.length})</p>
           <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
             {[...roster].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>(
-              <span key={p.id} style={{ display:"flex", alignItems:"center", gap:5, fontSize:12,
-                padding:"5px 6px 5px 10px", borderRadius:20,
+              <span key={p.id} style={{ fontSize:12, padding:"5px 10px", borderRadius:20,
                 background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.6)" }}>
                 {p.jersey?`#${p.jersey} `:""}{p.name}
-                <button type="button" onClick={()=>setConfirmRemove(p)} aria-label={`Remove ${p.name} from roster`}
-                  style={{ background:"rgba(244,63,94,0.12)", border:"none", borderRadius:"50%", width:18, height:18,
-                    color:"#f87171", fontSize:11, lineHeight:"16px", cursor:"pointer", padding:0 }}>
-                  ✕
-                </button>
               </span>
             ))}
           </div>
-          {confirmRemove && (
-            <div style={{ marginTop:12, padding:12, borderRadius:12,
-              background:"rgba(244,63,94,0.08)", border:"1px solid rgba(244,63,94,0.25)" }}>
-              <p style={{ margin:"0 0 10px", fontSize:13, color:"#f87171", fontWeight:600, textAlign:"center" }}>
-                Remove {confirmRemove.name} from the roster? This will delete all their pitch history.
-              </p>
-              <div style={{ display:"flex", gap:8 }}>
-                <button onClick={()=>setConfirmRemove(null)} style={{ ...cancelBtn, flex:1 }}>Keep Player</button>
-                <button onClick={()=>{ onDelete(confirmRemove.id); setConfirmRemove(null); }}
-                  style={{ flex:2, background:"linear-gradient(135deg,#dc2626,#b91c1c)", border:"none",
-                    borderRadius:12, padding:10, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-                  Yes, Remove
-                </button>
-              </div>
-            </div>
+        </div>
+      )}
+
+      {roster.length>0 && (
+        <div style={{ ...card, marginTop:12 }}>
+          <p style={{ ...sectionLabel, color:"rgba(244,63,94,0.5)" }}>DANGER ZONE</p>
+
+          {deletePhase==="idle" && (
+            <button onClick={()=>setDeletePhase("select")} style={{ width:"100%", background:"transparent",
+              border:"1px solid rgba(244,63,94,0.2)", borderRadius:14, padding:12, color:"rgba(244,63,94,0.6)",
+              fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+              {I.trash} Delete a Player
+            </button>
           )}
+
+          {deletePhase==="select" && (() => {
+            const selected = roster.find(p=>p.id===selectedDeleteId);
+            return (
+              <>
+                <p style={{ margin:"0 0 10px", fontSize:12, color:"rgba(255,255,255,0.4)" }}>Select a player to remove.</p>
+                <div style={{ marginBottom:12 }}>
+                  {[...roster].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
+                    const isActive = p.id===selectedDeleteId;
+                    return (
+                      <div key={p.id} onClick={()=>setSelectedDeleteId(p.id)}
+                        style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 10px", borderRadius:10, marginBottom:4,
+                          cursor:"pointer", background:isActive?"rgba(244,63,94,0.1)":"rgba(255,255,255,0.02)",
+                          border:`1px solid ${isActive?"rgba(244,63,94,0.4)":"rgba(255,255,255,0.05)"}` }}>
+                        <span style={{ fontSize:14, fontWeight:600, color:isActive?"#f87171":"rgba(255,255,255,0.8)" }}>
+                          {p.jersey?`#${p.jersey} `:""}{p.name}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={resetDeleteFlow} style={{ ...cancelBtn, flex:1 }}>Cancel</button>
+                  <button onClick={()=>setDeletePhase("confirm")} disabled={!selected}
+                    style={{ flex:2, background:"linear-gradient(135deg,#dc2626,#b91c1c)", border:"none",
+                      borderRadius:12, padding:10, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer",
+                      opacity:selected?1:0.4 }}>
+                    Delete Selected Player
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+
+          {deletePhase==="confirm" && (() => {
+            const selected = roster.find(p=>p.id===selectedDeleteId);
+            if (!selected) {
+              // Selected player vanished mid-flow (e.g. removed from another
+              // device) - don't setState during render, just offer a way out.
+              return (
+                <div style={{ padding:12, borderRadius:12,
+                  background:"rgba(244,63,94,0.08)", border:"1px solid rgba(244,63,94,0.25)" }}>
+                  <p style={{ margin:"0 0 10px", fontSize:13, color:"rgba(255,255,255,0.6)" }}>
+                    That player is no longer on the roster.
+                  </p>
+                  <button onClick={resetDeleteFlow} style={{ ...cancelBtn, width:"100%" }}>Back</button>
+                </div>
+              );
+            }
+            return (
+              <div style={{ padding:12, borderRadius:12,
+                background:"rgba(244,63,94,0.08)", border:"1px solid rgba(244,63,94,0.25)" }}>
+                <p style={{ margin:"0 0 10px", fontSize:13, color:"#f87171", fontWeight:600 }}>
+                  Type DELETE to permanently remove {selected.name} and all their pitch history.
+                </p>
+                <input value={deleteConfirmText} onChange={e=>setDeleteConfirmText(e.target.value)}
+                  placeholder="DELETE" aria-label="Type DELETE to confirm" style={{ ...inputStyle, marginBottom:10 }}/>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={resetDeleteFlow} style={{ ...cancelBtn, flex:1 }}>Cancel</button>
+                  <button onClick={()=>{ onDelete(selected.id); resetDeleteFlow(); }} disabled={deleteConfirmText!=="DELETE"}
+                    style={{ flex:2, background:"linear-gradient(135deg,#dc2626,#b91c1c)", border:"none",
+                      borderRadius:12, padding:10, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer",
+                      opacity:deleteConfirmText!=="DELETE"?0.4:1 }}>
+                    Confirm Delete
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

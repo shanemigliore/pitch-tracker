@@ -472,7 +472,7 @@ function App() {
         {tab==="roster" && selectedPlayer ? (
           <ScreenBoundary onBack={()=>setSelectedPlayer(null)}>
             <PitcherDetail pitcher={selectedPlayer} onBack={()=>setSelectedPlayer(null)}
-              onDelete={deletePlayer} tournaments={tournaments}
+              tournaments={tournaments}
               onEditGame={editGame} onDeleteGame={deleteGame} onEditPlayer={editPlayer}/>
           </ScreenBoundary>
         ) : tab==="roster" ? (
