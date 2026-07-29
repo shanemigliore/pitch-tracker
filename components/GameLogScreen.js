@@ -129,7 +129,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
       ) : (
         <>
           <div style={card}>
-            <p style={sectionLabel}>GAME DETAILS</p>
+            <p style={sectionTitle}>GAME DETAILS</p>
             <ContextPicker context={context} setContext={setContext}
               tourneyDay={tourneyDay} setTourneyDay={setTourneyDay} tournaments={tournaments} gameDate={gameDate}/>
             <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME DATE</label>
@@ -157,7 +157,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
           </div>
 
           <div style={card}>
-            <p style={sectionLabel}>WHO PITCHED?</p>
+            <p style={sectionTitle}>WHO PITCHED?</p>
             <p style={{ margin:"0 0 12px", fontSize:12, color:"rgba(255,255,255,0.4)" }}>Tap everyone who threw in this game — a pitch count field appears right below their name.</p>
             {roster.length===0 ? (
               <div style={{ textAlign:"center", padding:"20px 0", color:"rgba(255,255,255,0.3)", fontSize:13 }}>No players on roster yet</div>

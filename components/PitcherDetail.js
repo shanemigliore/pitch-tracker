@@ -69,7 +69,7 @@ function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame,
       {/* Edit player details */}
       {editOpen && (
         <div style={{ ...card, border:"1px solid rgba(56,189,248,0.25)", marginBottom:12 }}>
-          <p style={sectionLabel}>EDIT PLAYER</p>
+          <p style={sectionTitle}>EDIT PLAYER</p>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NAME</label>
           <input value={editName} onChange={e=>setEditName(e.target.value)} aria-label="Name"
             style={{ ...inputStyle, marginBottom:10 }}/>
@@ -121,7 +121,7 @@ function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame,
       {/* Season Stats */}
       {seasonStats.filter(s=>s.games>0).length > 0 && (
         <div style={card}>
-          <p style={sectionLabel}>SEASON STATS</p>
+          <p style={sectionTitle}>SEASON STATS</p>
           {seasonStats.map(st=>(
             <div key={st.yr} style={{ marginBottom:10 }}>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
@@ -144,7 +144,7 @@ function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame,
       {/* History — editable */}
       {pitcher.history?.length > 0 && (
         <div style={card}>
-          <p style={sectionLabel}>GAME HISTORY</p>
+          <p style={sectionTitle}>GAME HISTORY</p>
           {[...pitcher.history].sort((a,b)=>b.date<a.date?-1:1).map((h,i)=>{
             const rd = getRegRestDays(h.pitches);
             return (

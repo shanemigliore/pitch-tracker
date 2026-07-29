@@ -101,7 +101,7 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - Firebase Realtime Database (email/password auth via two shared accounts — see Auth below)
 - No build step, no bundler, no npm
 
-**Current version:** v3.5
+**Current version:** v3.6
 
 ---
 

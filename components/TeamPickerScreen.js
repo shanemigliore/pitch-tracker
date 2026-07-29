@@ -331,7 +331,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose, rol
         <div style={{ flex:1 }}>
           <div style={{ fontSize:26, fontWeight:900, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2, lineHeight:1 }}>PRIME PITCHING</div>
           <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)", marginTop:2 }}>
-            {showManage ? "Switch or manage teams" : "Select your team to get started"}
+            {showManage ? (isAdmin ? "Switch or manage teams" : "Switch teams") : "Select your team to get started"}
           </div>
         </div>
         {showManage && onClose && (
@@ -355,7 +355,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose, rol
         </div>
       ) : teams.length === 0 ? (
         <div style={{ ...card, marginBottom:12 }}>
-          <p style={sectionLabel}>TEAMS</p>
+          <p style={sectionTitle}>TEAMS</p>
           <div style={{ fontSize:13, color:"rgba(255,255,255,0.3)", paddingBottom:4 }}>No teams yet — create one below.</div>
         </div>
       ) : (
@@ -387,7 +387,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose, rol
           </div>
           {seasonField("SEASON", newSeasonId, setNewSeasonId, newSeasonTerm, setNewSeasonTerm, newSeasonYear, setNewSeasonYear)}
           {cloneRosterField()}
-          <p style={{ ...sectionLabel, marginTop:14, marginBottom:10 }}>PITCH COUNT RULES</p>
+          <p style={{ ...sectionTitle, marginTop:14, marginBottom:10 }}>PITCH COUNT RULES</p>
           {ruleField(newRules, setNewRules, "Game max pitches", "maxPitches", "Maximum pitches allowed per game")}
           {ruleField(newRules, setNewRules, "0→1 rest-day breakpoint", "rest1", "Pitches above this require 1 day rest")}
           {ruleField(newRules, setNewRules, "1→2 rest-day breakpoint", "rest2", "Pitches above this require 2 days rest")}
@@ -427,7 +427,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose, rol
             {deletePhase === "idle" && (
               <>
                 <div style={{ ...card, border:"1px solid rgba(56,189,248,0.2)", marginBottom:12 }}>
-                  <p style={{ ...sectionLabel, color:"#38bdf8" }}>EDIT TEAM</p>
+                  <p style={{ ...sectionTitle, color:"#38bdf8" }}>EDIT TEAM</p>
                   <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>TEAM NAME</label>
                   <input value={renameName} onChange={e=>setRenameName(e.target.value)} aria-label="Team name"
                     style={{ ...inputStyle, marginBottom:12 }}/>
@@ -458,7 +458,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose, rol
                   </button>
                 </div>
                 <div style={{ ...card, border:"1px solid rgba(255,255,255,0.08)" }}>
-                  <p style={sectionLabel}>DUPLICATE</p>
+                  <p style={sectionTitle}>DUPLICATE</p>
                   <p style={{ fontSize:12, color:"rgba(255,255,255,0.4)", marginBottom:10, lineHeight:1.4 }}>
                     Start a new team with this roster — for example, carrying this team into next season.
                     Stats and game history start fresh; only the pitcher names/jerseys copy over.
@@ -470,7 +470,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose, rol
                   </button>
                 </div>
                 <div style={{ ...card, border:"1px solid rgba(244,63,94,0.15)" }}>
-                  <p style={{ ...sectionLabel, color:"#f43f5e" }}>DANGER ZONE</p>
+                  <p style={{ ...sectionTitle, color:"#f43f5e" }}>DANGER ZONE</p>
                   <button onClick={()=>setDeletePhase("confirm")}
                     style={{ background:"transparent", border:"1px solid rgba(220,38,38,0.4)",
                       borderRadius:8, padding:"5px 12px", color:"rgba(220,38,38,0.7)", cursor:"pointer",

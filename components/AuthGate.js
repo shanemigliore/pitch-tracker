@@ -16,6 +16,15 @@ function AuthGate() {
         setRole(window.__fbRoleForUser(user));
         setStatus(getCoachName() ? "ready" : "needsName");
       } else {
+        // Reset the password form's own state every time we land back here -
+        // otherwise a `busy`/error left over from a previous session (e.g.
+        // logging out after a successful sign-in, which never itself reset
+        // `busy` since the form just unmounts on success) would come back
+        // stuck disabled/showing "Checking…" with no way to submit again
+        // short of reloading the page.
+        setPassword("");
+        setBusy(false);
+        setError("");
         setStatus("needsPassword");
       }
     });

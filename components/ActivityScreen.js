@@ -104,7 +104,7 @@ function ActivityScreen({ auditLog, roster, onUndo, undidIds, onUndid }) {
           </button>
         </div>
       )}
-      <p style={sectionLabel}>RECENT ACTIVITY</p>
+      <p style={sectionTitle}>RECENT ACTIVITY</p>
       {auditLog.length === 0 ? (
         <div style={{ textAlign:"center", padding:"40px 0", color:"rgba(255,255,255,0.3)", fontSize:14 }}>
           No activity recorded yet
