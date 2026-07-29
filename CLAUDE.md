@@ -122,6 +122,18 @@ Firebase's default session persistence (IndexedDB) means signing in is a
 one-time event per device — it survives reloads and app version bumps, same
 as the coach-name entry.
 
+**Leftover anonymous sessions:** devices that used the app before this gate
+existed (anonymous sign-in used to run automatically on every load) still had
+that anonymous session persisted in IndexedDB — disabling the Anonymous
+provider in the Firebase console doesn't retroactively invalidate an
+already-cached client session. `__fbOnAuthChange` (`lib/firebase-init.js`)
+checks `user.isAnonymous` and calls `auth.signOut()` on any such user instead
+of forwarding it to `AuthGate`, so a leftover anonymous session is always
+treated as signed-out rather than silently passing the gate and being
+misread as `"coach"` (an anonymous user has no email, so it fails the
+`ADMIN_EMAIL` check and falls through). `authReady` has the same
+`!user.isAnonymous` guard so it can't resolve on a stale anonymous session either.
+
 **Role permissions:** Admin can create seasons and create/edit/delete teams
 (`TeamPickerScreen`'s create-team button, season picker, and per-team manage
 modal are hidden entirely for `role !== "admin"`; enforced for real by Firebase
