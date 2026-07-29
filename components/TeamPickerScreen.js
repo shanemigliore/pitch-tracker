@@ -353,7 +353,11 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose }) {
       ) : (
         groupedTeams.map(group => (
           <div key={group.key} style={{ ...card, marginBottom:12 }}>
-            <p style={sectionLabel}>{group.label.toUpperCase()}</p>
+            <p style={{ display:"flex", alignItems:"center", gap:8, margin:"0 0 10px",
+              fontSize:15, fontWeight:800, color:"#f8fafc", letterSpacing:0.5 }}>
+              <span style={{ width:4, height:15, borderRadius:2, background:"#38bdf8", flexShrink:0 }}/>
+              {group.label.toUpperCase()}
+            </p>
             {group.teams.map(teamRow)}
           </div>
         ))
@@ -362,12 +366,12 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose }) {
       {/* Create new team */}
       {!creating ? (
         <button onClick={()=>setCreating(true)}
-          style={{ ...primaryBtn, width:"100%", marginBottom:16 }}>
+          style={{ ...primaryBtn, width:"100%", marginTop:24, marginBottom:16 }}>
           + Create New Team
         </button>
       ) : (
-        <div style={{ ...card, border:"1px solid rgba(56,189,248,0.2)", marginBottom:16 }}>
-          <p style={{ ...sectionLabel, color:"#38bdf8" }}>NEW TEAM</p>
+        <div style={{ ...card, border:"1px solid rgba(56,189,248,0.2)", marginTop:24, marginBottom:16 }}>
+          <p style={{ fontSize:18, fontWeight:800, color:"#38bdf8", letterSpacing:0.3, margin:"0 0 14px" }}>NEW TEAM</p>
           <div style={{ marginBottom:10 }}>
             <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>TEAM NAME</label>
             <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="e.g. Prime 10U" aria-label="Team name"
