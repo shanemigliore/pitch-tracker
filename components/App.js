@@ -14,7 +14,7 @@ const TABS = [
 const TEAM_ID_KEY = "pt_selected_team_id";
 const TEAM_META_KEY = "pt_selected_team_meta";
 
-function App() {
+function App({ role }) {
   // ── Team selection ──────────────────────────────────────────────────────
   const [teamId,   setTeamId]   = useState(() => localStorage.getItem(TEAM_ID_KEY) || null);
   const [teamMeta, setTeamMeta] = useState(() => {
@@ -83,11 +83,16 @@ function App() {
     let unsubFn = null;
     // Run seeds first (ensures rules exist in Firebase), then refresh teamMeta,
     // then start the subscription — so rules are always correct before roster renders.
-    Promise.all([
-      window.__fbMigrateIfNeeded?.() || Promise.resolve(),
-      window.__fbCreatePrime12U?.()  || Promise.resolve(),
-      window.__fbCreatePrime10U?.()  || Promise.resolve(),
-    ]).then(() => window.__fbMigrateSeasonIfNeeded?.() || Promise.resolve()) // after seeds, so it sees their teamsMeta writes
+    // Seeds/migrations write to teamsMeta/seasonsMeta, which Firebase rules restrict
+    // to the admin account — only run them as admin, coaches just read what's there.
+    const seedIfAdmin = role === "admin"
+      ? Promise.all([
+          window.__fbMigrateIfNeeded?.() || Promise.resolve(),
+          window.__fbCreatePrime12U?.()  || Promise.resolve(),
+          window.__fbCreatePrime10U?.()  || Promise.resolve(),
+        ]).then(() => window.__fbMigrateSeasonIfNeeded?.() || Promise.resolve())
+      : Promise.resolve();
+    seedIfAdmin
       .then(() => window.__fbListTeams()).then(list => {
       const fresh = list.find(t => t.id === teamId);
       if (fresh) {
@@ -168,7 +173,7 @@ function App() {
     try {
       const tid = teamIdRef.current;
       if (!tid || !window.__fbPushAudit) return;
-      const entryData = { ts: Date.now(), deviceId: getDeviceId(), device: getDeviceName(), action, detail, undoData, ...(extra||{}) };
+      const entryData = { ts: Date.now(), deviceId: getDeviceId(), device: getCoachName(), action, detail, undoData, ...(extra||{}) };
       // Generate the real Firebase push key offline so the local entry has the correct id from the start
       const pushKey = window.__fbAuditKey ? window.__fbAuditKey(tid) : null;
       if (pushKey) {
@@ -377,7 +382,7 @@ function App() {
 
   // ── Team picker screen ──────────────────────────────────────────────────
   if (!teamId || showTeamPicker) {
-    return <TeamPickerScreen onSelect={selectTeam} showManage={showTeamPicker}
+    return <TeamPickerScreen onSelect={selectTeam} showManage={showTeamPicker} role={role}
       onClose={()=>setShowTeamPicker(false)}
       onTeamMetaUpdate={(id, updatedMeta) => {
         if (id === teamId) {

@@ -4,7 +4,8 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // TEAM PICKER — Select or create a team
 // ══════════════════════════════════════════════════════════════════════════════
-function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose }) {
+function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose, role }) {
+  const isAdmin = role === "admin";
   const TERM_OPTIONS = ["Winter", "Spring", "Summer", "Fall"];
   const NEW_SEASON = "__NEW__";
 
@@ -36,11 +37,16 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose }) {
   function loadAll() {
     setLoading(true);
     setLoadError("");
-    Promise.all([
-      window.__fbMigrateIfNeeded(),
-      window.__fbCreatePrime12U(),
-      window.__fbCreatePrime10U(),
-    ]).then(() => window.__fbMigrateSeasonIfNeeded()) // runs after the seeds so it sees their teamsMeta writes
+    // Seeds/migrations write to teamsMeta/seasonsMeta, which Firebase rules restrict
+    // to the admin account — only run them as admin, coaches just read what's there.
+    const seedIfAdmin = isAdmin
+      ? Promise.all([
+          window.__fbMigrateIfNeeded(),
+          window.__fbCreatePrime12U(),
+          window.__fbCreatePrime10U(),
+        ]).then(() => window.__fbMigrateSeasonIfNeeded())
+      : Promise.resolve();
+    seedIfAdmin
       .then(() => Promise.all([window.__fbListTeams(), window.__fbListSeasons()]))
       .then(([teamList, seasonList]) => {
         setTeams(teamList);
@@ -303,12 +309,14 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose }) {
           Max {t.rules?.maxPitches||55}p · Rest: {t.rules?.rest1||20}/{t.rules?.rest2||40}/{t.rules?.rest3||60}
         </div>
       </button>
-      <button onClick={()=>openManage(t)}
-        aria-label={`Manage ${t.name}`}
-        style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)",
-          borderRadius:8, padding:"5px 10px", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:12 }}>
-        ···
-      </button>
+      {isAdmin && (
+        <button onClick={()=>openManage(t)}
+          aria-label={`Manage ${t.name}`}
+          style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)",
+            borderRadius:8, padding:"5px 10px", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:12 }}>
+          ···
+        </button>
+      )}
     </div>
   );
 
@@ -363,8 +371,8 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose }) {
         ))
       )}
 
-      {/* Create new team */}
-      {!creating ? (
+      {/* Create new team — admin only */}
+      {!isAdmin ? null : !creating ? (
         <button onClick={()=>setCreating(true)}
           style={{ ...primaryBtn, width:"100%", marginTop:24, marginBottom:16 }}>
           + Create New Team

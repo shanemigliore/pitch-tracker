@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Prime Pitching"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#080c14"/>
-  <meta name="app-version" content="v3.3"/>
+  <meta name="app-version" content="v3.4"/>
   <title>Prime Pitching</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="assets/logo.png"/>
@@ -85,7 +85,7 @@
 
 
 // ─── App version (bump minor for each PR) ────────────────────────────────────
-const APP_VERSION = "v3.3";
+const APP_VERSION = "v3.4";
 const LOGO_URI = "assets/logo.png";
 
 // ─── Pure logic (rest-day/eligibility/date/device-id math) ───────────────────
@@ -96,7 +96,7 @@ const {
   getRegRestDays, getEligibleDate, isTourneyOver, getTourneyAdjustedRestInfo,
   getAvailabilityStatus, daysUntilEligible, getEligibleDateStr,
   formatDate, todayStr, addDays, newId,
-  getDeviceId, getDeviceName, recomputeLast,
+  getDeviceId, getCoachName, setCoachName, recomputeLast,
   getActiveTourney, getSubjectKey,
   getSeasonName, compareSeasonsDesc,
 } = window.PitchLogic;
@@ -129,9 +129,10 @@ const { STATUS, I, inputStyle, primaryBtn, cancelBtn, card, sectionLabel } = win
   <script type="text/babel" data-presets="react" src="components/ActivityScreen.js"></script>
   <script type="text/babel" data-presets="react" src="components/Settings.js"></script>
   <script type="text/babel" data-presets="react" src="components/App.js"></script>
+  <script type="text/babel" data-presets="react" src="components/AuthGate.js"></script>
 
   <script type="text/babel" data-presets="react">
-    window.__PitchApp = App;
+    window.__PitchApp = AuthGate;
 
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
