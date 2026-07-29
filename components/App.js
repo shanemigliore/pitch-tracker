@@ -378,6 +378,7 @@ function App() {
   // ── Team picker screen ──────────────────────────────────────────────────
   if (!teamId || showTeamPicker) {
     return <TeamPickerScreen onSelect={selectTeam} showManage={showTeamPicker}
+      onClose={()=>setShowTeamPicker(false)}
       onTeamMetaUpdate={(id, updatedMeta) => {
         if (id === teamId) {
           const merged = { ...teamMeta, ...updatedMeta };

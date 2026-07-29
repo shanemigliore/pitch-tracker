@@ -4,13 +4,14 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // TEAM PICKER — Select or create a team
 // ══════════════════════════════════════════════════════════════════════════════
-function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
+function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose }) {
   const TERM_OPTIONS = ["Winter", "Spring", "Summer", "Fall"];
   const NEW_SEASON = "__NEW__";
 
   const [teams, setTeams]       = useState([]);
   const [seasons, setSeasons]   = useState([]);
   const [loading, setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [creating, setCreating] = useState(false);
   const [managing, setManaging] = useState(null); // team object being managed
   const [newName, setNewName]   = useState("");
@@ -32,7 +33,9 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
   const [deleteText, setDeleteText]   = useState("");
   const [hoveredTeamId, setHoveredTeamId] = useState(null);
 
-  useEffect(() => {
+  function loadAll() {
+    setLoading(true);
+    setLoadError("");
     Promise.all([
       window.__fbMigrateIfNeeded(),
       window.__fbCreatePrime12U(),
@@ -45,14 +48,23 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
         const sorted = [...seasonList].sort(compareSeasonsDesc);
         setNewSeasonId(sorted[0]?.id || NEW_SEASON);
         setLoading(false);
+      })
+      .catch(() => {
+        // A failed read (e.g. a Firebase rules mismatch on a newer node like
+        // seasonsMeta) must never leave the screen stuck on "Loading teams…"
+        // forever with no way out.
+        setLoading(false);
+        setLoadError("Couldn't load teams — check your connection and try again.");
       });
-  }, []);
+  }
+
+  useEffect(() => { loadAll(); }, []);
 
   function refreshAll() {
     Promise.all([window.__fbListTeams(), window.__fbListSeasons()]).then(([teamList, seasonList]) => {
       setTeams(teamList);
       setSeasons(seasonList);
-    });
+    }).catch(() => {});
   }
 
   function resolveSeasonId(selectedId, term, year) {
@@ -308,17 +320,31 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate }) {
       {/* Header */}
       <div style={{ padding:"32px 0 20px", display:"flex", alignItems:"center", gap:14 }}>
         <img src={LOGO_URI} alt="Prime Baseball" style={{ width:52, height:52, borderRadius:"50%", flexShrink:0 }}/>
-        <div>
+        <div style={{ flex:1 }}>
           <div style={{ fontSize:26, fontWeight:900, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2, lineHeight:1 }}>PRIME PITCHING</div>
           <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)", marginTop:2 }}>
             {showManage ? "Switch or manage teams" : "Select your team to get started"}
           </div>
         </div>
+        {showManage && onClose && (
+          <button onClick={onClose} aria-label="Close"
+            style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8,
+              width:32, height:32, color:"rgba(255,255,255,0.5)", cursor:"pointer", flexShrink:0 }}>✕</button>
+        )}
       </div>
 
       {/* Team list, grouped by season */}
       {loading ? (
         <div style={{ textAlign:"center", padding:"40px 0", color:"rgba(255,255,255,0.3)", fontSize:14 }}>Loading teams…</div>
+      ) : loadError ? (
+        <div style={{ ...card, marginBottom:12, border:"1px solid rgba(244,63,94,0.2)" }}>
+          <div style={{ fontSize:13, color:"#f87171", marginBottom:10 }}>{loadError}</div>
+          <button onClick={loadAll}
+            style={{ background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.15)",
+              borderRadius:8, padding:"8px 14px", color:"#f8fafc", cursor:"pointer", fontSize:12, fontWeight:600 }}>
+            Retry
+          </button>
+        </div>
       ) : teams.length === 0 ? (
         <div style={{ ...card, marginBottom:12 }}>
           <p style={sectionLabel}>TEAMS</p>
