@@ -74,7 +74,7 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
         <input placeholder="Team name (optional)" value={editOpponent} onChange={e=>setEditOpponent(e.target.value)} aria-label="Opponent"
           style={{ ...inputStyle, marginBottom:14 }}/>
 
-        <p style={sectionLabel}>PITCHER PITCH COUNTS</p>
+        <p style={sectionTitle}>PITCHER PITCH COUNTS</p>
         {game.pitchers.map(p => {
           const pitches = parseInt(pitcherPitches[p.pitcherId], 10) || 0;
           const rd = getRegRestDays(pitches);

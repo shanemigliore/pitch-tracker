@@ -64,7 +64,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>NEW TOURNAMENT</h2>
         </div>
         <div style={card}>
-          <p style={sectionLabel}>DETAILS</p>
+          <p style={sectionTitle}>DETAILS</p>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NAME</label>
           <input placeholder="e.g. District 5 Tournament" value={name} onChange={e=>setName(e.target.value)} aria-label="Tournament name"
             style={{ ...inputStyle, marginBottom:10 }}/>
@@ -90,7 +90,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
           )}
         </div>
         <div style={card}>
-          <p style={sectionLabel}>PITCH RULES</p>
+          <p style={sectionTitle}>PITCH RULES</p>
 
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — DAY 1</label>
           <input type="number" min="1" placeholder="55" value={maxDay1} onChange={e=>setMaxDay1(e.target.value)} aria-label="Max pitches day 1"
@@ -143,7 +143,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>EDIT TOURNAMENT</h2>
         </div>
         <div style={card}>
-          <p style={sectionLabel}>DETAILS</p>
+          <p style={sectionTitle}>DETAILS</p>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NAME</label>
           <input placeholder="e.g. District 5 Tournament" value={name} onChange={e=>setName(e.target.value)} aria-label="Tournament name"
             style={{ ...inputStyle, marginBottom:10 }}/>
@@ -169,7 +169,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
           )}
         </div>
         <div style={card}>
-          <p style={sectionLabel}>PITCH RULES</p>
+          <p style={sectionTitle}>PITCH RULES</p>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — DAY 1</label>
           <input type="number" min="1" placeholder="55" value={maxDay1} onChange={e=>setMaxDay1(e.target.value)} aria-label="Max pitches day 1"
             style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center", marginBottom:10 }}/>

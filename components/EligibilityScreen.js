@@ -72,7 +72,7 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
       </div>
 
       <div style={card}>
-        <p style={sectionLabel}>CHECK DATE</p>
+        <p style={sectionTitle}>CHECK DATE</p>
         <div style={{ display:"flex", gap:8 }}>
           {[[todayStr(),"Today"],[addDays(todayStr(),1),"Tomorrow"],[addDays(todayStr(),2),"In 2 Days"]].map(([d,label])=>(
             <button key={d} onClick={()=>{ setCheckDate(d); setShowCustomDate(false); }} aria-pressed={checkDate===d}
@@ -99,7 +99,7 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
       </div>
 
       <div style={card}>
-        <p style={sectionLabel}>VIEW FOR</p>
+        <p style={sectionTitle}>VIEW FOR</p>
         {(() => {
           // 3+ total buttons (regular + 2 tournaments) wrap to multiple lines at
           // this width - switch to a single horizontally-scrollable row instead.
@@ -145,7 +145,7 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
           <div style={{ ...card, border:"1px solid rgba(74,222,128,0.2)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
               <span style={{ fontSize:16 }}>✅</span>
-              <p style={{ ...sectionLabel, margin:0, color:"#4ade80" }}>
+              <p style={{ ...sectionTitle, margin:0, color:"#4ade80" }}>
                 ELIGIBLE {displayLabel.toUpperCase()} — {eligibleList.length} PITCHER{eligibleList.length!==1?"S":""}
               </p>
             </div>
@@ -173,7 +173,7 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
           <div style={{ ...card, border:"1px solid rgba(244,63,94,0.2)" }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
               <span style={{ fontSize:16 }}>🚫</span>
-              <p style={{ ...sectionLabel, margin:0, color:"#f43f5e" }}>
+              <p style={{ ...sectionTitle, margin:0, color:"#f43f5e" }}>
                 NOT ELIGIBLE — {ineligibleList.length} PITCHER{ineligibleList.length!==1?"S":""}
               </p>
             </div>
@@ -226,7 +226,7 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
                 width:32, height:32, color:"rgba(255,255,255,0.6)", cursor:"pointer", fontSize:18 }}>✕</button>
             </div>
 
-            <p style={sectionLabel}>AVAILABILITY KEY</p>
+            <p style={sectionTitle}>AVAILABILITY KEY</p>
             <div style={{ display:"flex", flexWrap:"wrap", gap:10, marginBottom:18 }}>
               {Object.entries(STATUS).map(([k,v])=>(
                 <span key={k} style={{ display:"flex", alignItems:"center", gap:4, fontSize:12, color:"rgba(255,255,255,0.6)" }}>
@@ -235,7 +235,7 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
               ))}
             </div>
 
-            <p style={sectionLabel}>REST REQUIREMENTS</p>
+            <p style={sectionTitle}>REST REQUIREMENTS</p>
             {(()=>{
               const r = getCurrentRules();
               const rows = [

@@ -167,7 +167,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
         <div style={card}>
           <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
             {I.filter}
-            <p style={{ ...sectionLabel, margin:0 }}>FILTER BY PITCHER</p>
+            <p style={{ ...sectionTitle, margin:0 }}>FILTER BY PITCHER</p>
           </div>
           <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
             <button onClick={()=>setFilterPitcherId("all")} aria-pressed={filterPitcherId==="all"}
@@ -227,7 +227,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
           )}
           {leaderboard.length>0 && (
             <div style={card}>
-              <p style={sectionLabel}>LEADERBOARD</p>
+              <p style={sectionTitle}>LEADERBOARD</p>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 54px 48px 54px", columnGap:8,
                 marginBottom:6, paddingBottom:6, borderBottom:"1px solid rgba(255,255,255,0.07)" }}>
                 <span style={{ fontSize:10, color:"rgba(255,255,255,0.35)", fontWeight:700, letterSpacing:1 }}>PLAYER</span>

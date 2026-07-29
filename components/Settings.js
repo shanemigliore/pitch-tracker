@@ -46,7 +46,7 @@ function AddPitcherSection({ roster, onAdd, onDelete }) {
   return (
     <div style={{ padding:"0 16px 110px" }}>
       <div style={{ ...card, border:"1px solid rgba(255,255,255,0.12)" }}>
-        <p style={sectionLabel}>NEW PLAYER</p>
+        <p style={sectionTitle}>NEW PLAYER</p>
         <input aria-label="Name" placeholder="Name" value={name}
           onChange={e=>{ setName(e.target.value); setConfirmDupeName(false); }}
           onKeyDown={e=>e.key==="Enter"&&submit()} style={{ ...inputStyle, marginBottom:8 }}/>
@@ -71,7 +71,7 @@ function AddPitcherSection({ roster, onAdd, onDelete }) {
 
       {roster.length>0 && (
         <div style={{ ...card, marginTop:12 }}>
-          <p style={sectionLabel}>CURRENT ROSTER ({roster.length})</p>
+          <p style={sectionTitle}>CURRENT ROSTER ({roster.length})</p>
           <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
             {[...roster].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>(
               <span key={p.id} style={{ fontSize:12, padding:"5px 10px", borderRadius:20,
@@ -85,7 +85,7 @@ function AddPitcherSection({ roster, onAdd, onDelete }) {
 
       {roster.length>0 && (
         <div style={{ ...card, marginTop:12 }}>
-          <p style={{ ...sectionLabel, color:"rgba(244,63,94,0.5)" }}>DANGER ZONE</p>
+          <p style={{ ...sectionTitle, color:"rgba(244,63,94,0.7)" }}>DANGER ZONE</p>
 
           {deletePhase==="idle" && (
             <button onClick={()=>setDeletePhase("select")} style={{ width:"100%", background:"transparent",
@@ -174,14 +174,14 @@ function AddPitcherSection({ roster, onAdd, onDelete }) {
 // ══════════════════════════════════════════════════════════════════════════════
 function AccountSection({ role, onLogout }) {
   function handleLogout() {
-    if (!confirm("Log out of this device? You'll need the password, your name, and to pick a team again next time.")) return;
+    if (!confirm("Log out of this device?")) return;
     onLogout();
   }
 
   return (
     <div style={{ padding:"0 16px 110px" }}>
       <div style={{ ...card, border:"1px solid rgba(255,255,255,0.12)" }}>
-        <p style={sectionLabel}>SIGNED IN AS</p>
+        <p style={sectionTitle}>SIGNED IN AS</p>
         <div style={{ fontSize:16, fontWeight:700, color:"#f8fafc", marginBottom:2 }}>{getCoachName() || "—"}</div>
         <div style={{ fontSize:13, color:"rgba(255,255,255,0.4)" }}>{role === "admin" ? "Admin" : "Coach"}</div>
       </div>
