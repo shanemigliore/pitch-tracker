@@ -40,7 +40,7 @@ only when the user explicitly asks for it.
 ## App Architecture
 
 **Static, multi-file, still zero build step/npm.** `index.html` is now just a
-small shell (~230 lines: `<head>`, a head-shell script, 12+3 `<script>` tags,
+small shell (~230 lines: `<head>`, a head-shell script, 13+3 `<script>` tags,
 service worker). Pure logic, Firebase glue, shared UI tokens, and every
 screen/modal component were split out of what used to be one 1.65MB file
 (Phase 1: `lib/`; Phase 2: `components/`) so both the browser and Claude/tests
@@ -50,18 +50,19 @@ can load just what they need:
 |------|----------|-----------|
 | `index.html` | `<head>`, head-shell (hooks/`PitchLogic`/`UIConstants` destructures, `APP_VERSION`, `LOGO_URI`), the component `<script src>` tags, bootstrap render, service worker | shell |
 | `lib/firebase-init.js` | `window.__fb*` functions (Firebase RTDB/auth setup) | plain `<script src>` |
-| `lib/pitch-logic.js` | Rest-day/eligibility/date/device-id math, `recomputeLast`, `getActiveTourney`, `getSubjectKey` — UMD module, also `require()`'d directly by `tests/logic.test.js` | plain `<script src>`, exposes `window.PitchLogic` |
+| `lib/pitch-logic.js` | Rest-day/eligibility/date/device-id/coach-name math, `recomputeLast`, `getActiveTourney`, `getSubjectKey` — UMD module, also `require()`'d directly by `tests/logic.test.js` | plain `<script src>`, exposes `window.PitchLogic` |
 | `lib/ui-constants.js` | `STATUS`, icon set `I` (includes `settings`), shared style objects (`card`, `inputStyle`, etc.) — contains JSX (icons), IIFE-wrapped | `<script type="text/babel" src>`, exposes `window.UIConstants` |
 | `components/shared.js` | `Chip`, `RadialArc`, `ContextPicker`, `ScreenBoundary` | `<script type="text/babel" src>` |
 | `components/EditGameModal.js`, `PitcherDetail.js`, `GameLogScreen.js`, `EligibilityScreen.js`, `TournamentScreen.js`, `EditGameGroupModal.js`, `SeasonHistory.js`, `TeamPickerScreen.js`, `ActivityScreen.js`, `Settings.js` | One screen/modal component each | `<script type="text/babel" src>` each |
-| `components/App.js` | `TABS`, `TEAM_ID_KEY`, `TEAM_META_KEY` consts, then `App` (root component: team selection, Firebase subscription, tab routing, all handlers) | `<script type="text/babel" src>` |
+| `components/App.js` | `TABS`, `TEAM_ID_KEY`, `TEAM_META_KEY` consts, then `App` (root component, receives `role` prop: team selection, Firebase subscription, tab routing, all handlers) | `<script type="text/babel" src>` |
+| `components/AuthGate.js` | `AuthGate` — password + one-time coach-name gate shown before `App`; renders `<App role={role}/>` once signed in and named | `<script type="text/babel" src>` |
 | `assets/logo.png` | App logo/icon (was a ~500KB inline base64 blob) | referenced by `LOGO_URI`, apple-touch-icon link |
 | `manifest.json` | PWA manifest (was an inline data-URI) | referenced by the manifest `<link>` |
 | `tests/logic.test.js` | Dependency-free Node test suite for `lib/pitch-logic.js` | `node tests/logic.test.js` |
 
 `index.html`'s head-shell destructures `window.PitchLogic` and
 `window.UIConstants` before any component script loads, so every call site
-across all 12 `components/*.js` files (`getAvailabilityStatus(...)`, `card`,
+across all 13 `components/*.js` files (`getAvailabilityStatus(...)`, `card`,
 `STATUS[...]`, `useState`, etc.) resolves as a plain free variable — classic
 `<script>` tags share one global lexical environment, so this works regardless
 of which component file loads in which order. `currentRules` is no longer a
@@ -71,9 +72,10 @@ bare mutable global — read it via `getCurrentRules()` and write it via
 **Component script order doesn't matter relative to each other** — they only
 reference shared globals inside their function bodies, which don't run until
 React actually calls them at render time, well after every script tag has
-executed. The one hard rule: the bootstrap script (`window.__PitchApp = App;`
-+ `ReactDOM.createRoot(...).render(...)`) must come after all 12 component
-`<script>` tags, since it references `App` directly by name.
+executed. The one hard rule: the bootstrap script (`window.__PitchApp = AuthGate;`
++ `ReactDOM.createRoot(...).render(...)`) must come after all 13 component
+`<script>` tags, since `AuthGate` references `App` directly by name (and the
+bootstrap script references `AuthGate`).
 
 **Collision rule for any new `lib/`/`components/` file:** classic `<script>`
 tags share one global lexical environment. A top-level `const`/`let` declared
@@ -96,16 +98,44 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 **Stack:**
 - React 18 + ReactDOM loaded from CDN, rendered via `ReactDOM.createRoot`
 - Babel standalone transpiles JSX in-browser (script type `text/babel`)
-- Firebase Realtime Database (anonymous auth via `auth.signInAnonymously()`)
+- Firebase Realtime Database (email/password auth via two shared accounts — see Auth below)
 - No build step, no bundler, no npm
 
-**Current version:** v3.3
+**Current version:** v3.4
 
 ---
 
 ## Firebase Structure
 
-**Auth:** Anonymous sign-in. All reads/writes wait on `authReady` promise (resolved on first `onAuthStateChanged` user).
+**Auth:** No more anonymous sign-in — closed off in favor of two shared Firebase
+email/password accounts, `ADMIN_EMAIL` and `COACH_EMAIL` (constants in
+`lib/firebase-init.js`), one password each. `AuthGate` (`components/AuthGate.js`)
+gates the whole app: shows a single password field, tries it against the admin
+account then the coach account (`window.__fbSignIn(password)`), and once
+signed in — mandatory, once per device — a "your name" field whose value
+(`getCoachName()`/`setCoachName()`, localStorage key `pt_coach_name`) replaces
+what used to be a generic device-type label in the audit log. Role
+(`"admin"` | `"coach"`) is derived from which account signed in
+(`window.__fbRoleForUser(user)`, compares `user.email` to `ADMIN_EMAIL`) and
+passed down as a prop: `AuthGate` → `App({ role })` → `TeamPickerScreen({ role })`.
+Firebase's default session persistence (IndexedDB) means signing in is a
+one-time event per device — it survives reloads and app version bumps, same
+as the coach-name entry.
+
+**Role permissions:** Admin can create seasons and create/edit/delete teams
+(`TeamPickerScreen`'s create-team button, season picker, and per-team manage
+modal are hidden entirely for `role !== "admin"`; enforced for real by Firebase
+rules on `teamsMeta`/`seasonsMeta`/`archive` requiring `auth.token.email` to
+match the admin account). Both roles can view/select any team and freely
+create/edit/delete roster entries, game log entries, and tournaments (all
+under `/teams/{teamId}`, open to any authenticated user). The one-time
+seed/migration calls (`__fbMigrateIfNeeded`, `__fbCreatePrime12U`,
+`__fbCreatePrime10U`, `__fbMigrateSeasonIfNeeded`) write to admin-gated paths,
+so both `App.js` and `TeamPickerScreen.js` only run them when `role === "admin"`
+— coaches skip straight to reading `__fbListTeams()`/`__fbListSeasons()`.
+
+All reads/writes wait on `authReady` promise (resolves once a real admin/coach
+user is signed in — never resolves if nobody's signed in, which is the point).
 
 **Database paths:**
 ```
@@ -131,6 +161,9 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - `__fbListSeasons()` — reads `/seasonsMeta` (parent-level read, requires read rule at `seasonsMeta`)
 - `__fbCreateSeason(term, year)` — `seasonId` is deterministic (`${year}_${term.toLowerCase()}`), so creating the same term+year twice returns the existing season instead of duplicating it; resolves with the `seasonId`
 - `__fbGetRoster(teamId)` — one-time read of another team's roster (used for roster cloning at team-creation time)
+- `__fbSignIn(password)` — tries the password against the admin account, then the coach account; resolves once either succeeds, rejects if neither does
+- `__fbOnAuthChange(cb)` — wraps `auth.onAuthStateChanged`; fires immediately with the current user (or `null`), then on every sign-in/out; returns the unsubscribe function
+- `__fbRoleForUser(user)` — returns `"admin"` if `user.email === ADMIN_EMAIL`, `"coach"` otherwise, `null` if no user
 
 **Security Rules (current recommended):**
 ```json
@@ -139,18 +172,30 @@ cached `components/TournamentScreen.js` keeps serving old logic.
     "teams": { "$teamId": { ".read": "auth != null", ".write": "auth != null" } },
     "teamsMeta": {
       ".read": "auth != null",
-      "$teamId": { ".write": "auth != null" }
+      "$teamId": { ".write": "auth.token.email == 'admin@prime-pitchtracker.app'" }
     },
     "seasonsMeta": {
       ".read": "auth != null",
-      "$seasonId": { ".write": "auth != null" }
+      "$seasonId": { ".write": "auth.token.email == 'admin@prime-pitchtracker.app'" }
     },
     "auditLog": { "$teamId": { ".read": "auth != null", ".write": "auth != null" } },
-    "archive": { "$teamId": { ".read": "auth != null", ".write": "auth != null" } }
+    "archive": { "$teamId": { ".read": "auth != null", ".write": "auth.token.email == 'admin@prime-pitchtracker.app'" } }
   }
 }
 ```
-`teamsMeta` and `seasonsMeta` both need `.read` at the collection level because `__fbListTeams`/`__fbListSeasons` read the parent node.
+`teamsMeta` and `seasonsMeta` both need `.read` at the collection level because
+`__fbListTeams`/`__fbListSeasons` read the parent node. `teamsMeta`/`seasonsMeta`/
+`archive` writes require the admin account's email (must match `ADMIN_EMAIL` in
+`lib/firebase-init.js` exactly) — this is the real enforcement of the admin/coach
+split; the app also hides the corresponding UI, but the rules are what actually
+stop a coach-authenticated client from writing those paths directly. `teams`
+(roster, tournaments) and `auditLog` stay open to any authenticated user, since
+both roles can log games, manage rosters, and manage tournaments. Disabling the
+**Anonymous** sign-in provider in the Firebase console (leaving only **Email/Password**
+enabled) is what actually keeps non-Prime people out — without that, anyone could
+still call `signInAnonymously()` directly against the public API key regardless
+of what the app's UI does, since `auth != null` alone doesn't care which
+provider produced the auth.
 
 ---
 
@@ -224,8 +269,8 @@ isolated dataset (see "Roster cloning" under Key Patterns below).
 {
   id: string,              // Firebase push key (assigned client-side after fetch)
   ts: number,              // Date.now()
-  deviceId: string,
-  device: string,
+  deviceId: string,        // per-device id, used only for the "(this device)" tag
+  device: string,          // the coach's typed name (getCoachName()) — not a device type
   action: string,          // see Audit Actions below
   detail: string,          // human-readable summary
   undoData: UndoData | null,
@@ -293,7 +338,8 @@ specific principle.
 | `Settings` | `components/Settings.js` | `settings` | **The Settings tab.** Sub-nav over three sections: Roster (add a pitcher — `AddPitcherSection`, same file), Tournaments (renders `TournamentScreen`), Activity (renders `ActivityScreen`). |
 | `TournamentScreen` | `components/TournamentScreen.js` | (Settings sub-section) | Create/edit/delete tournaments — config only. Viewing a tournament's actual games/pitch usage lives on the Season tab now, grouped under that tournament. |
 | `ActivityScreen` | `components/ActivityScreen.js` | (Settings sub-section) | Audit log with undo capability |
-| `TeamPickerScreen` | `components/TeamPickerScreen.js` | (pre-app) | Team selection / create / manage — reached via the header's TEAM button, not a tab. Teams are grouped under season headers (newest season first); create/edit forms let you pick a season or spin up a new one inline (`+ New Season`), and optionally clone another team's roster (fresh id per pitcher, stats/history reset) either while creating a team or via "Clone Roster to New Team" from an existing team's manage modal |
+| `TeamPickerScreen` | `components/TeamPickerScreen.js` | (pre-app) | Team selection / create / manage — reached via the header's TEAM button, not a tab. Teams are grouped under season headers (newest season first); create/edit forms let you pick a season or spin up a new one inline (`+ New Season`), and optionally clone another team's roster (fresh id per pitcher, stats/history reset) either while creating a team or via "Clone Roster to New Team" from an existing team's manage modal. Team selection is open to any role; the create-team button, `+ New Season` picker, and per-team manage modal (rename/rules/season/delete/clone) only render when `role === "admin"`. |
+| `AuthGate` | `components/AuthGate.js` | (pre-app, above `TeamPickerScreen`) | Root-most component (see App Architecture bootstrap). Password field → `window.__fbSignIn`; once signed in, a mandatory one-time "your name" field (`setCoachName`) if none is stored yet; then renders `<App role={role}/>`. Both steps persist across reloads/version bumps (Firebase session persistence + localStorage), so a coach only ever sees this once per device. |
 
 ### Modals & Sub-components
 | Component | File | Purpose |
@@ -311,6 +357,8 @@ specific principle.
 ## App-Level State (`App` component)
 
 ```js
+role              // "admin" | "coach" — prop from AuthGate, not local state; passed through
+                  // to TeamPickerScreen to gate create/edit/delete-team and season UI
 teamId            // string | null — persisted to localStorage (TEAM_ID_KEY)
 teamMeta          // { name, rules, ... } | null
 syncStatus        // "connecting"|"saving"|"synced"|"offline"|"error" — "error" is a
@@ -362,7 +410,8 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 | `formatDate(iso)` | Formats `"YYYY-MM-DD"` to `"Mon DD, YYYY"` |
 | `addDays(dateStr, n)` | Returns new date string n days after input |
 | `newId()` | Returns a unique ID string (timestamp + random) |
-| `getDeviceId()` / `getDeviceName()` | Device fingerprint for audit log attribution |
+| `getDeviceId()` | Per-device id, used only for the "(this device)" tag in the activity log |
+| `getCoachName()` / `setCoachName(name)` | localStorage-backed coach name (`pt_coach_name`), captured once via `AuthGate`; used as `device` on audit entries |
 | `load(key)` / `save(key, val)` | localStorage helpers; `save` also calls `__fbSet` |
 | `getSeasonName(season)` | Formats `{term,year}` as `"Spring 2026"` |
 | `compareSeasonsDesc(a, b)` | Array-sort comparator: newest season first (year desc, then term rank Winter<Spring<Summer<Fall within a year) |
