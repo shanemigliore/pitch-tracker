@@ -170,16 +170,45 @@ function AddPitcherSection({ roster, onAdd, onDelete }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ACCOUNT (Settings sub-section) — who's signed in + log out
+// ══════════════════════════════════════════════════════════════════════════════
+function AccountSection({ role, onLogout }) {
+  function handleLogout() {
+    if (!confirm("Log out of this device? You'll need the password, your name, and to pick a team again next time.")) return;
+    onLogout();
+  }
+
+  return (
+    <div style={{ padding:"0 16px 110px" }}>
+      <div style={{ ...card, border:"1px solid rgba(255,255,255,0.12)" }}>
+        <p style={sectionLabel}>SIGNED IN AS</p>
+        <div style={{ fontSize:16, fontWeight:700, color:"#f8fafc", marginBottom:2 }}>{getCoachName() || "—"}</div>
+        <div style={{ fontSize:13, color:"rgba(255,255,255,0.4)" }}>{role === "admin" ? "Admin" : "Coach"}</div>
+      </div>
+
+      <div style={{ ...card, marginTop:12, border:"1px solid rgba(244,63,94,0.15)" }}>
+        <button onClick={handleLogout} style={{ width:"100%", background:"transparent",
+          border:"1px solid rgba(244,63,94,0.4)", borderRadius:12, padding:12,
+          color:"rgba(220,38,38,0.8)", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+          Log Out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: SETTINGS
 // ══════════════════════════════════════════════════════════════════════════════
 function Settings({ roster, onAddPlayer, onDeletePlayer, tournaments, onAddTourney, onDeleteTourney, onUpdateTourney,
-  auditLog, onUndo, undidIds, onUndid }) {
+  auditLog, onUndo, undidIds, onUndid, role, onLogout }) {
   const [section, setSection] = useState("roster");
 
   const sections = [
     ["roster", "Roster"],
     ["tournaments", "Tournaments"],
     ["activity", "Activity"],
+    ["account", "Account"],
   ];
 
   return (
@@ -208,6 +237,7 @@ function Settings({ roster, onAddPlayer, onDeletePlayer, tournaments, onAddTourn
       {section==="activity" && (
         <ActivityScreen auditLog={auditLog} roster={roster} onUndo={onUndo} undidIds={undidIds} onUndid={onUndid}/>
       )}
+      {section==="account" && <AccountSection role={role} onLogout={onLogout}/>}
     </div>
   );
 }
