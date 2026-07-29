@@ -101,7 +101,7 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - Firebase Realtime Database (email/password auth via two shared accounts — see Auth below)
 - No build step, no bundler, no npm
 
-**Current version:** v3.4
+**Current version:** v3.5
 
 ---
 
@@ -176,6 +176,7 @@ user is signed in — never resolves if nobody's signed in, which is the point).
 - `__fbSignIn(password)` — tries the password against the admin account, then the coach account; resolves once either succeeds, rejects if neither does
 - `__fbOnAuthChange(cb)` — wraps `auth.onAuthStateChanged`; fires immediately with the current user (or `null`), then on every sign-in/out; returns the unsubscribe function
 - `__fbRoleForUser(user)` — returns `"admin"` if `user.email === ADMIN_EMAIL`, `"coach"` otherwise, `null` if no user
+- `__fbSignOut()` — signs out of Firebase; `AuthGate`'s listener picks up the resulting `null` user and swaps back to the password screen
 
 **Security Rules (current recommended):**
 ```json
@@ -347,7 +348,7 @@ specific principle.
 | `PitcherDetail` | `components/PitcherDetail.js` | `roster` (drill-in) | Pitcher stats, editable season history, edit name/jersey, remove from roster. Logging a new game happens on the Game Log tab, not here. |
 | `GameLogScreen` | `components/GameLogScreen.js` | `gamelog` | Log a **new** game for multiple pitchers at once (two-step: who pitched, then pitch counts). Entry-only — browsing/editing past games moved to the Season tab. |
 | `SeasonHistory` | `components/SeasonHistory.js` | `season` | **The Season tab.** Chronological game history with leaderboard. Tournament games collapse into one container per tournament (day-by-day breakdown inside), positioned by its most recent game date, so the whole season is browsable as one continuous list without switching to a separate tournament view. |
-| `Settings` | `components/Settings.js` | `settings` | **The Settings tab.** Sub-nav over three sections: Roster (add a pitcher — `AddPitcherSection`, same file), Tournaments (renders `TournamentScreen`), Activity (renders `ActivityScreen`). |
+| `Settings` | `components/Settings.js` | `settings` | **The Settings tab.** Sub-nav over four sections: Roster (add a pitcher — `AddPitcherSection`, same file), Tournaments (renders `TournamentScreen`), Activity (renders `ActivityScreen`), Account (signed-in name/role + log out — `AccountSection`, same file). |
 | `TournamentScreen` | `components/TournamentScreen.js` | (Settings sub-section) | Create/edit/delete tournaments — config only. Viewing a tournament's actual games/pitch usage lives on the Season tab now, grouped under that tournament. |
 | `ActivityScreen` | `components/ActivityScreen.js` | (Settings sub-section) | Audit log with undo capability |
 | `TeamPickerScreen` | `components/TeamPickerScreen.js` | (pre-app) | Team selection / create / manage — reached via the header's TEAM button, not a tab. Teams are grouped under season headers (newest season first); create/edit forms let you pick a season or spin up a new one inline (`+ New Season`), and optionally clone another team's roster (fresh id per pitcher, stats/history reset) either while creating a team or via "Clone Roster to New Team" from an existing team's manage modal. Team selection is open to any role; the create-team button, `+ New Season` picker, and per-team manage modal (rename/rules/season/delete/clone) only render when `role === "admin"`. |
@@ -359,6 +360,7 @@ specific principle.
 | `EditGameModal` | `components/EditGameModal.js` | Edit or delete a single HistoryEntry |
 | `EditGameGroupModal` | `components/EditGameGroupModal.js` | Edit/delete a multi-pitcher (`sharedGameId`) game log entry — also used for a single day within a Season-tab tournament container |
 | `AddPitcherSection` | `components/Settings.js` | New-pitcher form (duplicate jersey blocked, duplicate name soft-warned) — Settings' Roster sub-section |
+| `AccountSection` | `components/Settings.js` | Shows signed-in name + role (Admin/Coach) and a confirm-then-log-out button — Settings' Account sub-section |
 | `ContextPicker` | `components/shared.js` | Regular season vs. tournament picker (shared by log forms) |
 | `Chip` | `components/shared.js` | Small colored status badge |
 | `RadialArc` | `components/shared.js` | SVG radial progress ring (pitch count vs. max) |
@@ -370,7 +372,8 @@ specific principle.
 
 ```js
 role              // "admin" | "coach" — prop from AuthGate, not local state; passed through
-                  // to TeamPickerScreen to gate create/edit/delete-team and season UI
+                  // to TeamPickerScreen to gate create/edit/delete-team and season UI, and
+                  // to Settings/AccountSection to display which role is signed in
 teamId            // string | null — persisted to localStorage (TEAM_ID_KEY)
 teamMeta          // { name, rules, ... } | null
 syncStatus        // "connecting"|"saving"|"synced"|"offline"|"error" — "error" is a
@@ -403,6 +406,7 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 | `updateTourney(t)` | Updates tournament, pushes EDIT_TOURNEY audit |
 | `executeUndo(entry)` | Dispatches to the correct handler based on `entry.undoData.type` (with `{skipAudit:true}` so the handler's own audit push doesn't fire), then pushes one `UNDO` audit entry on success. Returns whether the undo actually found its target — `ActivityScreen` alerts the user instead of marking it undone when it returns `false`. Guarded by a ref (`undoneEntryIdsRef`) against a same-tick double-invocation re-running the same entry. |
 | `pushAudit(action, detail, undoData, extra)` | Writes to `/auditLog/{teamId}` via `__fbPushAudit`; `extra` is spread into the entry; on write failure, flags the optimistic local entry `_failed:true` |
+| `logout()` | Confirmed via `AccountSection`'s prompt before it's called. Clears the saved team (`TEAM_ID_KEY`/`TEAM_META_KEY`) and coach name (`setCoachName("")`), then calls `__fbSignOut()` — `AuthGate`'s listener picks up the resulting sign-out and swaps back to the password screen, so the next person on this device starts completely fresh. No audit entry (there's no team/session left to attribute it to). |
 
 ---
 

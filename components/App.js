@@ -25,6 +25,15 @@ function App({ role }) {
   // Keep currentRules in sync on every render (before any child renders read it)
   setCurrentRules(teamMeta?.rules || DEFAULT_RULES);
 
+  // Signs out and clears this device's saved name/team so the next person to
+  // open the app starts completely fresh (password, name, and team picker).
+  function logout() {
+    localStorage.removeItem(TEAM_ID_KEY);
+    localStorage.removeItem(TEAM_META_KEY);
+    setCoachName("");
+    window.__fbSignOut();
+  }
+
   function selectTeam(id, meta) {
     // Same team — just close the picker, nothing to reload
     if (id === teamId) {
@@ -494,7 +503,7 @@ function App({ role }) {
           <ScreenBoundary>
             <Settings roster={roster} onAddPlayer={addPlayer} onDeletePlayer={deletePlayer}
               tournaments={tournaments} onAddTourney={addTourney} onDeleteTourney={deleteTourney} onUpdateTourney={updateTourney}
-              auditLog={auditLog} onUndo={executeUndo}
+              auditLog={auditLog} onUndo={executeUndo} role={role} onLogout={logout}
               undidIds={undidIds} onUndid={id => {
                 setUndidIds(s => new Set([...s, id]));
                 if (window.__fbMarkAuditUndone) window.__fbMarkAuditUndone(teamId, id);
