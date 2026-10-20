@@ -279,6 +279,9 @@ as a `{"0":..,"1":..}` object - `getTourneyDayLimits` handles both.
   Fri–Sun tournament → eligible Monday). This applies while a tournament is in
   progress too (provisional, using the total so far). Thresholds are the team's
   `rest1/2/3`, same as regular season.
+- The header's ✓/😴 counts (`App.js`) use `getTourneyEligibility` for today
+  while a tournament is active (`getActiveTourney`, shown with a 🏆), and
+  regular-season `getAvailabilityStatus` otherwise.
 - The tournament day a game counts toward is always derived from its date
   (`getTourneyDayNumber`) — `ContextPicker` no longer has a day picker, and
   saving is blocked when the game date is outside the selected tournament.

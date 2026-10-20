@@ -414,8 +414,17 @@ function App({ role }) {
     </div>
   );
 
-  const availableCount = roster.filter(p=>getAvailabilityStatus(p, null, tournaments)==="available").length;
-  const restingCount   = roster.filter(p=>getAvailabilityStatus(p, null, tournaments)!=="available").length;
+  // While a tournament is running today, the header counts tournament
+  // eligibility (that day's hard limit, the total, pre-tournament rest) -
+  // regular-season status would show everyone who's pitched in it as resting
+  // until it ends, which isn't the question mid-tournament.
+  const headerTourney = getActiveTourney(tournaments, todayStr());
+  const isAvailableNow = p => headerTourney
+    ? getTourneyEligibility(p, headerTourney, todayStr(), tournaments).eligible
+    : getAvailabilityStatus(p, null, tournaments)==="available";
+  const availableCount = roster.filter(isAvailableNow).length;
+  const restingCount   = roster.length - availableCount;
+  const countScope     = headerTourney ? `today in ${headerTourney.name}` : "for regular season today";
 
   return (
     <div style={{ background:"#080c14", minHeight:"100dvh", maxWidth:430, margin:"0 auto",
@@ -465,8 +474,9 @@ function App({ role }) {
             </div>
           </div>
           <div style={{ display:"flex", gap:5, alignItems:"center" }}>
-            {availableCount>0 && <div style={{ padding:"3px 8px", borderRadius:8, background:"rgba(74,222,128,0.15)", fontSize:11, fontWeight:700, color:"#4ade80" }}>{availableCount}✓</div>}
-            {restingCount>0  && <div style={{ padding:"3px 8px", borderRadius:8, background:"rgba(244,63,94,0.15)",  fontSize:11, fontWeight:700, color:"#f43f5e" }}>{restingCount}😴</div>}
+            {headerTourney && roster.length>0 && <div title={`Counts are for ${headerTourney.name}`} aria-hidden="true" style={{ fontSize:11 }}>🏆</div>}
+            {availableCount>0 && <div title={`${availableCount} eligible ${countScope}`} aria-label={`${availableCount} eligible ${countScope}`} style={{ padding:"3px 8px", borderRadius:8, background:"rgba(74,222,128,0.15)", fontSize:11, fontWeight:700, color:"#4ade80" }}>{availableCount}✓</div>}
+            {restingCount>0  && <div title={`${restingCount} not eligible ${countScope}`} aria-label={`${restingCount} not eligible ${countScope}`} style={{ padding:"3px 8px", borderRadius:8, background:"rgba(244,63,94,0.15)",  fontSize:11, fontWeight:700, color:"#f43f5e" }}>{restingCount}😴</div>}
             <div title={syncStatus==="error" && lastSyncError ? `error: ${lastSyncError}` : syncStatus}
               onClick={()=>{ if (syncStatus==="error") alert(`Sync error: ${lastSyncError || "Unknown error"}`); }}
               style={{ width:7, height:7, borderRadius:"50%", flexShrink:0, cursor: syncStatus==="error" ? "pointer" : "default",
