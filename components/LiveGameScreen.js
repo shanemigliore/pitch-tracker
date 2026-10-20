@@ -7,7 +7,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: LIVE GAME
 // ══════════════════════════════════════════════════════════════════════════════
-function LiveGameScreen({ roster, tournaments, liveGame, onStart, onUpdate, onComplete, onDiscard }) {
+function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onComplete, onDiscard }) {
   // Setup form (only used before a game exists)
   const [setupDate, setSetupDate] = useState(todayStr());
   const [setupContext, setSetupContext] = useState("regular");
@@ -46,6 +46,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onUpdate, onCo
   useEffect(() => {
     setCountDrafts({}); setOpponentDraft(null); setOpponentErr(false);
     setCompleteErr(""); setWarnViolations(false); setUndoSwap(null);
+    if (gameId) setSaved(null); // a newer game supersedes "Game Logged!"
   }, [gameId]);
 
   const recentOpponents = (()=>{
@@ -111,6 +112,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onUpdate, onCo
       if (starting || setupOutside) return;
       setStarting(true);
       Promise.resolve(onStart({ date:setupDate, context:setupContext, opponent:sanitizeOpponent(setupOpponent) }))
+        .then(created => { if (created === false) alert("Another coach already started a game — it'll appear here in a moment."); })
         .catch(err => alert(`Couldn't start the game: ${err && err.message ? err.message : err}`))
         .finally(() => setStarting(false));
     }
@@ -156,55 +158,40 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onUpdate, onCo
   const unavailable = notInGame.filter(p=>!budgets.get(p.id).eligible).sort((a,b)=>a.name.localeCompare(b.name));
   const gameTotal = inGameIds.reduce((s,id)=>s+liveGame.pitchers[id].pitches, 0);
 
+  const act = action => onAction(liveGame.id, action);
   function commitOpponent() {
     if (opponentDraft === null) return;
     const v = sanitizeOpponent(opponentDraft);
     setOpponentDraft(null);
-    if (v !== liveGame.opponent) onUpdate({ opponent:v });
+    if (v !== liveGame.opponent) act({ type:"setField", field:"opponent", value:v });
   }
-  function setCount(id, v) { setCompleteErr(""); onUpdate({ [`pitchers/${id}/pitches`]: sanitizeLiveCount(v) }); }
-  function bump(id, delta) {
-    setCompleteErr("");
-    const cur = liveGame.pitchers[id].pitches;
-    if (delta < 0 && cur + delta < 0) { if (cur > 0) setCount(id, 0); return; }
-    if (delta > 0 && cur + delta > LIVE_MAX_COUNT) return;
-    onUpdate({ [`pitchers/${id}/pitches`]: window.__fbLiveIncrement ? window.__fbLiveIncrement(delta) : cur + delta });
-  }
+  function bump(id, delta) { setCompleteErr(""); act({ type:"bump", id, delta }); }
   function commitCount(id) {
     if (countDrafts[id] === undefined) return;
     const v = countDrafts[id];
     setCountDrafts(d => { const n = { ...d }; delete n[id]; return n; });
-    if (sanitizeLiveCount(v) !== liveGame.pitchers[id].pitches) setCount(id, v);
+    if (sanitizeLiveCount(v) !== liveGame.pitchers[id].pitches) { setCompleteErr(""); act({ type:"setCount", id, value:v }); }
   }
   // Bringing in a new pitcher takes out whoever is pitching - once replaced,
   // they can't come back in this game.
   function addPitcher(p) {
-    const now = Date.now();
-    const order = inGameIds.reduce((m,id)=>Math.max(m, liveGame.pitchers[id].order), 0) + 1;
-    const patch = { [`pitchers/${p.id}`]: { pitches:0, status:"active", order, enteredAt:now } };
-    activeIds.forEach(id => { patch[`pitchers/${id}/status`] = "left"; patch[`pitchers/${id}/leftAt`] = now; });
-    onUpdate(patch);
+    act({ type:"add", id:p.id, now:Date.now() });
     setCompleteErr("");
     setUndoSwap(activeIds.length ? { gameId:liveGame.id, newId:p.id, prevIds:activeIds } : null);
   }
   function undoAdd() {
     if (!undoSwap || undoSwap.gameId !== liveGame.id) return;
-    const patch = { [`pitchers/${undoSwap.newId}`]: null };
-    undoSwap.prevIds.forEach(id => { patch[`pitchers/${id}/status`] = "active"; patch[`pitchers/${id}/leftAt`] = null; });
-    onUpdate(patch);
+    act({ type:"undoAdd", id:undoSwap.newId, prevIds:undoSwap.prevIds });
     setUndoSwap(null);
   }
-  function markLeft(id) {
-    onUpdate({ [`pitchers/${id}/status`]:"left", [`pitchers/${id}/leftAt`]:Date.now() });
-    setUndoSwap(null);
-  }
+  function markLeft(id) { act({ type:"markLeft", id, now:Date.now() }); setUndoSwap(null); }
   function putBackIn(p) {
     if (!confirm(`Put ${p.name} back in?\n\nA pitcher who leaves the game can't return to pitch in it. Only do this to fix a mistake.`)) return;
-    onUpdate({ [`pitchers/${p.id}/status`]:"active", [`pitchers/${p.id}/leftAt`]:null });
+    act({ type:"putBack", id:p.id });
   }
   function removeFromGame(p) {
     if (!confirm(`Remove ${p.name} from this game? Their ${liveGame.pitchers[p.id].pitches} pitches won't be logged.`)) return;
-    onUpdate({ [`pitchers/${p.id}`]: null });
+    act({ type:"remove", id:p.id });
     setUndoSwap(null);
   }
 
@@ -266,10 +253,10 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onUpdate, onCo
           <span style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>{gameTotal}p total</span>
         </div>
         {liveGame.startedBy && <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)", marginTop:-6, marginBottom:10 }}>Started by {liveGame.startedBy}</div>}
-        <ContextPicker context={liveGame.context} setContext={c=>onUpdate({ context:c })} tournaments={tournaments} gameDate={liveGame.date}/>
+        <ContextPicker context={liveGame.context} setContext={c=>act({ type:"setField", field:"context", value:c })} tournaments={tournaments} gameDate={liveGame.date}/>
         <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME DATE</label>
         <input type="date" value={liveGame.date} aria-label="Game date"
-          onChange={e=>{ if (isIsoDate(e.target.value)) onUpdate({ date:e.target.value }); }}
+          onChange={e=>{ if (isIsoDate(e.target.value)) act({ type:"setField", field:"date", value:e.target.value }); }}
           style={{ ...inputStyle, marginBottom:10 }}/>
         <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>OPPONENT *</label>
         <input placeholder="Team name" value={opponentValue} maxLength={LIVE_OPPONENT_MAX} aria-label="Opponent"
@@ -279,7 +266,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onUpdate, onCo
           onKeyDown={e=>{ if (e.key==="Enter") e.target.blur(); }}
           style={{ ...inputStyle, border:opponentErr?"1px solid rgba(244,63,94,0.6)":inputStyle.border }}/>
         {opponentErr && <div style={{ fontSize:11, color:"#f87171", marginTop:4 }}>Opponent is required to log the game</div>}
-        {opponentChips(opponentValue, name=>{ setOpponentDraft(null); setOpponentErr(false); onUpdate({ opponent:name }); })}
+        {opponentChips(opponentValue, name=>{ setOpponentDraft(null); setOpponentErr(false); act({ type:"setField", field:"opponent", value:name }); })}
       </div>
 
       <div style={card}>
@@ -361,7 +348,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onUpdate, onCo
             </div>
           );
         })}
-        {undoSwap && undoSwap.gameId===liveGame.id && (
+        {undoSwap && undoSwap.gameId===liveGame.id && liveGame.pitchers[undoSwap.newId] && liveGame.pitchers[undoSwap.newId].pitches===0 && (
           <div role="status" style={{ display:"flex", alignItems:"center", gap:8, marginTop:6, padding:"8px 10px", borderRadius:10,
             background:"rgba(56,189,248,0.08)", border:"1px solid rgba(56,189,248,0.25)", fontSize:12, color:"rgba(255,255,255,0.7)" }}>
             <span style={{ flex:1 }}>

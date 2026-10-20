@@ -353,21 +353,28 @@ function App({ role }) {
     });
   }, []);
 
-  const updateLiveGame = useCallback(patch => {
+  const liveGameAction = useCallback((gameId, action) => {
     const tid = teamIdRef.current;
-    if (!tid || !window.__fbUpdateLiveGame) return;
-    window.__fbUpdateLiveGame(tid, patch).catch(reportSyncError);
+    if (!tid || !window.__fbMutateLiveGame) return;
+    window.__fbMutateLiveGame(tid, gameId, cur => applyLiveGameAction(cur, gameId, action)).catch(reportSyncError);
   }, []);
 
   // Claims the game on the server first (so two coaches finishing at once can't
   // both log it), then logs whatever the server had - not this device's copy.
   // Resolves { count, opponent }, or null if another device got there first.
+  // If the team was switched while the claim was pending, the entries would
+  // land on the wrong roster - put the game back instead and say so.
   const completeLiveGame = useCallback(gameId => {
     const tid = teamIdRef.current;
     if (!tid || !window.__fbClaimLiveGame) return Promise.resolve(null);
     return window.__fbClaimLiveGame(tid, gameId).then(raw => {
       const game = normalizeLiveGame(raw);
       if (!game) return null;
+      if (teamIdRef.current !== tid) {
+        return window.__fbStartLiveGame(tid, raw).then(() => {
+          throw new Error("You switched teams before the game finished logging. It's back on that team's Live tab — log it from there");
+        });
+      }
       const onRoster = new Set(rosterRef.current.map(p => p.id));
       const { entries } = liveGameToLogEntries(game, tournamentsRef.current, newId());
       const logged = entries.filter(e => onRoster.has(e.playerId));
@@ -578,7 +585,7 @@ function App({ role }) {
         ) : tab==="live" ? (
           <ScreenBoundary>
             <LiveGameScreen roster={roster} tournaments={tournaments} liveGame={liveGame}
-              onStart={startLiveGame} onUpdate={updateLiveGame}
+              onStart={startLiveGame} onAction={liveGameAction}
               onComplete={completeLiveGame} onDiscard={discardLiveGame}/>
           </ScreenBoundary>
         ) : tab==="gamelog" ? (

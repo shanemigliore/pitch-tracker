@@ -174,9 +174,8 @@ user is signed in — never resolves if nobody's signed in, which is the point).
 - `__fbListSeasons()` — reads `/seasonsMeta` (parent-level read, requires read rule at `seasonsMeta`)
 - `__fbCreateSeason(term, year)` — `seasonId` is deterministic (`${year}_${term.toLowerCase()}`), so creating the same term+year twice returns the existing season instead of duplicating it; resolves with the `seasonId`
 - `__fbWatchLiveGame(teamId, onData)` — live listener on `/teams/{teamId}/liveGame` (raw value or `null`; App runs it through `normalizeLiveGame`)
-- `__fbStartLiveGame(teamId, game)` — transaction: creates the live game only if none exists; resolves `true` if this call created it
-- `__fbUpdateLiveGame(teamId, patch)` — multi-path `update()` relative to `liveGame` (e.g. `{"pitchers/abc/pitches": 23}`) — never a whole-object set, so concurrent edits to different pitchers don't clobber
-- `__fbLiveIncrement(n)` — `ServerValue.increment(n)`, used for the +/- buttons so simultaneous taps from two devices both count
+- `__fbStartLiveGame(teamId, game)` — transaction: creates the live game unless a real one (with an `id`) exists — an id-less node is junk and gets replaced; resolves `true` if this call created it
+- `__fbMutateLiveGame(teamId, gameId, mutate)` — **every** in-game edit: a transaction running `mutate(cur)` (`applyLiveGameAction`) against the server's current value, aborting unless it's still game `gameId`. Plain field `update()`s were tried first and broke under races: a late write after the game was claimed left an id-less junk node (blocking Start), a write to a removed pitcher resurrected them as "active", and two −1 taps drove counts negative. Applied locally immediately, so taps stay instant; concurrent taps from two devices both count (transaction retry)
 - `__fbClaimLiveGame(teamId, gameId)` — transaction (not applied locally) that removes the live game only if its id still matches; resolves with the server's copy if this device won, `null` otherwise. Used by both complete and discard, so a game can't be logged twice
 - `__fbGetRoster(teamId)` — one-time read of another team's roster (used for roster cloning at team-creation time)
 - `__fbSignIn(password)` — tries the password against the admin account, then the coach account; resolves once either succeeds, rejects if neither does
@@ -328,8 +327,8 @@ isolated dataset (see "Roster cloning" under Key Patterns below).
 }
 ```
 Any authenticated client can write it, so it's always read through
-`normalizeLiveGame` (returns `null` for anything malformed, clamps counts,
-sanitizes the opponent). No new security rules — it's under `/teams/{teamId}`.
+`normalizeLiveGame` (returns `null` for anything malformed, drops pitcher entries without a valid
+`status`, clamps counts, sanitizes the opponent). No new security rules — it's under `/teams/{teamId}`.
 
 **AuditEntry (stored in Firebase, received in auditLog array):**
 ```js
@@ -463,8 +462,8 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 | `updateTourney(t)` | Updates tournament, pushes EDIT_TOURNEY audit |
 | `executeUndo(entry)` | Dispatches to the correct handler based on `entry.undoData.type` (with `{skipAudit:true}` so the handler's own audit push doesn't fire), then pushes one `UNDO` audit entry on success. Returns whether the undo actually found its target — `ActivityScreen` alerts the user instead of marking it undone when it returns `false`. Guarded by a ref (`undoneEntryIdsRef`) against a same-tick double-invocation re-running the same entry. |
 | `startLiveGame({date, context, opponent})` | `__fbStartLiveGame` with a fresh id and `startedBy: getCoachName()` |
-| `updateLiveGame(patch)` | `__fbUpdateLiveGame`; a rejected write goes to the same sync-error banner as roster saves |
-| `completeLiveGame(gameId)` | `__fbClaimLiveGame`, then `liveGameToLogEntries` on the **server's** copy → `logMultiple` per pitcher still on the roster. Resolves `{count, opponent}`, or `null` if another device already finished/discarded it |
+| `liveGameAction(gameId, action)` | `__fbMutateLiveGame` with `applyLiveGameAction`; a rejected write goes to the same sync-error banner as roster saves |
+| `completeLiveGame(gameId)` | `__fbClaimLiveGame`, then `liveGameToLogEntries` on the **server's** copy → `logMultiple` per pitcher still on the roster. Resolves `{count, opponent}`, or `null` if another device already finished/discarded it. If the team was switched while the claim was pending, it writes the game back to its team and rejects instead of logging onto the wrong roster |
 | `discardLiveGame(gameId)` | `__fbClaimLiveGame`, then a `DISCARD_LIVE_GAME` audit entry |
 | `pushAudit(action, detail, undoData, extra)` | Writes to `/auditLog/{teamId}` via `__fbPushAudit`; `extra` is spread into the entry; on write failure, flags the optimistic local entry `_failed:true` |
 | `logout()` | Confirmed via `AccountSection`'s prompt before it's called. Clears the saved team (`TEAM_ID_KEY`/`TEAM_META_KEY`) and coach name (`setCoachName("")`), then calls `__fbSignOut()` — `AuthGate`'s listener picks up the resulting sign-out and swaps back to the password screen, so the next person on this device starts completely fresh. No audit entry (there's no team/session left to attribute it to). |
@@ -487,6 +486,7 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 | `buildGameEntries({pitchers, date, opponent, context, tourney, sharedGameId})` | HistoryEntry payloads (`{playerId, data}`) for one game — shared by Game Log and Live |
 | `getLivePitcherBudget(pitcher, liveGame, tournaments)` | Live tab per-pitcher view: `{ inGame, hasLeft, count, eligible, reason, priorToday, pitchesLeft, leftLabel, arcValue, arcMax, note, rest }`. Eligibility is from logged history only (so it doesn't flip mid-game); pitches left includes the live count. Regular: `maxPitches` per day minus already-logged same-day pitches + live count. Tournament: tighter of the day's hard limit and the total |
 | `getRestThresholdInfo(pitches)` | `{ restDays, nextAt, nextRestDays }` — next rest threshold (strict `>`, so `nextAt = restN + 1`) |
+| `applyLiveGameAction(raw, gameId, action)` | Pure reducer for Live-tab edits (`setField`/`bump`/`setCount`/`add`/`undoAdd`/`markLeft`/`putBack`/`remove`) on the raw server value; returns the new value or `undefined` (abort) when the game id doesn't match or the target pitcher isn't in the game. `add` auto-marks active pitchers left; `undoAdd` refuses once the new pitcher has thrown; counts clamp to 0..999 |
 | `liveGameToLogEntries(liveGame, tournaments, sharedGameId)` | `{ entries, dropped }` — 0-count pitchers dropped, entry order preserved |
 | `normalizeLiveGame(raw)` / `sanitizeLiveCount(v)` / `sanitizeOpponent(s)` | Untrusted-input guards for the live game (counts 0..`LIVE_MAX_COUNT`, opponent ≤ `LIVE_OPPONENT_MAX`) |
 | `getAvailabilityStatus(pitcher, onDate, tournaments)` | Returns STATUS key for a pitcher on a given date |
