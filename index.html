@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Prime Pitching"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#080c14"/>
-  <meta name="app-version" content="v3.7"/>
+  <meta name="app-version" content="v3.8"/>
   <title>Prime Pitching</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="assets/logo.png"/>
@@ -25,6 +25,8 @@
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
     .spinner { animation: spin 0.9s linear infinite; display: inline-block; }
     .offline-banner { animation: fadeIn 0.3s ease; }
+    @keyframes livePulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.75); } }
+    .live-dot { animation: livePulse 1.6s ease-in-out infinite; }
     /* Portrait-only: show an overlay in landscape telling the user to rotate back */
     #landscape-block {
       display: none;
@@ -85,7 +87,7 @@
 
 
 // ─── App version (bump minor for each PR) ────────────────────────────────────
-const APP_VERSION = "v3.7";
+const APP_VERSION = "v3.8";
 const LOGO_URI = "assets/logo.png";
 
 // ─── Pure logic (rest-day/eligibility/date/device-id math) ───────────────────
@@ -98,6 +100,10 @@ const {
   DEFAULT_TOURNEY_DAY_LIMIT, DEFAULT_TOURNEY_TOTAL,
   getTourneyDays, getTourneyEndDate, getTourneyDayLimits, getTourneyMaxTotal, getTourneyDayNumber,
   getPitcherTourneyStats, getTourneyEligibility, getTourneyLimitViolation,
+  getGameLogCheck, buildGameEntries,
+  LIVE_MAX_COUNT, LIVE_OPPONENT_MAX, sanitizeLiveCount, sanitizeOpponent, normalizeLiveGame,
+  getLiveGamePitcherIds, getRestThresholdInfo, getLivePitcherBudget, liveGameToLogEntries,
+  applyLiveGameAction,
   formatDate, todayStr, addDays, toLocalDateStr, isIsoDate, newId,
   getDeviceId, getCoachName, setCoachName, recomputeLast,
   getActiveTourney, getSubjectKey,
@@ -124,6 +130,7 @@ const { STATUS, I, inputStyle, primaryBtn, cancelBtn, card, sectionLabel, sectio
   <script type="text/babel" data-presets="react" src="components/EditGameModal.js"></script>
   <script type="text/babel" data-presets="react" src="components/PitcherDetail.js"></script>
   <script type="text/babel" data-presets="react" src="components/GameLogScreen.js"></script>
+  <script type="text/babel" data-presets="react" src="components/LiveGameScreen.js"></script>
   <script type="text/babel" data-presets="react" src="components/EligibilityScreen.js"></script>
   <script type="text/babel" data-presets="react" src="components/TournamentScreen.js"></script>
   <script type="text/babel" data-presets="react" src="components/EditGameGroupModal.js"></script>

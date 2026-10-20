@@ -392,6 +392,131 @@ test('9n. 12U thresholds (25/45/65) drive post-tournament rest', () => {
   }
 });
 
+// ── 10. Live game (v3.8) ─────────────────────────────────────────────────
+
+function liveGame(overrides) {
+  return Object.assign({ id: 'lg1', date: '2026-10-20', context: 'regular', opponent: 'Hawks',
+    startedAt: 1, startedBy: 'Coach', pitchers: {} }, overrides);
+}
+const LT = { id: 'lt', name: 'Fall Classic', startDate: '2026-10-23', days: 3, maxTotal: 100,
+  dayLimits: [{ max: 50, isHard: true }, { max: 40, isHard: false }, { max: 50, isHard: true }] };
+
+test('10a. regular season: pitches left = maxPitches minus live count', () => {
+  const p = { id: 'a', name: 'A', history: [] };
+  const b = logic.getLivePitcherBudget(p, liveGame({ pitchers: { a: { pitches: 38, status: 'active', order: 1 } } }), []);
+  assert.strictEqual(b.inGame, true);
+  assert.strictEqual(b.eligible, true);
+  assert.strictEqual(b.pitchesLeft, 55 - 38);
+  assert.deepStrictEqual(b.rest, { restDays: 1, nextAt: 41, nextRestDays: 2 });
+});
+
+test('10b. regular season: same-day logged pitches count toward the daily max', () => {
+  const p = { id: 'a', name: 'A', history: [makeEntry({ date: '2026-10-20', pitches: 30 })] };
+  const b = logic.getLivePitcherBudget(p, liveGame({ pitchers: { a: { pitches: 10, status: 'active', order: 1 } } }), []);
+  assert.strictEqual(b.priorToday, 30);
+  assert.strictEqual(b.pitchesLeft, 15);
+  const full = { id: 'b', name: 'B', history: [makeEntry({ date: '2026-10-20', pitches: 55 })] };
+  assert.strictEqual(logic.getLivePitcherBudget(full, liveGame(), []).eligible, false);
+});
+
+test('10c. regular season: resting pitcher is unavailable with reason', () => {
+  const p = { id: 'a', name: 'A', history: [makeEntry({ date: '2026-10-19', pitches: 45 })] };
+  const b = logic.getLivePitcherBudget(p, liveGame(), []);
+  assert.strictEqual(b.eligible, false);
+  assert.ok(/Resting/.test(b.reason), b.reason);
+});
+
+test('10d. tournament: tighter of hard day limit and total, guideline note', () => {
+  const p = { id: 'a', name: 'A', history: [
+    makeEntry({ date: '2026-10-23', pitches: 45, isTournament: true, tournamentId: 'lt' })] };
+  const day1 = logic.getLivePitcherBudget(p, liveGame({ date: '2026-10-23', context: 'lt',
+    pitchers: { a: { pitches: 3, status: 'active', order: 1 } } }), [LT]);
+  assert.strictEqual(day1.pitchesLeft, 2);
+  assert.strictEqual(day1.leftLabel, 'left today');
+  const day2 = logic.getLivePitcherBudget(p, liveGame({ date: '2026-10-24', context: 'lt',
+    pitchers: { a: { pitches: 41, status: 'active', order: 1 } } }), [LT]);
+  assert.strictEqual(day2.pitchesLeft, 100 - 86);
+  assert.strictEqual(day2.leftLabel, 'left in tourney');
+  assert.ok(day2.note && /guideline/.test(day2.note));
+});
+
+test('10e. tournament: date outside tournament is unavailable', () => {
+  const b = logic.getLivePitcherBudget({ id: 'a', history: [] }, liveGame({ date: '2026-10-30', context: 'lt' }), [LT]);
+  assert.strictEqual(b.eligible, false);
+});
+
+test('10f. liveGameToLogEntries drops 0-count pitchers and keeps entry order', () => {
+  const g = liveGame({ pitchers: {
+    b: { pitches: 20, status: 'active', order: 2 },
+    a: { pitches: 30, status: 'left', order: 1 },
+    c: { pitches: 0, status: 'left', order: 3 } } });
+  const { entries, dropped } = logic.liveGameToLogEntries(g, [], 'sg');
+  assert.deepStrictEqual(entries.map(e => e.playerId), ['a', 'b']);
+  assert.deepStrictEqual(dropped, ['c']);
+  assert.strictEqual(entries[0].data.gameId, 'sg_a');
+  assert.strictEqual(entries[0].data.sharedGameId, 'sg');
+  assert.strictEqual(entries[0].data.isTournament, false);
+  assert.strictEqual(entries[0].data.opponent, 'Hawks');
+});
+
+test('10g. liveGameToLogEntries for a tournament fills tournament fields from the date', () => {
+  const g = liveGame({ date: '2026-10-24', context: 'lt', pitchers: { a: { pitches: 12, status: 'active', order: 1 } } });
+  const d = logic.liveGameToLogEntries(g, [LT], 'sg').entries[0].data;
+  assert.strictEqual(d.tournamentId, 'lt');
+  assert.strictEqual(d.tournamentName, 'Fall Classic');
+  assert.strictEqual(d.tourneyDay, 2);
+});
+
+test('10h. normalizeLiveGame rejects junk and sanitizes fields', () => {
+  assert.strictEqual(logic.normalizeLiveGame(null), null);
+  assert.strictEqual(logic.normalizeLiveGame({ date: '2026-10-20' }), null);
+  const g = logic.normalizeLiveGame({ id: 'x', date: 'nope', opponent: '  ' + 'z'.repeat(100),
+    pitchers: { a: { pitches: -4, status: 'active' }, b: 'junk', c: { pitches: '5000', status: 'left' }, d: { pitches: 3 } } });
+  assert.ok(logic.isIsoDate(g.date));
+  assert.strictEqual(g.opponent.length, logic.LIVE_OPPONENT_MAX);
+  assert.deepStrictEqual(Object.keys(g.pitchers), ['a', 'c']); // d: no status -> dropped
+  assert.strictEqual(g.pitchers.a.pitches, 0);
+  assert.strictEqual(g.pitchers.a.status, 'active');
+  assert.strictEqual(g.pitchers.c.pitches, logic.LIVE_MAX_COUNT);
+});
+
+test('10i. getRestThresholdInfo at the 3-day max has no next threshold', () => {
+  assert.deepStrictEqual(logic.getRestThresholdInfo(0), { restDays: 0, nextAt: 21, nextRestDays: 1 });
+  assert.deepStrictEqual(logic.getRestThresholdInfo(61), { restDays: 3, nextAt: null, nextRestDays: null });
+});
+
+test('10j. applyLiveGameAction guards game id, missing pitchers, and clamps counts', () => {
+  const g = liveGame({ pitchers: { a: { pitches: 1, status: 'active', order: 1, enteredAt: 1 } } });
+  const A = (raw, action) => logic.applyLiveGameAction(raw, 'lg1', action);
+  assert.strictEqual(A(null, { type: 'bump', id: 'a', delta: 1 }), undefined);            // game gone
+  assert.strictEqual(A({ pitchers: {} }, { type: 'bump', id: 'a', delta: 1 }), undefined); // junk, no id
+  assert.strictEqual(logic.applyLiveGameAction(g, 'other', { type: 'bump', id: 'a', delta: 1 }), undefined);
+  assert.strictEqual(A(g, { type: 'bump', id: 'zz', delta: 1 }), undefined);              // removed pitcher
+  assert.strictEqual(A(g, { type: 'bump', id: 'a', delta: -5 }).pitchers.a.pitches, 0);
+  assert.strictEqual(A(g, { type: 'setCount', id: 'a', value: '5000' }).pitchers.a.pitches, 999);
+  assert.strictEqual(g.pitchers.a.pitches, 1); // input not mutated
+});
+
+test('10k. add marks the active pitcher left; undoAdd reverses only before the new pitcher throws', () => {
+  const g = liveGame({ pitchers: { a: { pitches: 30, status: 'active', order: 1, enteredAt: 1 } } });
+  const g2 = logic.applyLiveGameAction(g, 'lg1', { type: 'add', id: 'b', now: 5 });
+  assert.strictEqual(g2.pitchers.a.status, 'left');
+  assert.strictEqual(g2.pitchers.a.leftAt, 5);
+  assert.deepStrictEqual(g2.pitchers.b, { pitches: 0, status: 'active', order: 2, enteredAt: 5 });
+  assert.strictEqual(logic.applyLiveGameAction(g2, 'lg1', { type: 'add', id: 'b' }), undefined); // already in
+  const g3 = logic.applyLiveGameAction(g2, 'lg1', { type: 'undoAdd', id: 'b', prevIds: ['a'] });
+  assert.strictEqual(g3.pitchers.b, undefined);
+  assert.strictEqual(g3.pitchers.a.status, 'active');
+  const thrown = logic.applyLiveGameAction(g2, 'lg1', { type: 'bump', id: 'b', delta: 1 });
+  assert.strictEqual(logic.applyLiveGameAction(thrown, 'lg1', { type: 'undoAdd', id: 'b', prevIds: ['a'] }), undefined);
+});
+
+test('10l. sanitizeLiveCount handles exponent-notation numbers', () => {
+  assert.strictEqual(logic.sanitizeLiveCount(1e21), 999);
+  assert.strictEqual(logic.sanitizeLiveCount(Infinity), 0);
+  assert.strictEqual(logic.sanitizeLiveCount(12.7), 12);
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────
 
 console.log('');

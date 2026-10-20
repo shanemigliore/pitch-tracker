@@ -34,6 +34,7 @@ function ActivityScreen({ auditLog, roster, onUndo, undidIds, onUndid }) {
     DELETE_TOURNEY: { label:"Tourney Deleted",color:"#f43f5e" },
     EDIT_TOURNEY:   { label:"Tourney Edited", color:"#fbbf24" },
     UNDO:           { label:"Undone",         color:"#fbbf24" },
+    DISCARD_LIVE_GAME: { label:"Live Game Discarded", color:"#f43f5e" },
   };
 
   // Per subject, only the most-recent non-undone entry can be undone.

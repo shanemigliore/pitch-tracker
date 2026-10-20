@@ -57,13 +57,8 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
   //   hard daily limit / the tournament total (getTourneyLimitViolation).
   // Guideline overages come back as level "note" and never block.
   function getCheck(p) {
-    if (context==="regular") {
-      const eligStr = getEligibleDateStr(p, tournaments, { before: gameDate });
-      return eligStr && eligStr > gameDate
-        ? { level:"violation", message:`Resting — eligible ${formatDate(eligStr)}` } : null;
-    }
-    if (!selectedTourney || dateOutsideTourney) return null;
-    return getTourneyLimitViolation(p, selectedTourney, gameDate, getCount(p.id), tournaments);
+    if (dateOutsideTourney) return null;
+    return getGameLogCheck(p, { context, tourney:selectedTourney, date:gameDate, count:getCount(p.id), tournaments });
   }
   function getViolation(p) {
     const c = getCheck(p);
@@ -80,20 +75,9 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
     const violations = toLog.map(p=>({ p, reason:getViolation(p) })).filter(v=>v.reason);
     if (violations.length>0 && !confirmed) { setWarnViolations(true); return; }
     setWarnViolations(false);
-    const sharedGameId = newId();
-    toLog.forEach(p=>{
-      onLogMultiple(p.id, {
-        pitches: getCount(p.id),
-        date: gameDate,
-        opponent,
-        isTournament: context!=="regular",
-        tournamentId: context!=="regular"?context:null,
-        tournamentName: context!=="regular"?selectedTourney?.name:null,
-        tourneyDay: context!=="regular"?tourneyDay:null,
-        gameId: sharedGameId + "_" + p.id,
-        sharedGameId,
-      });
-    });
+    buildGameEntries({ pitchers: toLog.map(p=>({ id:p.id, pitches:getCount(p.id) })),
+      date: gameDate, opponent, context, tourney: selectedTourney, sharedGameId: newId() })
+      .forEach(e => onLogMultiple(e.playerId, e.data));
     setSaved(true);
   }
 
