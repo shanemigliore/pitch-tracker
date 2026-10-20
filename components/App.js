@@ -6,6 +6,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 const TABS = [
   { id:"roster",   label:"Roster",   icon:I.roster   },
+  { id:"live",     label:"Live",     icon:I.live     },
   { id:"gamelog",  label:"Game Log", icon:I.gamelog  },
   { id:"season",   label:"Season",   icon:I.history  },
   { id:"settings", label:"Settings", icon:I.settings },
@@ -49,6 +50,7 @@ function App({ role }) {
     // Reset app data for the new team
     setRoster([]);
     setTournaments([]);
+    setLiveGame(null);
     setLoaded(false);
     setTab("roster");
     setSelectedPlayer(null);
@@ -64,6 +66,7 @@ function App({ role }) {
   const [auditLog,    setAuditLog]    = useState([]);
   const [undidIds,    setUndidIds]    = useState(new Set());
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [liveGame,    setLiveGame]    = useState(null);
 
   // Refs for stale-closure-free access inside callbacks
   const rosterRef      = useRef(roster);       rosterRef.current      = roster;
@@ -147,6 +150,18 @@ function App({ role }) {
       });
     });
     return () => unsub();
+  }, [teamId]);
+
+  // Live game for current team - its own listener, written field-by-field by
+  // the live-game handlers below rather than through the roster save effect.
+  useEffect(() => {
+    setLiveGame(null);
+    if (!teamId || !window.__fbWatchLiveGame) return;
+    const subscribedTeamId = teamId;
+    return window.__fbWatchLiveGame(teamId, raw => {
+      if (teamIdRef.current !== subscribedTeamId) return;
+      setLiveGame(normalizeLiveGame(raw));
+    });
   }, [teamId]);
 
   // Write to Firebase whenever data changes (after initial load)
@@ -320,6 +335,63 @@ function App({ role }) {
       return { ...prev, ...recomputeLast(history), history };
     });
     return true;
+  }, []);
+
+  // ── Live game handlers ─────────────────────────────────────────────────
+  function reportSyncError(err) {
+    console.error("[live] Firebase write failed:", err);
+    setLastSyncError(err && err.message ? err.message : String(err));
+    setSyncStatus(err && err.code === "PERMISSION_DENIED" ? "error" : "offline");
+  }
+
+  const startLiveGame = useCallback(({ date, context, opponent }) => {
+    const tid = teamIdRef.current;
+    if (!tid || !window.__fbStartLiveGame) return Promise.resolve(false);
+    return window.__fbStartLiveGame(tid, {
+      id: newId(), date, context, opponent: sanitizeOpponent(opponent),
+      startedAt: Date.now(), startedBy: getCoachName(),
+    });
+  }, []);
+
+  const updateLiveGame = useCallback(patch => {
+    const tid = teamIdRef.current;
+    if (!tid || !window.__fbUpdateLiveGame) return;
+    window.__fbUpdateLiveGame(tid, patch).catch(reportSyncError);
+  }, []);
+
+  // Claims the game on the server first (so two coaches finishing at once can't
+  // both log it), then logs whatever the server had - not this device's copy.
+  // Resolves { count, opponent }, or null if another device got there first.
+  const completeLiveGame = useCallback(gameId => {
+    const tid = teamIdRef.current;
+    if (!tid || !window.__fbClaimLiveGame) return Promise.resolve(null);
+    return window.__fbClaimLiveGame(tid, gameId).then(raw => {
+      const game = normalizeLiveGame(raw);
+      if (!game) return null;
+      const onRoster = new Set(rosterRef.current.map(p => p.id));
+      const { entries } = liveGameToLogEntries(game, tournamentsRef.current, newId());
+      const logged = entries.filter(e => onRoster.has(e.playerId));
+      logged.forEach(e => logMultiple(e.playerId, e.data));
+      return { count: logged.length, opponent: game.opponent };
+    });
+  }, [logMultiple]);
+
+  const discardLiveGame = useCallback(gameId => {
+    const tid = teamIdRef.current;
+    if (!tid || !window.__fbClaimLiveGame) return Promise.resolve(false);
+    return window.__fbClaimLiveGame(tid, gameId).then(raw => {
+      const game = normalizeLiveGame(raw);
+      if (!game) return false;
+      const names = getLiveGamePitcherIds(game).map(id => {
+        const p = rosterRef.current.find(x => x.id === id);
+        return `${p ? p.name : id} ${game.pitchers[id].pitches}p`;
+      });
+      // Not undoable, but the detail keeps the counts recoverable by hand.
+      pushAudit("DISCARD_LIVE_GAME",
+        `Discarded live game${game.opponent ? ` vs ${game.opponent}` : ""} (${formatDate(game.date)})${names.length ? `: ${names.join(", ")}` : ""}`,
+        null);
+      return true;
+    });
   }, []);
 
   // Takes the full audit entry (not just its undoData) so it can log a
@@ -503,6 +575,12 @@ function App({ role }) {
           </ScreenBoundary>
         ) : tab==="roster" ? (
           <EligibilityScreen roster={roster} tournaments={tournaments} onSelect={p=>setSelectedPlayer(p)}/>
+        ) : tab==="live" ? (
+          <ScreenBoundary>
+            <LiveGameScreen roster={roster} tournaments={tournaments} liveGame={liveGame}
+              onStart={startLiveGame} onUpdate={updateLiveGame}
+              onComplete={completeLiveGame} onDiscard={discardLiveGame}/>
+          </ScreenBoundary>
         ) : tab==="gamelog" ? (
           <GameLogScreen roster={roster} onLogMultiple={logMultiple} tournaments={tournaments}/>
         ) : tab==="season" ? (
@@ -533,7 +611,13 @@ function App({ role }) {
               <button key={t.id} onClick={()=>{ setTab(t.id); if(t.id!=="roster") setSelectedPlayer(null); }} aria-pressed={active}
                 style={{ flex:1, background:"transparent", border:"none", cursor:"pointer",
                   padding:"9px 0 7px", display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-                <div style={{ color:active?"#38bdf8":"rgba(255,255,255,0.3)", transition:"color 0.2s" }}>{t.icon}</div>
+                <div style={{ position:"relative", color:active?"#38bdf8":"rgba(255,255,255,0.3)", transition:"color 0.2s" }}>
+                  {t.icon}
+                  {t.id==="live" && liveGame && (
+                    <span className="live-dot" aria-label="Game in progress"
+                      style={{ position:"absolute", top:-1, right:-3, width:8, height:8, borderRadius:"50%", background:"#ef4444" }}/>
+                  )}
+                </div>
                 <span style={{ fontSize:10, fontWeight:700, letterSpacing:0.5,
                   color:active?"#38bdf8":"rgba(255,255,255,0.3)", transition:"color 0.2s" }}>
                   {t.label.toUpperCase()}

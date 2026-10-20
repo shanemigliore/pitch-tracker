@@ -40,7 +40,7 @@ only when the user explicitly asks for it.
 ## App Architecture
 
 **Static, multi-file, still zero build step/npm.** `index.html` is now just a
-small shell (~230 lines: `<head>`, a head-shell script, 13+3 `<script>` tags,
+small shell (~230 lines: `<head>`, a head-shell script, 14+3 `<script>` tags,
 service worker). Pure logic, Firebase glue, shared UI tokens, and every
 screen/modal component were split out of what used to be one 1.65MB file
 (Phase 1: `lib/`; Phase 2: `components/`) so both the browser and Claude/tests
@@ -53,7 +53,7 @@ can load just what they need:
 | `lib/pitch-logic.js` | Rest-day/eligibility/date/device-id/coach-name math, `recomputeLast`, `getActiveTourney`, `getSubjectKey` — UMD module, also `require()`'d directly by `tests/logic.test.js` | plain `<script src>`, exposes `window.PitchLogic` |
 | `lib/ui-constants.js` | `STATUS`, icon set `I` (includes `settings`), shared style objects (`card`, `inputStyle`, etc.) — contains JSX (icons), IIFE-wrapped | `<script type="text/babel" src>`, exposes `window.UIConstants` |
 | `components/shared.js` | `Chip`, `RadialArc`, `ContextPicker`, `ScreenBoundary` | `<script type="text/babel" src>` |
-| `components/EditGameModal.js`, `PitcherDetail.js`, `GameLogScreen.js`, `EligibilityScreen.js`, `TournamentScreen.js`, `EditGameGroupModal.js`, `SeasonHistory.js`, `TeamPickerScreen.js`, `ActivityScreen.js`, `Settings.js` | One screen/modal component each | `<script type="text/babel" src>` each |
+| `components/EditGameModal.js`, `PitcherDetail.js`, `GameLogScreen.js`, `LiveGameScreen.js`, `EligibilityScreen.js`, `TournamentScreen.js`, `EditGameGroupModal.js`, `SeasonHistory.js`, `TeamPickerScreen.js`, `ActivityScreen.js`, `Settings.js` | One screen/modal component each | `<script type="text/babel" src>` each |
 | `components/App.js` | `TABS`, `TEAM_ID_KEY`, `TEAM_META_KEY` consts, then `App` (root component, receives `role` prop: team selection, Firebase subscription, tab routing, all handlers) | `<script type="text/babel" src>` |
 | `components/AuthGate.js` | `AuthGate` — password + one-time coach-name gate shown before `App`; renders `<App role={role}/>` once signed in and named | `<script type="text/babel" src>` |
 | `assets/logo.png` | App logo/icon (was a ~500KB inline base64 blob) | referenced by `LOGO_URI`, apple-touch-icon link |
@@ -62,7 +62,7 @@ can load just what they need:
 
 `index.html`'s head-shell destructures `window.PitchLogic` and
 `window.UIConstants` before any component script loads, so every call site
-across all 13 `components/*.js` files (`getAvailabilityStatus(...)`, `card`,
+across all 14 `components/*.js` files (`getAvailabilityStatus(...)`, `card`,
 `STATUS[...]`, `useState`, etc.) resolves as a plain free variable — classic
 `<script>` tags share one global lexical environment, so this works regardless
 of which component file loads in which order. `currentRules` is no longer a
@@ -73,7 +73,7 @@ bare mutable global — read it via `getCurrentRules()` and write it via
 reference shared globals inside their function bodies, which don't run until
 React actually calls them at render time, well after every script tag has
 executed. The one hard rule: the bootstrap script (`window.__PitchApp = AuthGate;`
-+ `ReactDOM.createRoot(...).render(...)`) must come after all 13 component
++ `ReactDOM.createRoot(...).render(...)`) must come after all 14 component
 `<script>` tags, since `AuthGate` references `App` directly by name (and the
 bootstrap script references `AuthGate`).
 
@@ -101,7 +101,7 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - Firebase Realtime Database (email/password auth via two shared accounts — see Auth below)
 - No build step, no bundler, no npm
 
-**Current version:** v3.7
+**Current version:** v3.8
 
 ---
 
@@ -153,6 +153,7 @@ user is signed in — never resolves if nobody's signed in, which is the point).
 ```
 /teams/{teamId}/roster        — object keyed by pitcherId → Pitcher
 /teams/{teamId}/tournaments   — object keyed by tourneyId → Tournament
+/teams/{teamId}/liveGame      — LiveGame | absent — the one in-progress game (Live tab)
 /teamsMeta/{teamId}           — { name, rules, createdAt, seasonId }
 /seasonsMeta/{seasonId}       — { term, year, createdAt } — see Seasons below
 /auditLog/{teamId}/{pushKey}  — AuditEntry (limitToLast 50)
@@ -172,6 +173,11 @@ user is signed in — never resolves if nobody's signed in, which is the point).
 - `__fbMigrateSeasonIfNeeded()` — one-time: ensures a `Spring 2026` season exists (`seasonId: "2026_spring"`) and backfills that `seasonId` onto any `teamsMeta` entry missing one (covers teams created before seasons existed)
 - `__fbListSeasons()` — reads `/seasonsMeta` (parent-level read, requires read rule at `seasonsMeta`)
 - `__fbCreateSeason(term, year)` — `seasonId` is deterministic (`${year}_${term.toLowerCase()}`), so creating the same term+year twice returns the existing season instead of duplicating it; resolves with the `seasonId`
+- `__fbWatchLiveGame(teamId, onData)` — live listener on `/teams/{teamId}/liveGame` (raw value or `null`; App runs it through `normalizeLiveGame`)
+- `__fbStartLiveGame(teamId, game)` — transaction: creates the live game only if none exists; resolves `true` if this call created it
+- `__fbUpdateLiveGame(teamId, patch)` — multi-path `update()` relative to `liveGame` (e.g. `{"pitchers/abc/pitches": 23}`) — never a whole-object set, so concurrent edits to different pitchers don't clobber
+- `__fbLiveIncrement(n)` — `ServerValue.increment(n)`, used for the +/- buttons so simultaneous taps from two devices both count
+- `__fbClaimLiveGame(teamId, gameId)` — transaction (not applied locally) that removes the live game only if its id still matches; resolves with the server's copy if this device won, `null` otherwise. Used by both complete and discard, so a game can't be logged twice
 - `__fbGetRoster(teamId)` — one-time read of another team's roster (used for roster cloning at team-creation time)
 - `__fbSignIn(password)` — tries the password against the admin account, then the coach account; resolves once either succeeds, rejects if neither does
 - `__fbOnAuthChange(cb)` — wraps `auth.onAuthStateChanged`; fires immediately with the current user (or `null`), then on every sign-in/out; returns the unsubscribe function
@@ -309,6 +315,22 @@ team's roster/tournaments/history do not carry over when it's reassigned or
 when a new team is created for a new season — each `teamId` is its own
 isolated dataset (see "Roster cloning" under Key Patterns below).
 
+**LiveGame (stored at `/teams/{teamId}/liveGame`, at most one per team):**
+```js
+{
+  id: string,               // newId(); claim/complete/discard check it still matches
+  date: string,             // "YYYY-MM-DD", defaults to today, keeps its date if left unfinished
+  context: "regular" | tourneyId,
+  opponent: string,         // optional while live, required to log; trimmed, max 60 chars
+  startedAt: number, startedBy: string,  // getCoachName() of whoever started it
+  pitchers: { [pitcherId]: { pitches: number /* 0..999 */, status: "active" | "left",
+                             order: number, enteredAt: number, leftAt: number | null } }
+}
+```
+Any authenticated client can write it, so it's always read through
+`normalizeLiveGame` (returns `null` for anything malformed, clamps counts,
+sanitizes the opponent). No new security rules — it's under `/teams/{teamId}`.
+
 **AuditEntry (stored in Firebase, received in auditLog array):**
 ```js
 {
@@ -357,6 +379,7 @@ renders it with a "⚠ Not synced" badge instead of leaving it looking normal.
 | `ADD_TOURNEY` | `DELETE_TOURNEY` | `tourneyId` |
 | `EDIT_TOURNEY` | `RESTORE_TOURNEY` | `tourney` (full Tournament object) |
 | `DELETE_TOURNEY` | `RESTORE_TOURNEY` | `tourney` |
+| `DISCARD_LIVE_GAME` | *(none — `undoData:null`)* | Pushed when a live game is discarded; `detail` lists each pitcher's count so it's recoverable by hand. Live count changes and starting a game are deliberately never audited (noise); completing one produces the normal `LOG_GAME` entries. |
 | `UNDO` | *(none — `undoData:null`)* | Pushed by `executeUndo` itself on every successful undo, detail `"Undid: <original entry's detail>"`. Can't itself be undone. The handler that performed the original action has its own audit push suppressed (`{skipAudit:true}`) when invoked via undo, so exactly one entry is logged per undo instead of a mislabeled duplicate. |
 
 ---
@@ -367,7 +390,7 @@ Every component listed below lives in its own file under `components/`
 (Phase 2 of the split — see App Architecture above), except the four in
 `components/shared.js`.
 
-The bottom nav has 4 tabs. This is a deliberate consolidation (originally 6
+The bottom nav has 5 tabs (Roster, Live, Game Log, Season, Settings). The 4 non-Live tabs are a deliberate consolidation (originally 6
 tabs) so related information isn't split across screens the coach has to flip
 between, and so info that's only relevant in one context (e.g. pre-game
 eligibility) doesn't linger where it isn't — see "Key Patterns" below for the
@@ -378,6 +401,7 @@ specific principle.
 |-----------|------|--------|---------|
 | `EligibilityScreen` | `components/EligibilityScreen.js` | `roster` | **The Roster tab.** Pitcher list grouped by availability for a chosen date (regular season or a specific tournament's budget), tap a pitcher to drill into `PitcherDetail`. (Filename predates the merge with the old standalone roster list.) |
 | `PitcherDetail` | `components/PitcherDetail.js` | `roster` (drill-in) | Pitcher stats, editable season history, edit name/jersey, remove from roster. Logging a new game happens on the Game Log tab, not here. |
+| `LiveGameScreen` | `components/LiveGameScreen.js` | `live` | **The Live tab.** Running pitch counts for the game in progress, shared live across devices via `/teams/{teamId}/liveGame`. Setup (date defaults to today, `ContextPicker`, opponent + recent-opponent chips) → in-game cards (−1/+1/+5 + tap-to-type running total, pitches left, rest hint, "Left game" / "Put back in…" / Remove) → available pitchers (tap to bring in) → not-available list with reasons → **Log Complete Game** (same checks/entries as Game Log) or Discard. The tab icon gets a pulsing red dot while a game is live. |
 | `GameLogScreen` | `components/GameLogScreen.js` | `gamelog` | Log a **new** game for multiple pitchers at once (two-step: who pitched, then pitch counts). Entry-only — browsing/editing past games moved to the Season tab. |
 | `SeasonHistory` | `components/SeasonHistory.js` | `season` | **The Season tab.** Chronological game history with leaderboard. Tournament games collapse into one container per tournament (day-by-day breakdown inside), positioned by its most recent game date, so the whole season is browsable as one continuous list without switching to a separate tournament view. |
 | `Settings` | `components/Settings.js` | `settings` | **The Settings tab.** Sub-nav over four sections: Roster (add a pitcher — `AddPitcherSection`, same file), Tournaments (renders `TournamentScreen`), Activity (renders `ActivityScreen`), Account (signed-in name/role + log out — `AccountSection`, same file). |
@@ -416,7 +440,8 @@ lastSyncError     // string | null — human-readable detail shown when syncStat
 loaded            // boolean — initial data received from Firebase
 roster            // Pitcher[] — sorted by name
 tournaments       // Tournament[]
-tab               // "roster"|"gamelog"|"season"|"settings"
+liveGame          // LiveGame | null — normalized, from its own __fbWatchLiveGame listener
+tab               // "roster"|"live"|"gamelog"|"season"|"settings"
 selectedPlayer    // Pitcher | null — active drill-in on Roster tab
 auditLog          // AuditEntry[] — last 50, newest first
 undidIds          // Set<string> — audit entry IDs that have been undone (persists across tab changes)
@@ -437,6 +462,10 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 | `deleteTourney(id, opts?)` | Removes tournament, pushes DELETE_TOURNEY audit unless `opts.skipAudit`; returns whether the tournament existed |
 | `updateTourney(t)` | Updates tournament, pushes EDIT_TOURNEY audit |
 | `executeUndo(entry)` | Dispatches to the correct handler based on `entry.undoData.type` (with `{skipAudit:true}` so the handler's own audit push doesn't fire), then pushes one `UNDO` audit entry on success. Returns whether the undo actually found its target — `ActivityScreen` alerts the user instead of marking it undone when it returns `false`. Guarded by a ref (`undoneEntryIdsRef`) against a same-tick double-invocation re-running the same entry. |
+| `startLiveGame({date, context, opponent})` | `__fbStartLiveGame` with a fresh id and `startedBy: getCoachName()` |
+| `updateLiveGame(patch)` | `__fbUpdateLiveGame`; a rejected write goes to the same sync-error banner as roster saves |
+| `completeLiveGame(gameId)` | `__fbClaimLiveGame`, then `liveGameToLogEntries` on the **server's** copy → `logMultiple` per pitcher still on the roster. Resolves `{count, opponent}`, or `null` if another device already finished/discarded it |
+| `discardLiveGame(gameId)` | `__fbClaimLiveGame`, then a `DISCARD_LIVE_GAME` audit entry |
 | `pushAudit(action, detail, undoData, extra)` | Writes to `/auditLog/{teamId}` via `__fbPushAudit`; `extra` is spread into the entry; on write failure, flags the optimistic local entry `_failed:true` |
 | `logout()` | Confirmed via `AccountSection`'s prompt before it's called. Clears the saved team (`TEAM_ID_KEY`/`TEAM_META_KEY`) and coach name (`setCoachName("")`), then calls `__fbSignOut()` — `AuthGate`'s listener picks up the resulting sign-out and swaps back to the password screen, so the next person on this device starts completely fresh. No audit entry (there's no team/session left to attribute it to). |
 
@@ -454,6 +483,12 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 | `getPitcherTourneyStats(pitcher, t)` | `{ total, byDay[], games, lastPitchDate }` for one tournament |
 | `getTourneyEligibility(pitcher, t, dateStr, tournaments)` | In-tournament eligibility on a date (dates before start = Day 1): `{ eligible, reason, dayNum, dayPitches, dayLimit, pitchesLeft, ... }` |
 | `getTourneyLimitViolation(pitcher, t, dateStr, count, tournaments)` | Save-time check for a tournament game: `null`, `{level:"note"}` (guideline, non-blocking) or `{level:"violation"}` |
+| `getGameLogCheck(pitcher, {context, tourney, date, count, tournaments})` | Save-time rule check shared by Game Log and Live: regular-season rest owed, or `getTourneyLimitViolation` |
+| `buildGameEntries({pitchers, date, opponent, context, tourney, sharedGameId})` | HistoryEntry payloads (`{playerId, data}`) for one game — shared by Game Log and Live |
+| `getLivePitcherBudget(pitcher, liveGame, tournaments)` | Live tab per-pitcher view: `{ inGame, hasLeft, count, eligible, reason, priorToday, pitchesLeft, leftLabel, arcValue, arcMax, note, rest }`. Eligibility is from logged history only (so it doesn't flip mid-game); pitches left includes the live count. Regular: `maxPitches` per day minus already-logged same-day pitches + live count. Tournament: tighter of the day's hard limit and the total |
+| `getRestThresholdInfo(pitches)` | `{ restDays, nextAt, nextRestDays }` — next rest threshold (strict `>`, so `nextAt = restN + 1`) |
+| `liveGameToLogEntries(liveGame, tournaments, sharedGameId)` | `{ entries, dropped }` — 0-count pitchers dropped, entry order preserved |
+| `normalizeLiveGame(raw)` / `sanitizeLiveCount(v)` / `sanitizeOpponent(s)` | Untrusted-input guards for the live game (counts 0..`LIVE_MAX_COUNT`, opponent ≤ `LIVE_OPPONENT_MAX`) |
 | `getAvailabilityStatus(pitcher, onDate, tournaments)` | Returns STATUS key for a pitcher on a given date |
 | `daysUntilEligible(pitcher, onDate, tournaments)` | Returns number of days until pitcher can throw |
 | `getEligibleDateStr(pitcher, tournaments, opts?)` | Eligible date as `"YYYY-MM-DD"` (or `null`); `opts.before` as above |
@@ -494,5 +529,7 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 **Season-scoped isolation / roster cloning:** Two teams can share a name (e.g. "Prime 10U" in both `Fall 2026` and `Spring 2027`) because each is its own `teamId` with its own `/teams/{teamId}/roster`, `/teams/{teamId}/tournaments`, and history — nothing carries over automatically between seasons. To start a new season's team with last season's roster, `TeamPickerScreen` reads the source team's roster via `__fbGetRoster`, assigns each pitcher a **new id** via `newId()`, and resets `lastPitches: 0, lastGameDate: "", history: []` — only `name`/`jersey` copy over. Tournaments are never cloned (they're season-specific by nature).
 
 **Repeat info only where it's contextually useful:** `GameLogScreen` deliberately does not show a pitcher's pre-game eligibility/rest status while picking who pitched or entering counts — the game already happened, so "were they allowed to start" isn't the question at that point. What it does check, once counts are entered (`getCheck` in `GameLogScreen.js`, judged as of the game date): for a regular-season game, rest still owed from earlier outings (`getEligibleDateStr(..., {before: gameDate})`); for a tournament game, `getTourneyLimitViolation` (pre-tournament rest, that day's hard limit, the tournament total) — either blocks Save behind a warn-and-override screen, same pattern as the old ineligible-pitcher warning. If you're tempted to add a status chip back into the entry flow, check whether it's answering a question that's actually relevant post-hoc before doing so.
+
+**Live game (Live tab):** one per team. Bringing a pitcher in auto-marks whoever is pitching as "left" (with a 10s Undo for a mistap); once left, a pitcher can't return — "Put back in…" exists only to fix mistakes, behind a confirm. Unavailable pitchers (resting, at a tournament limit, already at the daily max) can't be brought in. Counts may go over the limit (finishing a batter) with a red warning; logging then goes through the same warn-and-override as Game Log. A game from an earlier date stays put with an "Unfinished game" banner and keeps its own date when logged. Typed fields (count, opponent) hold a local draft while focused and commit on blur/Enter, so a remote update can't yank the value mid-typing. `__fbSubscribe` skips its callback when only `liveGame` changed (roster/tournaments JSON unchanged) — otherwise every +1 tap on any device would hand App a fresh roster array and the save effect would write the whole roster back.
 
 **`window.__pendingAppUpdateVersion` / `window.__applyPendingAppUpdate`:** set by the version-check script in `index.html` on a deploy mismatch, instead of reloading immediately (which could wipe unsaved input mid-entry). `App.js` listens for the `pt-update-available` window event (and checks the flag on mount, in case the event fired before the listener attached) and shows a tappable banner; the banner calls `window.__applyPendingAppUpdate()` to actually clear caches and reload, on the user's own timing.
