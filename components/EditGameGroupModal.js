@@ -10,7 +10,6 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
   const [editContext, setEditContext] = useState(
     game.isTournament ? (game.tournamentId || "regular") : "regular"
   );
-  const [editTourneyDay, setEditTourneyDay] = useState(game.tourneyDay || 1);
   const [pitcherPitches, setPitcherPitches] = useState(() => {
     const m = {};
     game.pitchers.forEach(p => { m[p.pitcherId] = String(p.pitches); });
@@ -19,8 +18,11 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const selectedTourney = tournaments.find(t => t.id === editContext);
+  const editTourneyDay = selectedTourney ? getTourneyDayNumber(selectedTourney, editDate) : null;
+  const dateOutsideTourney = editContext !== "regular" && !!selectedTourney && !editTourneyDay;
 
   function handleSave() {
+    if (dateOutsideTourney) return;
     game.pitchers.forEach(p => {
       const pitches = parseInt(pitcherPitches[p.pitcherId], 10);
       if (isNaN(pitches) || pitches < 1) return;
@@ -32,7 +34,7 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
         isTournament: editContext !== "regular",
         tournamentId: editContext !== "regular" ? editContext : null,
         tournamentName: editContext !== "regular" ? selectedTourney?.name : null,
-        tourneyDay: editContext !== "regular" ? parseInt(editTourneyDay, 10) : null,
+        tourneyDay: editContext !== "regular" ? editTourneyDay : null,
       });
     });
     onClose();
@@ -63,7 +65,6 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
         </div>
 
         <ContextPicker context={editContext} setContext={setEditContext}
-          tourneyDay={editTourneyDay} setTourneyDay={setEditTourneyDay}
           tournaments={tournaments} gameDate={editDate}/>
 
         <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME DATE</label>
@@ -133,7 +134,7 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
 
         <div style={{ display:"flex", gap:8, marginTop:16, marginBottom:10 }}>
           <button onClick={onClose} style={{ ...cancelBtn, flex:1 }}>Cancel</button>
-          <button onClick={handleSave} style={{ ...primaryBtn, flex:2 }}>{I.check} Save Changes</button>
+          <button onClick={handleSave} disabled={dateOutsideTourney} style={{ ...primaryBtn, flex:2, opacity:dateOutsideTourney?0.4:1 }}>{I.check} Save Changes</button>
         </div>
 
         {!confirmDelete ? (

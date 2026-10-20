@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Prime Pitching"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#080c14"/>
-  <meta name="app-version" content="v3.6"/>
+  <meta name="app-version" content="v3.7"/>
   <title>Prime Pitching</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="assets/logo.png"/>
@@ -85,7 +85,7 @@
 
 
 // ─── App version (bump minor for each PR) ────────────────────────────────────
-const APP_VERSION = "v3.6";
+const APP_VERSION = "v3.7";
 const LOGO_URI = "assets/logo.png";
 
 // ─── Pure logic (rest-day/eligibility/date/device-id math) ───────────────────
@@ -95,7 +95,10 @@ const {
   DEFAULT_RULES, setCurrentRules, getCurrentRules,
   getRegRestDays, getEligibleDate, isTourneyOver, getTourneyAdjustedRestInfo,
   getAvailabilityStatus, daysUntilEligible, getEligibleDateStr,
-  formatDate, todayStr, addDays, newId,
+  DEFAULT_TOURNEY_DAY_LIMIT, DEFAULT_TOURNEY_TOTAL,
+  getTourneyDays, getTourneyEndDate, getTourneyDayLimits, getTourneyMaxTotal, getTourneyDayNumber,
+  getPitcherTourneyStats, getTourneyEligibility, getTourneyLimitViolation,
+  formatDate, todayStr, addDays, toLocalDateStr, isIsoDate, newId,
   getDeviceId, getCoachName, setCoachName, recomputeLast,
   getActiveTourney, getSubjectKey,
   getSeasonName, compareSeasonsDesc,

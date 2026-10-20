@@ -101,7 +101,7 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - Firebase Realtime Database (email/password auth via two shared accounts — see Auth below)
 - No build step, no bundler, no npm
 
-**Current version:** v3.6
+**Current version:** v3.7
 
 ---
 
@@ -248,11 +248,43 @@ provider produced the auth.
   name: string,
   startDate: string,    // "YYYY-MM-DD"
   days: number,
-  maxDay1: number,          // pitch cap for tourneyDay 1
-  maxTotal: number,         // pitch cap for the whole tournament (eligibility limit)
-  day1IsHardLimit: boolean  // true = exceeding maxDay1 makes a pitcher ineligible for the rest of the tournament; false = guideline only
+  dayLimits: { max: number, isHard: boolean }[], // one per day, index 0 = Day 1
+  maxTotal: number,         // pitch cap for the whole tournament - always enforced
+  // legacy, still written (mirrors dayLimits[0]) for pre-v3.7 cached clients;
+  // never read directly - always go through getTourneyDayLimits(t):
+  maxDay1: number,
+  day1IsHardLimit: boolean
 }
 ```
+Defaults for a new tournament: every day 50 / hard, total 100. Daily limits may
+sum to more than `maxTotal`. Tournaments saved before v3.7 have only
+`maxDay1`/`day1IsHardLimit`: `getTourneyDayLimits` maps Day 1 from those and
+copies `maxDay1` as a *guideline* onto Days 2..N. RTDB may return `dayLimits`
+as a `{"0":..,"1":..}` object - `getTourneyDayLimits` handles both.
+
+**Tournament eligibility rules (CPYL — `lib/pitch-logic.js`):**
+- *During* a tournament: no rest days between tournament days. A pitcher is
+  ineligible on a given day only if (a) rest from before the tournament is
+  still owed, (b) that day's **hard** limit has been reached (out for the rest
+  of that day), or (c) the tournament total has been reached (out for the rest
+  of the tournament). Guidelines never affect eligibility. "Reached" is `>=`:
+  hitting exactly the cap is allowed; going over is only legal when finishing
+  a batter, which the app can't detect, so it's a warn-and-override at save
+  time (`getTourneyLimitViolation`). All pitches count toward the total and rest.
+- *Regular-season* rest: every outing sets a requirement and the latest eligible
+  date wins (`getOutings` → `getTourneyAdjustedRestInfo`). A regular game day
+  uses that day's pitches. A tournament uses its **total** pitches, rest starts
+  the day after the pitcher's last tournament outing, and the eligible date is
+  never earlier than the day after the tournament ends (CPYL: 33 on Fri of a
+  Fri–Sun tournament → eligible Monday). This applies while a tournament is in
+  progress too (provisional, using the total so far). Thresholds are the team's
+  `rest1/2/3`, same as regular season.
+- The header's ✓/😴 counts (`App.js`) use `getTourneyEligibility` for today
+  while a tournament is active (`getActiveTourney`, shown with a 🏆), and
+  regular-season `getAvailabilityStatus` otherwise.
+- The tournament day a game counts toward is always derived from its date
+  (`getTourneyDayNumber`) — `ContextPicker` no longer has a day picker, and
+  saving is blocked when the game date is outside the selected tournament.
 
 **Team rules (currentRules / DEFAULT_RULES):**
 ```js
@@ -416,10 +448,15 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 |----------|---------|
 | `getEligibleDate(gameDate, pitches, restFn)` | Returns Date or null; null-guards empty/invalid dates |
 | `getRegRestDays(pitches)` | Returns 0/1/2/3 rest days based on pitch count vs. `currentRules` |
-| `getTourneyAdjustedRestInfo(pitcher, tournaments)` | Checks if last game was a tournament and adjusts rest |
+| `getTourneyAdjustedRestInfo(pitcher, tournaments, opts?)` | Regular-season rest across all outings (regular game days + whole tournaments); returns the binding one `{ isTourney, tournamentId, totalPitches, lastPitchDate, eligibleDate, restDays }`. `opts.before` = only outings strictly before that date |
+| `getTourneyDayLimits(t)` / `getTourneyMaxTotal(t)` / `getTourneyDays(t)` / `getTourneyEndDate(t)` | Read tournament config (new or legacy shape) |
+| `getTourneyDayNumber(t, dateStr)` | 1-based tournament day for a date, `null` outside the tournament |
+| `getPitcherTourneyStats(pitcher, t)` | `{ total, byDay[], games, lastPitchDate }` for one tournament |
+| `getTourneyEligibility(pitcher, t, dateStr, tournaments)` | In-tournament eligibility on a date (dates before start = Day 1): `{ eligible, reason, dayNum, dayPitches, dayLimit, pitchesLeft, ... }` |
+| `getTourneyLimitViolation(pitcher, t, dateStr, count, tournaments)` | Save-time check for a tournament game: `null`, `{level:"note"}` (guideline, non-blocking) or `{level:"violation"}` |
 | `getAvailabilityStatus(pitcher, onDate, tournaments)` | Returns STATUS key for a pitcher on a given date |
 | `daysUntilEligible(pitcher, onDate, tournaments)` | Returns number of days until pitcher can throw |
-| `getEligibleDateStr(pitcher, tournaments)` | Human-readable eligible date string |
+| `getEligibleDateStr(pitcher, tournaments, opts?)` | Eligible date as `"YYYY-MM-DD"` (or `null`); `opts.before` as above |
 | `recomputeLast(history)` | Returns `{ lastPitches, lastGameDate }` from history array |
 | `getSubjectKey(undoData)` | Returns a stable string key for the subject of an undo (used for canUndoSet) |
 | `todayStr()` | Returns today as `"YYYY-MM-DD"` |
@@ -456,6 +493,6 @@ undidIds          // Set<string> — audit entry IDs that have been undone (pers
 
 **Season-scoped isolation / roster cloning:** Two teams can share a name (e.g. "Prime 10U" in both `Fall 2026` and `Spring 2027`) because each is its own `teamId` with its own `/teams/{teamId}/roster`, `/teams/{teamId}/tournaments`, and history — nothing carries over automatically between seasons. To start a new season's team with last season's roster, `TeamPickerScreen` reads the source team's roster via `__fbGetRoster`, assigns each pitcher a **new id** via `newId()`, and resets `lastPitches: 0, lastGameDate: "", history: []` — only `name`/`jersey` copy over. Tournaments are never cloned (they're season-specific by nature).
 
-**Repeat info only where it's contextually useful:** `GameLogScreen` deliberately does not show a pitcher's pre-game eligibility/rest status while picking who pitched or entering counts — the game already happened, so "were they allowed to start" isn't the question at that point. What it does check, once counts are entered: a rest-day rule violation (`getAvailabilityStatus`) or a tournament pitch-limit violation (`getViolation` in `GameLogScreen.js`, checking a tournament's `maxDay1`/`maxTotal` against that pitcher's prior-plus-this-game total) — either blocks Save behind a warn-and-override screen, same pattern as the old ineligible-pitcher warning. If you're tempted to add a status chip back into the entry flow, check whether it's answering a question that's actually relevant post-hoc before doing so.
+**Repeat info only where it's contextually useful:** `GameLogScreen` deliberately does not show a pitcher's pre-game eligibility/rest status while picking who pitched or entering counts — the game already happened, so "were they allowed to start" isn't the question at that point. What it does check, once counts are entered (`getCheck` in `GameLogScreen.js`, judged as of the game date): for a regular-season game, rest still owed from earlier outings (`getEligibleDateStr(..., {before: gameDate})`); for a tournament game, `getTourneyLimitViolation` (pre-tournament rest, that day's hard limit, the tournament total) — either blocks Save behind a warn-and-override screen, same pattern as the old ineligible-pitcher warning. If you're tempted to add a status chip back into the entry flow, check whether it's answering a question that's actually relevant post-hoc before doing so.
 
 **`window.__pendingAppUpdateVersion` / `window.__applyPendingAppUpdate`:** set by the version-check script in `index.html` on a deploy mismatch, instead of reloading immediately (which could wipe unsaved input mid-entry). `App.js` listens for the `pt-update-available` window event (and checks the flag on mount, in case the event fired before the listener attached) and shows a tappable banner; the banner calls `window.__applyPendingAppUpdate()` to actually clear caches and reload, on the user's own timing.

@@ -141,45 +141,23 @@ for (const [pitches, expectedDays] of restDayCases) {
   });
 }
 
-// ── 5. Bug #4: mid-tournament rest computation ──────────────────────────────
-// Desired/correct behavior: a pitcher whose only game so far is Day 1 of a
-// still-in-progress 3-day tournament should NOT have rest computed off the
-// cumulative-tournament-total branch (info.isTourney should be false, falling
-// back to plain day-based rest) until the tournament has actually ended.
-// Written as the CORRECT assertion - expected to currently FAIL, which is
-// the proof the bug is real.
+// ── 5. In-progress tournament: regular-season rest uses the running
+// tournament total (CPYL), and can't end before the day after the tournament.
+// (Replaces the pre-v3.7 behavior, which fell back to day-based rest until the
+// tournament ended.)
 
-test('5. [BUG #4] getTourneyAdjustedRestInfo: in-progress tournament (day 1 of 3) should not use tournament-total branch', () => {
+test('5. getTourneyAdjustedRestInfo: in-progress tournament uses running total, clamped past tournament end', () => {
   const today = logic.todayStr();
   const pitcher = {
-    id: 'p1',
-    name: 'Test Pitcher',
-    jersey: '1',
-    lastPitches: 45,
-    lastGameDate: today,
-    history: [
-      makeEntry({
-        gameId: 'g1',
-        date: today,
-        pitches: 45,
-        isTournament: true,
-        tournamentId: 't1',
-        tournamentName: 'Test Tourney',
-        tourneyDay: 1,
-      }),
-    ],
+    id: 'p1', name: 'Test Pitcher', jersey: '1', lastPitches: 45, lastGameDate: today,
+    history: [makeEntry({ gameId: 'g1', date: today, pitches: 45, isTournament: true,
+      tournamentId: 't1', tournamentName: 'Test Tourney', tourneyDay: 1 })],
   };
-  const tournaments = [
-    { id: 't1', name: 'Test Tourney', startDate: today, days: 3, day1IsHardLimit: false },
-  ];
-
+  const tournaments = [{ id: 't1', name: 'Test Tourney', startDate: today, days: 3 }];
   const info = logic.getTourneyAdjustedRestInfo(pitcher, tournaments);
-  assert.strictEqual(
-    info.isTourney,
-    false,
-    `expected info.isTourney to be false for a tournament that hasn't ended yet (day 1 of 3), got ${info.isTourney}` +
-      ` (info=${JSON.stringify(info)})`
-  );
+  assert.strictEqual(info.isTourney, true);
+  // 45 -> 2 rest days -> today+3, which is the day after the 3-day tournament ends anyway.
+  assert.strictEqual(logic.getEligibleDateStr(pitcher, tournaments), logic.addDays(today, 3));
 });
 
 // ── 5b. Post-tournament recovery: cumulative-total branch still applies
@@ -284,6 +262,134 @@ test('8d. compareSeasonsDesc: within same year, later term sorts first', () => {
     ['Fall', 'Summer', 'Spring', 'Winter'],
     `expected Fall>Summer>Spring>Winter within the same year, got ${JSON.stringify(sorted.map(s => s.term))}`
   );
+});
+
+// ── 9. Per-day tournament limits + CPYL post-tournament rest (v3.7) ─────────
+
+logic.setCurrentRules(logic.DEFAULT_RULES); // 10U: 20/40/60
+
+const FRI = '2026-10-23'; // Fri-Sun tournament
+const T3 = { id: 'T', name: 'Fall Classic', startDate: FRI, days: 3, maxTotal: 100,
+  dayLimits: [{ max: 75, isHard: true }, { max: 75, isHard: true }, { max: 75, isHard: true }] };
+
+function tourneyPitcher(perDay, t = T3) {
+  return { id: 'p', name: 'P', jersey: '1', history: perDay
+    .map((n, i) => n ? makeEntry({ date: logic.addDays(t.startDate, i), pitches: n, isTournament: true,
+      tournamentId: t.id, tournamentName: t.name, tourneyDay: i + 1 }) : null)
+    .filter(Boolean) };
+}
+
+// CPYL "Pitch Counts 101" examples (Fri/Sat/Sun) + the examples from the spec.
+const restCases = [
+  ['CPYL pitcher 1: 33/0/0 -> Monday',     [33, 0, 0],  '2026-10-26'],
+  ['CPYL pitcher 2: 28/0/2 -> Tuesday',    [28, 0, 2],  '2026-10-27'],
+  ['CPYL pitcher 3: 10/15/19 -> Wednesday',[10, 15, 19],'2026-10-28'],
+  ['CPYL pitcher 4: 4/20/42 -> Thursday',  [4, 20, 42], '2026-10-29'],
+  ['spec: 20/0/5 -> rest day after tournament, eligible day 5', [20, 0, 5], '2026-10-27'],
+  ['spec: 25/0/0 -> rest served during tournament, eligible after it', [25, 0, 0], '2026-10-26'],
+  ['spec: 25/45/0 = 70 -> 3 rest days starting day 3, eligible day 6', [25, 45, 0], '2026-10-28'],
+  ['25/20/0 = 45 -> 2 rest days from day 2, eligible day 5', [25, 20, 0], '2026-10-27'],
+  ['<=20 total -> no rest days, but not before the day after the tournament', [10, 0, 10], '2026-10-26'],
+];
+for (const [name, perDay, expected] of restCases) {
+  test(`9a. ${name}`, () => {
+    assert.strictEqual(logic.getEligibleDateStr(tourneyPitcher(perDay), [T3]), expected);
+  });
+}
+
+test('9b. regular game pitched during post-tournament rest cannot shorten it', () => {
+  const p = tourneyPitcher([4, 20, 42]); // eligible Thu 10/29
+  p.history.push(makeEntry({ date: '2026-10-27', pitches: 10 })); // illegal Tue game, 0 rest on its own
+  assert.strictEqual(logic.getEligibleDateStr(p, [T3]), '2026-10-29');
+  // ...and a GameLog-style check "as of" Tue only sees the tournament.
+  assert.strictEqual(logic.getEligibleDateStr(p, [T3], { before: '2026-10-27' }), '2026-10-29');
+});
+
+test('9c. later regular game with more rest extends past the tournament rest', () => {
+  const p = tourneyPitcher([33, 0, 0]); // eligible Mon 10/26
+  p.history.push(makeEntry({ date: '2026-10-27', pitches: 65 })); // 3 rest days
+  assert.strictEqual(logic.getEligibleDateStr(p, [T3]), '2026-10-31');
+});
+
+test('9d. getTourneyDayLimits: legacy maxDay1/day1IsHardLimit shape', () => {
+  const legacy = { id: 'L', startDate: FRI, days: 3, maxDay1: 55, day1IsHardLimit: true, maxTotal: 115 };
+  assert.deepStrictEqual(logic.getTourneyDayLimits(legacy),
+    [{ max: 55, isHard: true }, { max: 55, isHard: false }, { max: 55, isHard: false }]);
+  assert.strictEqual(logic.getTourneyMaxTotal(legacy), 115);
+});
+
+test('9e. getTourneyDayLimits: RTDB object-shaped array, short array padded with hard defaults', () => {
+  const t = { startDate: FRI, days: 3, dayLimits: { 0: { max: 60, isHard: false }, 1: { max: 40, isHard: true } } };
+  assert.deepStrictEqual(logic.getTourneyDayLimits(t), [
+    { max: 60, isHard: false }, { max: 40, isHard: true },
+    { max: logic.DEFAULT_TOURNEY_DAY_LIMIT, isHard: true }]);
+});
+
+test('9f. getTourneyDayNumber derives the day from the date', () => {
+  assert.strictEqual(logic.getTourneyDayNumber(T3, '2026-10-22'), null);
+  assert.strictEqual(logic.getTourneyDayNumber(T3, FRI), 1);
+  assert.strictEqual(logic.getTourneyDayNumber(T3, '2026-10-25'), 3);
+  assert.strictEqual(logic.getTourneyDayNumber(T3, '2026-10-26'), null);
+});
+
+test('9g. in-tournament: no rest between days (45 on Fri, eligible Sat)', () => {
+  const e = logic.getTourneyEligibility(tourneyPitcher([45]), T3, '2026-10-24', [T3]);
+  assert.strictEqual(e.eligible, true, e.reason);
+  assert.strictEqual(e.pitchesLeft, 55); // min(75 today, 100-45 total)
+});
+
+test('9h. in-tournament: reaching a hard daily limit ends that day only', () => {
+  const p = tourneyPitcher([77]); // finished a batter past 75
+  assert.strictEqual(logic.getTourneyEligibility(p, T3, FRI, [T3]).eligible, false);
+  const sat = logic.getTourneyEligibility(p, T3, '2026-10-24', [T3]);
+  assert.strictEqual(sat.eligible, true);
+  assert.strictEqual(sat.pitchesLeft, 23);
+});
+
+test('9i. in-tournament: reaching the total exactly ends the tournament', () => {
+  const p = tourneyPitcher([60, 40]);
+  assert.strictEqual(logic.getTourneyEligibility(p, T3, '2026-10-25', [T3]).eligible, false);
+});
+
+test('9j. guideline day limit never makes a pitcher ineligible', () => {
+  const t = { ...T3, dayLimits: [{ max: 30, isHard: false }, { max: 75, isHard: true }, { max: 75, isHard: true }] };
+  const e = logic.getTourneyEligibility(tourneyPitcher([40], t), t, FRI, [t]);
+  assert.strictEqual(e.eligible, true);
+  assert.strictEqual(e.atGuideline, true);
+  const v = logic.getTourneyLimitViolation(tourneyPitcher([], t), t, FRI, 40, [t]);
+  assert.strictEqual(v.level, 'note');
+});
+
+test('9k. pre-tournament regular-season rest carries into the tournament', () => {
+  const p = tourneyPitcher([]);
+  p.history.push(makeEntry({ date: '2026-10-22', pitches: 50 })); // Thu, 2 rest -> eligible Sun
+  assert.strictEqual(logic.getTourneyEligibility(p, T3, FRI, [T3]).eligible, false);
+  assert.strictEqual(logic.getTourneyEligibility(p, T3, '2026-10-25', [T3]).eligible, true);
+  assert.strictEqual(logic.getTourneyLimitViolation(p, T3, '2026-10-24', 10, [T3]).level, 'violation');
+});
+
+test('9l. getTourneyLimitViolation: finishing a batter over a hard limit is a (overridable) violation', () => {
+  const p = tourneyPitcher([70]);
+  const v = logic.getTourneyLimitViolation(p, T3, FRI, 7, [T3]); // logging a 2nd Fri game: 70 + 7
+  assert.strictEqual(v.level, 'violation');
+  assert.ok(/finishing a batter/.test(v.message), v.message);
+  assert.strictEqual(logic.getTourneyLimitViolation(p, T3, FRI, 5, [T3]), null); // exactly 75
+});
+
+test('9m. getTourneyLimitViolation: over the tournament total', () => {
+  const p = tourneyPitcher([60, 30]);
+  assert.ok(/tournament limit/.test(logic.getTourneyLimitViolation(p, T3, '2026-10-25', 12, [T3]).message));
+  assert.strictEqual(logic.getTourneyLimitViolation(p, T3, '2026-10-25', 10, [T3]), null);
+});
+
+test('9n. 12U thresholds (25/45/65) drive post-tournament rest', () => {
+  logic.setCurrentRules({ maxPitches: 75, rest1: 25, rest2: 45, rest3: 65 });
+  try {
+    assert.strictEqual(logic.getEligibleDateStr(tourneyPitcher([25]), [T3]), '2026-10-26'); // 25 -> no rest, floor Mon
+    assert.strictEqual(logic.getEligibleDateStr(tourneyPitcher([20, 0, 26]), [T3]), '2026-10-28'); // 46 -> 2
+  } finally {
+    logic.setCurrentRules(logic.DEFAULT_RULES);
+  }
 });
 
 // ── Summary ──────────────────────────────────────────────────────────────
