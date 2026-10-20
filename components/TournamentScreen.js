@@ -13,56 +13,69 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
   const [startDate, setStartDate] = useState(todayStr());
   const [days, setDays] = useState("2");
   const [customDays, setCustomDays] = useState("");
-  const [maxDay1, setMaxDay1] = useState("55");
-  const [maxTotal, setMaxTotal] = useState("115");
-  const [day1IsHardLimit, setDay1IsHardLimit] = useState(false);
+  // One { max, isHard } per day. May be longer than the current day count so
+  // shrinking then re-growing the tournament doesn't lose what was typed.
+  const [dayLimits, setDayLimits] = useState([]);
+  const [maxTotal, setMaxTotal] = useState(String(DEFAULT_TOURNEY_TOTAL));
   const [confirmDeleteTourney, setConfirmDeleteTourney] = useState(false);
+
+  const resolvedDays = Math.min(14, Math.max(1, days==="custom" ? (parseInt(customDays)||1) : (parseInt(days)||2)));
+  const formLimits = Array.from({length:resolvedDays}, (_,i) =>
+    dayLimits[i] || { max:String(DEFAULT_TOURNEY_DAY_LIMIT), isHard:true });
+
+  function setDayLimit(i, patch) {
+    const next = formLimits.map(l=>({...l}));
+    next[i] = { ...next[i], ...patch };
+    setDayLimits(next.concat(dayLimits.slice(resolvedDays)));
+  }
+
+  function resetForm() {
+    setName(""); setStartDate(todayStr()); setDays("2"); setCustomDays("");
+    setDayLimits([]); setMaxTotal(String(DEFAULT_TOURNEY_TOTAL));
+  }
 
   function openEdit(t) {
     setEditId(t.id);
     setName(t.name);
     setStartDate(t.startDate || todayStr());
-    const d = t.days || 2;
-    if (d === 1 || d === 2) { setDays(String(d)); setCustomDays(""); }
+    const d = getTourneyDays(t);
+    if (d <= 3) { setDays(String(d)); setCustomDays(""); }
     else { setDays("custom"); setCustomDays(String(d)); }
-    setMaxDay1(String(t.maxDay1 || 55));
-    setMaxTotal(String(t.maxTotal || 115));
-    setDay1IsHardLimit(!!t.day1IsHardLimit);
+    setDayLimits(getTourneyDayLimits(t).map(l=>({ max:String(l.max), isHard:l.isHard })));
+    setMaxTotal(String(getTourneyMaxTotal(t)));
     setView("edit");
+  }
+
+  // dayLimits/maxTotal are the source of truth. maxDay1/day1IsHardLimit are
+  // still written (mirroring Day 1) so a device on a pre-v3.7 cached build
+  // keeps showing something sensible until it picks up the update.
+  function limitFields() {
+    const limits = formLimits.map(l=>({ max:parseInt(l.max,10)||DEFAULT_TOURNEY_DAY_LIMIT, isHard:!!l.isHard }));
+    return { days:resolvedDays, dayLimits:limits, maxTotal:parseInt(maxTotal,10)||DEFAULT_TOURNEY_TOTAL,
+      maxDay1:limits[0].max, day1IsHardLimit:limits[0].isHard };
   }
 
   function handleCreate() {
     if (!name.trim()) return;
-    const resolvedDays = days==="custom" ? (parseInt(customDays)||1) : (parseInt(days)||2);
-    onAddTourney({ id:newId(), name:name.trim(), startDate, days:resolvedDays,
-      maxDay1:parseInt(maxDay1)||55,
-      maxTotal:parseInt(maxTotal)||115,
-      day1IsHardLimit,
-      createdAt:todayStr() });
-    setName(""); setStartDate(todayStr()); setDays("2"); setCustomDays(""); setMaxDay1("55"); setMaxTotal("115"); setDay1IsHardLimit(false);
+    onAddTourney({ id:newId(), name:name.trim(), startDate, ...limitFields(), createdAt:todayStr() });
+    resetForm();
     setView("list");
   }
 
   function handleSaveEdit() {
     if (!name.trim() || !editId) return;
-    const resolvedDays = days==="custom" ? (parseInt(customDays)||1) : (parseInt(days)||2);
     const original = tournaments.find(t=>t.id===editId);
-    onUpdateTourney({ ...original, name:name.trim(), startDate, days:resolvedDays,
-      maxDay1:parseInt(maxDay1)||55,
-      maxTotal:parseInt(maxTotal)||115,
-      day1IsHardLimit });
+    onUpdateTourney({ ...original, name:name.trim(), startDate, ...limitFields() });
     setEditId(null);
     setView("list");
   }
 
-  if (view==="create") {
+  const numStyle = { ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center" };
+
+  // Details + pitch-rules cards, shared by the create and edit views.
+  function renderFormCards() {
     return (
-      <div style={{ padding:"0 16px 110px" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 18px" }}>
-          <button onClick={()=>setView("list")} aria-label="Back to tournaments" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
-            padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
-          <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>NEW TOURNAMENT</h2>
-        </div>
+      <>
         <div style={card}>
           <p style={sectionTitle}>DETAILS</p>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NAME</label>
@@ -73,7 +86,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
             style={{ ...inputStyle, marginBottom:10 }}/>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NUMBER OF DAYS</label>
           <div style={{ display:"flex", gap:8, marginBottom:days==="custom"?10:0 }}>
-            {[["1","1"],["2","2"],["custom","Custom"]].map(([val,label])=>(
+            {[["1","1"],["2","2"],["3","3"],["custom","Custom"]].map(([val,label])=>(
               <button key={val} onClick={()=>setDays(val)} aria-pressed={days===val}
                 style={{ flex:1, height:42, borderRadius:10,
                   border:`1px solid ${days===val?"#38bdf8":"rgba(255,255,255,0.1)"}`,
@@ -88,41 +101,63 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
               style={{ ...inputStyle, textAlign:"center", fontSize:18, fontWeight:800,
                 fontFamily:"'Bebas Neue',cursive" }}/>
           )}
+          {startDate && (
+            <div style={{ marginTop:8, fontSize:11, color:"rgba(255,255,255,0.35)" }}>
+              {formatDate(startDate)}{resolvedDays>1?` – ${formatDate(addDays(startDate, resolvedDays-1))}`:""}
+            </div>
+          )}
         </div>
         <div style={card}>
           <p style={sectionTitle}>PITCH RULES</p>
-
-          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — DAY 1</label>
-          <input type="number" min="1" placeholder="55" value={maxDay1} onChange={e=>setMaxDay1(e.target.value)} aria-label="Max pitches day 1"
-            style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center", marginBottom:10 }}/>
-
-          <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>DAY 1 LIMIT TYPE</label>
-          <div style={{ display:"flex", gap:8, marginBottom:14 }}>
-            <label style={{ flex:1, display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:10, cursor:"pointer",
-              border:`1px solid ${!day1IsHardLimit?"#4ade80":"rgba(255,255,255,0.1)"}`,
-              background:!day1IsHardLimit?"rgba(74,222,128,0.12)":"rgba(255,255,255,0.04)" }}>
-              <input type="radio" name="d1type" checked={!day1IsHardLimit} onChange={()=>setDay1IsHardLimit(false)}
-                style={{ accentColor:"#4ade80", width:15, height:15, flexShrink:0 }}/>
-              <span style={{ fontSize:13, fontWeight:600, color:!day1IsHardLimit?"#4ade80":"rgba(255,255,255,0.5)" }}>Guideline only</span>
-            </label>
-            <label style={{ flex:1, display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:10, cursor:"pointer",
-              border:`1px solid ${day1IsHardLimit?"#f43f5e":"rgba(255,255,255,0.1)"}`,
-              background:day1IsHardLimit?"rgba(244,63,94,0.12)":"rgba(255,255,255,0.04)" }}>
-              <input type="radio" name="d1type" checked={day1IsHardLimit} onChange={()=>setDay1IsHardLimit(true)}
-                style={{ accentColor:"#f43f5e", width:15, height:15, flexShrink:0 }}/>
-              <span style={{ fontSize:13, fontWeight:600, color:day1IsHardLimit?"#f43f5e":"rgba(255,255,255,0.5)" }}>Hard limit</span>
-            </label>
-          </div>
-          <p style={{ margin:"0 0 14px", fontSize:11, color:"rgba(255,255,255,0.4)", lineHeight:1.5 }}>
-            {day1IsHardLimit
-              ? <><strong style={{color:"#f43f5e"}}>Hard limit:</strong> exceeding the Day 1 cap makes a pitcher ineligible for the rest of the tournament.</>
-              : <><strong style={{color:"#4ade80"}}>Guideline:</strong> Day 1 limit is informational only and does not affect eligibility.</>}
+          <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>DAILY LIMITS</label>
+          {formLimits.map((l,i)=>(
+            <div key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+              <div style={{ width:44, flexShrink:0, fontSize:12, fontWeight:700, color:"rgba(255,255,255,0.6)" }}>
+                Day {i+1}
+                {startDate && <div style={{ fontSize:9, fontWeight:500, color:"rgba(255,255,255,0.3)" }}>{formatDate(addDays(startDate,i))}</div>}
+              </div>
+              <input type="number" min="1" placeholder={String(DEFAULT_TOURNEY_DAY_LIMIT)} value={l.max}
+                onChange={e=>setDayLimit(i,{ max:e.target.value })} aria-label={`Max pitches day ${i+1}`}
+                style={{ ...numStyle, width:64, flexShrink:0, padding:"6px 4px" }}/>
+              <div role="radiogroup" aria-label={`Day ${i+1} limit type`} style={{ display:"flex", flex:1, gap:4 }}>
+                {[[true,"Hard","#f43f5e","rgba(244,63,94,0.12)"],[false,"Guideline","#4ade80","rgba(74,222,128,0.12)"]].map(([hard,label,c,bg])=>{
+                  const on = l.isHard===hard;
+                  return (
+                    <button key={label} type="button" role="radio" aria-checked={on} onClick={()=>setDayLimit(i,{ isHard:hard })}
+                      style={{ flex:1, padding:"9px 4px", borderRadius:10, cursor:"pointer", fontSize:12, fontWeight:700,
+                        border:`1px solid ${on?c:"rgba(255,255,255,0.1)"}`, background:on?bg:"rgba(255,255,255,0.04)",
+                        color:on?c:"rgba(255,255,255,0.45)" }}>{label}</button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          <p style={{ margin:"2px 0 14px", fontSize:11, color:"rgba(255,255,255,0.4)", lineHeight:1.5 }}>
+            <strong style={{color:"#f43f5e"}}>Hard:</strong> reaching it ends the pitcher's day (they may finish the current batter).{" "}
+            <strong style={{color:"#4ade80"}}>Guideline:</strong> informational only, never affects eligibility.
           </p>
 
-          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — ENTIRE TOURNAMENT (eligibility limit)</label>
-          <input type="number" min="1" placeholder="115" value={maxTotal} onChange={e=>setMaxTotal(e.target.value)} aria-label="Max total pitches"
-            style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center" }}/>
+          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — ENTIRE TOURNAMENT</label>
+          <input type="number" min="1" placeholder={String(DEFAULT_TOURNEY_TOTAL)} value={maxTotal} onChange={e=>setMaxTotal(e.target.value)} aria-label="Max total pitches"
+            style={numStyle}/>
+          <p style={{ margin:"6px 0 0", fontSize:11, color:"rgba(255,255,255,0.4)", lineHeight:1.5 }}>
+            Always enforced. Daily limits can add up to more than this, since pitchers won't throw every day.
+            After the tournament, rest days are based on this total and start the day after the pitcher's last tournament outing.
+          </p>
         </div>
+      </>
+    );
+  }
+
+  if (view==="create") {
+    return (
+      <div style={{ padding:"0 16px 110px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 18px" }}>
+          <button onClick={()=>setView("list")} aria-label="Back to tournaments" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
+            padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
+          <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>NEW TOURNAMENT</h2>
+        </div>
+        {renderFormCards()}
         <button onClick={handleCreate} disabled={!name.trim()}
           style={{ ...primaryBtn, width:"100%", padding:14, opacity:name.trim()?1:0.4,
             background:"linear-gradient(135deg,#d97706,#b45309)",
@@ -142,63 +177,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
             padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>EDIT TOURNAMENT</h2>
         </div>
-        <div style={card}>
-          <p style={sectionTitle}>DETAILS</p>
-          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NAME</label>
-          <input placeholder="e.g. District 5 Tournament" value={name} onChange={e=>setName(e.target.value)} aria-label="Tournament name"
-            style={{ ...inputStyle, marginBottom:10 }}/>
-          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>START DATE</label>
-          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} aria-label="Start date"
-            style={{ ...inputStyle, marginBottom:10 }}/>
-          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NUMBER OF DAYS</label>
-          <div style={{ display:"flex", gap:8, marginBottom:days==="custom"?10:0 }}>
-            {[["1","1"],["2","2"],["custom","Custom"]].map(([val,label])=>(
-              <button key={val} onClick={()=>setDays(val)} aria-pressed={days===val}
-                style={{ flex:1, height:42, borderRadius:10,
-                  border:`1px solid ${days===val?"#38bdf8":"rgba(255,255,255,0.1)"}`,
-                  background:days===val?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
-                  color:days===val?"#38bdf8":"rgba(255,255,255,0.6)", fontSize:14, fontWeight:700, cursor:"pointer",
-                  fontFamily:"'Bebas Neue',cursive" }}>{label}</button>
-            ))}
-          </div>
-          {days==="custom" && (
-            <input type="number" min="1" max="14" placeholder="Number of days" aria-label="Number of days"
-              value={customDays} onChange={e=>setCustomDays(e.target.value)}
-              style={{ ...inputStyle, textAlign:"center", fontSize:18, fontWeight:800,
-                fontFamily:"'Bebas Neue',cursive" }}/>
-          )}
-        </div>
-        <div style={card}>
-          <p style={sectionTitle}>PITCH RULES</p>
-          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — DAY 1</label>
-          <input type="number" min="1" placeholder="55" value={maxDay1} onChange={e=>setMaxDay1(e.target.value)} aria-label="Max pitches day 1"
-            style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center", marginBottom:10 }}/>
-          <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>DAY 1 LIMIT TYPE</label>
-          <div style={{ display:"flex", gap:8, marginBottom:14 }}>
-            <label style={{ flex:1, display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:10, cursor:"pointer",
-              border:`1px solid ${!day1IsHardLimit?"#4ade80":"rgba(255,255,255,0.1)"}`,
-              background:!day1IsHardLimit?"rgba(74,222,128,0.12)":"rgba(255,255,255,0.04)" }}>
-              <input type="radio" name="d1type" checked={!day1IsHardLimit} onChange={()=>setDay1IsHardLimit(false)}
-                style={{ accentColor:"#4ade80", width:15, height:15, flexShrink:0 }}/>
-              <span style={{ fontSize:13, fontWeight:600, color:!day1IsHardLimit?"#4ade80":"rgba(255,255,255,0.5)" }}>Guideline only</span>
-            </label>
-            <label style={{ flex:1, display:"flex", alignItems:"center", gap:8, padding:"10px 12px", borderRadius:10, cursor:"pointer",
-              border:`1px solid ${day1IsHardLimit?"#f43f5e":"rgba(255,255,255,0.1)"}`,
-              background:day1IsHardLimit?"rgba(244,63,94,0.12)":"rgba(255,255,255,0.04)" }}>
-              <input type="radio" name="d1type" checked={day1IsHardLimit} onChange={()=>setDay1IsHardLimit(true)}
-                style={{ accentColor:"#f43f5e", width:15, height:15, flexShrink:0 }}/>
-              <span style={{ fontSize:13, fontWeight:600, color:day1IsHardLimit?"#f43f5e":"rgba(255,255,255,0.5)" }}>Hard limit</span>
-            </label>
-          </div>
-          <p style={{ margin:"0 0 14px", fontSize:11, color:"rgba(255,255,255,0.4)", lineHeight:1.5 }}>
-            {day1IsHardLimit
-              ? <><strong style={{color:"#f43f5e"}}>Hard limit:</strong> exceeding the Day 1 cap makes a pitcher ineligible for the rest of the tournament.</>
-              : <><strong style={{color:"#4ade80"}}>Guideline:</strong> Day 1 limit is informational only and does not affect eligibility.</>}
-          </p>
-          <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>MAX PITCHES — ENTIRE TOURNAMENT (eligibility limit)</label>
-          <input type="number" min="1" placeholder="115" value={maxTotal} onChange={e=>setMaxTotal(e.target.value)} aria-label="Max total pitches"
-            style={{ ...inputStyle, fontSize:18, fontFamily:"'Bebas Neue',cursive", fontWeight:800, textAlign:"center" }}/>
-        </div>
+        {renderFormCards()}
         <button onClick={handleSaveEdit} disabled={!name.trim()}
           style={{ ...primaryBtn, width:"100%", padding:14, opacity:name.trim()?1:0.4,
             background:"linear-gradient(135deg,#1d4ed8,#1e40af)",
@@ -239,7 +218,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
           <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>TOURNAMENTS</h2>
           <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>{tournaments.length} configured</p>
         </div>
-        <button onClick={()=>setView("create")} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px",
+        <button onClick={()=>{ resetForm(); setView("create"); }} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px",
           background:"linear-gradient(135deg,#d97706,#b45309)", border:"none", borderRadius:20,
           color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer", boxShadow:"0 2px 12px rgba(217,119,6,0.35)" }}>
           {I.plus} New
@@ -255,7 +234,8 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
         const entries = roster.flatMap(p=>(p.history||[]).filter(h=>h.tournamentId===t.id));
         const players = new Set(entries.map(e=>e.playerId||"?")).size;
         const today = todayStr();
-        const endDate = t.startDate ? addDays(t.startDate, t.days - 1) : null;
+        const endDate = getTourneyEndDate(t);
+        const limitSummary = getTourneyDayLimits(t).map(l=>`${l.max}${l.isHard?"H":"G"}`).join(" / ");
         const tStatus = !t.startDate ? null
           : today < t.startDate ? "upcoming"
           : endDate && today <= endDate ? "active"
@@ -281,7 +261,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
                 {formatDate(t.startDate)}{endDate && endDate!==t.startDate ? ` – ${formatDate(endDate)}` : ""}
               </div>}
               <div style={{ fontSize:12, color:"rgba(255,255,255,0.35)", marginTop:1 }}>
-                {t.days} day{t.days!==1?"s":""} · Day 1: {t.maxDay1}p {t.day1IsHardLimit?"(hard limit)":"(guideline)"} · {t.maxTotal}p total
+                {getTourneyDays(t)} day{getTourneyDays(t)!==1?"s":""} · Daily {limitSummary} · {getTourneyMaxTotal(t)}p total
               </div>
               {entries.length>0 && <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)", marginTop:1 }}>{entries.length} appearances · {players} pitcher{players!==1?"s":""}</div>}
             </div>

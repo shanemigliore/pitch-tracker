@@ -9,13 +9,14 @@ function EditGameModal({ entry, pitcherName, roster, tournaments, onSave, onDele
   const [date, setDate] = useState(entry.date);
   const [opponent, setOpponent] = useState(entry.opponent || "");
   const [context, setContext] = useState(entry.isTournament ? (entry.tournamentId || "regular") : "regular");
-  const [tourneyDay, setTourneyDay] = useState(entry.tourneyDay || 1);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const selectedTourney = tournaments.find(t=>t.id===context);
+  const tourneyDay = selectedTourney ? getTourneyDayNumber(selectedTourney, date) : null;
+  const dateOutsideTourney = context !== "regular" && !!selectedTourney && !tourneyDay;
 
   function handleSave() {
-    if (pitches < 1) return;
+    if (pitches < 1 || dateOutsideTourney) return;
     onSave({
       ...entry,
       pitches,
@@ -106,7 +107,7 @@ function EditGameModal({ entry, pitcherName, roster, tournaments, onSave, onDele
 
         {/* Game type */}
         <ContextPicker context={context} setContext={setContext}
-          tourneyDay={tourneyDay} setTourneyDay={setTourneyDay} tournaments={tournaments} gameDate={date}/>
+          tournaments={tournaments} gameDate={date}/>
 
         {/* Date */}
         <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME DATE</label>
@@ -121,8 +122,8 @@ function EditGameModal({ entry, pitcherName, roster, tournaments, onSave, onDele
         {/* Actions */}
         <div style={{ display:"flex", gap:8, marginBottom:10 }}>
           <button onClick={onClose} style={{ ...cancelBtn, flex:1 }}>Cancel</button>
-          <button onClick={handleSave} disabled={pitches<1}
-            style={{ ...primaryBtn, flex:2, opacity:pitches<1?0.4:1 }}>
+          <button onClick={handleSave} disabled={pitches<1 || dateOutsideTourney}
+            style={{ ...primaryBtn, flex:2, opacity:pitches<1 || dateOutsideTourney?0.4:1 }}>
             {I.check} Save Changes
           </button>
         </div>

@@ -16,27 +16,6 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
   const [showRulesInfo, setShowRulesInfo] = useState(false);
   const selectedTourney = tournaments.find(t=>t.id===viewMode);
 
-  function getPitcherTourneyStats(pitcher, tourneyId) {
-    const games = (pitcher.history||[]).filter(h=>h.tournamentId===tourneyId);
-    const total = games.reduce((s,g)=>s+g.pitches,0);
-    const day1 = games.filter(g=>g.tourneyDay===1).reduce((s,g)=>s+g.pitches,0);
-    return { total, day1, games };
-  }
-
-  function getTourneyEligibility(pitcher, tourney) {
-    if (!tourney) return { eligible:true, reason:"" };
-    const stats = getPitcherTourneyStats(pitcher, tourney.id);
-
-    // Exceeded tournament total → ineligible for rest of tournament
-    if (stats.total >= tourney.maxTotal) return { eligible:false, reason:`Reached tournament total (${stats.total}/${tourney.maxTotal}p)` };
-
-    // Exceeded Day 1 hard limit → ineligible for rest of tournament (only when configured as hard limit)
-    if (tourney.day1IsHardLimit && stats.day1 > tourney.maxDay1) return { eligible:false, reason:`Exceeded Day 1 limit (${stats.day1}/${tourney.maxDay1}p)` };
-
-    const remaining = tourney.maxTotal - stats.total;
-    return { eligible:true, reason:`${remaining}p remaining in tournament` };
-  }
-
   const totalPitches = p => (p.history || []).reduce((s, g) => s + (g.pitches || 0), 0);
   const allPitchers = [...roster]
     .sort((a, b) => totalPitches(b) - totalPitches(a))
@@ -45,8 +24,9 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
         const status = getAvailabilityStatus(p, checkDate, tournaments);
         return { ...p, eligible: status==="available", status };
       } else {
-        const { eligible, reason } = getTourneyEligibility(p, selectedTourney);
-        return { ...p, eligible, status:eligible?"available":"resting", tourneyReason:reason };
+        const te = getTourneyEligibility(p, selectedTourney, checkDate, tournaments);
+        return { ...p, eligible:te.eligible, status:te.eligible?"available":"resting", tourneyReason:te.reason,
+          tourneyLeft:te.eligible ? te.pitchesLeft : null };
       }
     });
 
@@ -129,11 +109,17 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
             </div>
           );
         })()}
-        {viewMode!=="regular" && selectedTourney && (
-          <div style={{ marginTop:8, fontSize:11, color:"rgba(255,255,255,0.35)" }}>
-            Day 1 {selectedTourney.day1IsHardLimit?"limit":"guideline"}: {selectedTourney.maxDay1}p · <strong style={{color:"rgba(255,255,255,0.5)"}}>Total limit: {selectedTourney.maxTotal}p</strong>
-          </div>
-        )}
+        {viewMode!=="regular" && selectedTourney && (()=>{
+          const dayNum = getTourneyDayNumber(selectedTourney, checkDate);
+          const shownDay = dayNum || 1;
+          const lim = getTourneyDayLimits(selectedTourney)[shownDay-1];
+          return (
+            <div style={{ marginTop:8, fontSize:11, color:"rgba(255,255,255,0.35)" }}>
+              {dayNum ? `Day ${dayNum} of ${getTourneyDays(selectedTourney)}` : `Starts ${formatDate(selectedTourney.startDate)} — showing Day 1`}
+              {" · "}Day {shownDay} {lim.isHard?"hard limit":"guideline"}: {lim.max}p · <strong style={{color:"rgba(255,255,255,0.5)"}}>Total limit: {getTourneyMaxTotal(selectedTourney)}p</strong>
+            </div>
+          );
+        })()}
       </div>
 
       {roster.length===0 ? (
@@ -164,7 +150,9 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
                   {viewMode!=="regular" && <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>{p.tourneyReason}</div>}
                   {viewMode==="regular" && p.lastPitches>0 && <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>Last: {p.lastPitches}p on {formatDate(p.lastGameDate)}</div>}
                 </div>
-                <span style={{ fontSize:11, color:"#4ade80", fontWeight:600 }}>Ready</span>
+                <span style={{ fontSize:11, color:"#4ade80", fontWeight:600 }}>
+                  {viewMode!=="regular" && p.tourneyLeft!=null ? `${p.tourneyLeft}p left` : "Ready"}
+                </span>
                 <div style={{ color:"rgba(255,255,255,0.2)" }}>{I.chevron}</div>
               </div>
             ))}
@@ -254,6 +242,15 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
             })()}
             <p style={{ margin:"8px 0 0", fontSize:11, color:"rgba(255,255,255,0.3)", display:"flex", alignItems:"center", gap:5 }}>
               {I.warning} Max {getCurrentRules().maxPitches} — may finish batter already in progress
+            </p>
+
+            <p style={{ ...sectionTitle, marginTop:18 }}>TOURNAMENTS</p>
+            <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.55)", lineHeight:1.6 }}>
+              During a tournament only its daily and total limits apply — no rest days between tournament days
+              (rest still owed from before the tournament carries in). A pitcher who reaches a limit may finish
+              the current batter; every pitch counts. Afterwards, the tournament's total pitches set the rest days
+              above, starting the day after the pitcher's last tournament outing, and they can't pitch a
+              regular-season game before the day after the tournament ends.
             </p>
           </div>
         </div>

@@ -32,14 +32,22 @@ function RadialArc({ value, max, size=120, strokeW=9, color="#38bdf8" }) {
 }
 
 // ─── Context picker (reused in multiple screens) ──────────────────────────────
-function ContextPicker({ context, setContext, tourneyDay, setTourneyDay, tournaments, gameDate }) {
-  // Only show tournaments that are still active on the selected game date
+// The tournament day isn't picked here - it's derived from gameDate
+// (getTourneyDayNumber), so the day a game counts toward can't disagree with
+// its date. Callers should block saving while a tournament is selected and
+// gameDate falls outside it (getTourneyDayNumber returns null).
+function ContextPicker({ context, setContext, tournaments, gameDate }) {
+  const date = gameDate || todayStr();
+  // Show tournaments that haven't ended as of the game date, plus whichever is
+  // currently selected (so editing an old game doesn't hide its tournament).
   const activeTournaments = tournaments.filter(t => {
+    if (t.id === context) return true;
     if (!t.startDate) return true; // no start date set — always show
-    const endDate = addDays(t.startDate, (t.days || 1) - 1);
-    return (gameDate || todayStr()) <= endDate;
+    return date <= getTourneyEndDate(t);
   });
   const selectedTourney = tournaments.find(t=>t.id===context);
+  const dayNum = selectedTourney ? getTourneyDayNumber(selectedTourney, date) : null;
+  const dayLimit = dayNum ? getTourneyDayLimits(selectedTourney)[dayNum-1] : null;
   return (
     <>
       <div style={{ marginBottom:10 }}>
@@ -53,7 +61,7 @@ function ContextPicker({ context, setContext, tourneyDay, setTourneyDay, tournam
             ⚾ Regular Season
           </button>
           {activeTournaments.map(t=>(
-            <button key={t.id} onClick={()=>{setContext(t.id); if(setTourneyDay) setTourneyDay(1);}} aria-pressed={context===t.id}
+            <button key={t.id} onClick={()=>setContext(t.id)} aria-pressed={context===t.id}
               style={{ flex:1, minWidth:80, padding:"9px 10px", borderRadius:10,
                 border:`1px solid ${context===t.id?"#f59e0b":"rgba(255,255,255,0.1)"}`,
                 background:context===t.id?"rgba(245,158,11,0.15)":"rgba(255,255,255,0.04)",
@@ -69,22 +77,22 @@ function ContextPicker({ context, setContext, tourneyDay, setTourneyDay, tournam
           )}
         </div>
       </div>
-      {context!=="regular" && selectedTourney && setTourneyDay && (
+      {context!=="regular" && selectedTourney && (
         <div style={{ marginBottom:10 }}>
           <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>TOURNAMENT DAY</label>
-          <div style={{ display:"flex", gap:6 }}>
-            {Array.from({length:selectedTourney.days},(_,i)=>i+1).map(d=>(
-              <button key={d} onClick={()=>setTourneyDay(d)} aria-label={`Tournament day ${d}`} aria-pressed={tourneyDay===d}
-                style={{ width:42, height:42, borderRadius:10,
-                  border:`1px solid ${tourneyDay===d?"#f59e0b":"rgba(255,255,255,0.1)"}`,
-                  background:tourneyDay===d?"rgba(245,158,11,0.2)":"rgba(255,255,255,0.04)",
-                  color:tourneyDay===d?"#fbbf24":"rgba(255,255,255,0.5)", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                {d}
-              </button>
-            ))}
-          </div>
+          {dayNum ? (
+            <div style={{ fontSize:13, fontWeight:700, color:"#fbbf24" }}>
+              Day {dayNum} of {getTourneyDays(selectedTourney)} <span style={{ fontWeight:400, color:"rgba(255,255,255,0.4)" }}>· from game date</span>
+            </div>
+          ) : (
+            <div role="alert" style={{ fontSize:12, fontWeight:600, color:"#f87171" }}>
+              Game date ({formatDate(date)}) is outside this tournament
+              ({formatDate(selectedTourney.startDate)}{getTourneyDays(selectedTourney)>1?` – ${formatDate(getTourneyEndDate(selectedTourney))}`:""}). Change the game date.
+            </div>
+          )}
           <div style={{ marginTop:5, fontSize:11, color:"rgba(255,255,255,0.35)" }}>
-            Day 1 {selectedTourney.day1IsHardLimit?"limit":"guideline"}: {selectedTourney.maxDay1}p · <strong style={{color:"rgba(255,255,255,0.5)"}}>Tournament limit: {selectedTourney.maxTotal}p</strong>
+            {dayLimit && <>Day {dayNum} {dayLimit.isHard?"hard limit":"guideline"}: {dayLimit.max}p · </>}
+            <strong style={{color:"rgba(255,255,255,0.5)"}}>Tournament limit: {getTourneyMaxTotal(selectedTourney)}p</strong>
           </div>
         </div>
       )}

@@ -8,7 +8,6 @@
 function GameLogScreen({ roster, onLogMultiple, tournaments }) {
   const [gameDate, setGameDate] = useState(todayStr());
   const [context, setContext] = useState("regular");
-  const [tourneyDay, setTourneyDay] = useState(1);
   const [opponent, setOpponent] = useState("");
   const [opponentErr, setOpponentErr] = useState(false);
   const [entries, setEntries] = useState({});
@@ -18,6 +17,8 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
   const [missingCounts, setMissingCounts] = useState(false);
 
   const selectedTourney = tournaments.find(t=>t.id===context);
+  const tourneyDay = selectedTourney ? getTourneyDayNumber(selectedTourney, gameDate) : null;
+  const dateOutsideTourney = context!=="regular" && !!selectedTourney && !tourneyDay;
 
   // Opponents already played this season, most-recent first — lets a coach
   // tap a repeat opponent instead of retyping a name they've entered before.
@@ -48,36 +49,30 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
   const seasonTotal = p => (p.history||[]).reduce((s,g)=>s+(g.pitches||0),0);
   const sortedRoster = [...roster].sort((a,b)=>seasonTotal(b)-seasonTotal(a));
 
-  // Rest-day rule violation (they weren't eligible to pitch as of this game) or
-  // tournament pitch-limit violation (this count would push them over the
-  // tournament's day1/total cap) - either is worth flagging before save, since
-  // both mean "this game breaks a rule," which matters regardless of what their
-  // status was walking in.
+  // Rule violations worth flagging before save (warn-and-override), judged as
+  // of this game's date regardless of what their status was walking in:
+  // - Regular-season game: a rest day still owed from earlier outings (a
+  //   tournament's rest included - pitching during it can forfeit the game).
+  // - Tournament game: rest owed from before the tournament, or going over a
+  //   hard daily limit / the tournament total (getTourneyLimitViolation).
+  // Guideline overages come back as level "note" and never block.
+  function getCheck(p) {
+    if (context==="regular") {
+      const eligStr = getEligibleDateStr(p, tournaments, { before: gameDate });
+      return eligStr && eligStr > gameDate
+        ? { level:"violation", message:`Resting — eligible ${formatDate(eligStr)}` } : null;
+    }
+    if (!selectedTourney || dateOutsideTourney) return null;
+    return getTourneyLimitViolation(p, selectedTourney, gameDate, getCount(p.id), tournaments);
+  }
   function getViolation(p) {
-    if (getAvailabilityStatus(p, null, tournaments) !== "available") {
-      const eligStr = getEligibleDateStr(p, tournaments);
-      return eligStr ? `Resting — eligible ${formatDate(eligStr)}` : "Resting";
-    }
-    if (context !== "regular" && selectedTourney) {
-      const priorGames = (p.history||[]).filter(h=>h.tournamentId===context);
-      const priorTotal = priorGames.reduce((s,g)=>s+g.pitches,0);
-      const priorDay1 = priorGames.filter(g=>g.tourneyDay===1).reduce((s,g)=>s+g.pitches,0);
-      const thisCount = getCount(p.id);
-      const newTotal = priorTotal + thisCount;
-      const newDay1 = tourneyDay===1 ? priorDay1 + thisCount : priorDay1;
-      if (newTotal > selectedTourney.maxTotal) {
-        return `Would exceed tournament total (${newTotal}/${selectedTourney.maxTotal}p)`;
-      }
-      if (selectedTourney.day1IsHardLimit && tourneyDay===1 && newDay1 > selectedTourney.maxDay1) {
-        return `Would exceed Day 1 limit (${newDay1}/${selectedTourney.maxDay1}p)`;
-      }
-    }
-    return null;
+    const c = getCheck(p);
+    return c && c.level==="violation" ? c.message : null;
   }
 
   function handleSave(confirmed=false) {
     const toLog = roster.filter(p=>selectedIds.has(p.id));
-    if (toLog.length===0) return;
+    if (toLog.length===0 || dateOutsideTourney) return;
     if (!opponent.trim()) { setOpponentErr(true); return; }
     setOpponentErr(false);
     if (toLog.some(p=>getCount(p.id)===0)) { setMissingCounts(true); return; }
@@ -131,7 +126,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
           <div style={card}>
             <p style={sectionTitle}>GAME DETAILS</p>
             <ContextPicker context={context} setContext={setContext}
-              tourneyDay={tourneyDay} setTourneyDay={setTourneyDay} tournaments={tournaments} gameDate={gameDate}/>
+              tournaments={tournaments} gameDate={gameDate}/>
             <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>GAME DATE</label>
             <input type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)} aria-label="Game date"
               style={{ ...inputStyle, marginBottom:10 }}/>
@@ -176,9 +171,22 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
             )}
             {sortedRoster.filter(p=>selectedIds.has(p.id)).map(p=>{
               const count = getCount(p.id);
-              const overLimit = count > pitcherLimit;
-              const atWarning = context==="regular" && count >= pitcherLimit-10 && count <= pitcherLimit;
-              const rd = getRegRestDays(count);
+              // Pitches left after this game: the regular-season max, or in a
+              // tournament the tighter of today's hard limit and the tournament total.
+              let left = pitcherLimit - count, leftLabel = "left", restBasis = count;
+              if (selectedTourney && tourneyDay) {
+                const st = getPitcherTourneyStats(p, selectedTourney);
+                const lim = getTourneyDayLimits(selectedTourney)[tourneyDay-1];
+                const totalAfter = st.total + count;
+                const leftTotal = getTourneyMaxTotal(selectedTourney) - totalAfter;
+                left = lim.isHard ? Math.min(lim.max - (st.byDay[tourneyDay-1] + count), leftTotal) : leftTotal;
+                leftLabel = lim.isHard && lim.max - (st.byDay[tourneyDay-1] + count) < leftTotal ? "left today" : "left in tourney";
+                restBasis = totalAfter;
+              }
+              const overLimit = left < 0;
+              const atWarning = !overLimit && left <= 10;
+              const rd = getRegRestDays(restBasis);
+              const check = count>0 ? getCheck(p) : null;
               return (
                 <div key={p.id} style={{ marginBottom:8, padding:"10px 12px", borderRadius:12,
                   background:"rgba(56,189,248,0.05)", border:"1px solid rgba(56,189,248,0.2)" }}>
@@ -195,11 +203,11 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
                       <div style={{ textAlign:"right" }}>
                         <div style={{ fontSize:10, fontWeight:700,
                           color:rd===0?"#4ade80":rd===1?"#a3e635":rd===2?"#fb923c":"#f43f5e" }}>
-                          {rd===0?"No rest":`${rd}d rest`}
+                          {rd===0?"No rest":`${rd}d rest`}{context!=="regular"?" after":""}
                         </div>
                         <div style={{ fontSize:9,
                           color:overLimit?"#f43f5e":atWarning?"#fb923c":"rgba(255,255,255,0.35)" }}>
-                          {overLimit?`${count-pitcherLimit} over`:`${pitcherLimit-count} left`}
+                          {overLimit?`${-left} over`:`${left} ${leftLabel}`}
                         </div>
                       </div>
                     )}
@@ -234,6 +242,12 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
                       </button>
                     ))}
                   </div>
+                  {check && (
+                    <div style={{ marginTop:6, fontSize:11, fontWeight:600,
+                      color:check.level==="violation"?"#fb923c":"rgba(251,191,36,0.75)" }}>
+                      {check.level==="violation"?"⚠ ":"ⓘ "}{check.message}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -280,7 +294,8 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
               : "0 4px 20px rgba(234,88,12,0.4)";
             return (
               <button onClick={()=>handleSave(false)}
-                style={{ ...primaryBtn, width:"100%", padding:14, background:btnBg, boxShadow:btnShadow }}>
+                disabled={dateOutsideTourney}
+                style={{ ...primaryBtn, width:"100%", padding:14, background:btnBg, boxShadow:btnShadow, opacity:dateOutsideTourney?0.4:1 }}>
                 {I.check} Save Game — {totalPitchers} pitcher{totalPitchers!==1?"s":""}
               </button>
             );
