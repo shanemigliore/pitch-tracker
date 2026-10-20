@@ -110,7 +110,7 @@ function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame,
             {status==="available" ? "✅ Available to pitch" : `⏳ ${restRemaining} day${restRemaining!==1?"s":""} rest remaining`}
           </div>
           {eligible && <div style={{ fontSize:13, color:"rgba(255,255,255,0.5)" }}>
-            Eligible: <strong style={{ color:"rgba(255,255,255,0.85)" }}>{formatDate(eligible.toISOString())}</strong>
+            Eligible: <strong style={{ color:"rgba(255,255,255,0.85)" }}>{formatDate(getEligibleDateStr(pitcher, tournaments))}</strong>
           </div>}
           {pitcher.lastGameDate && <div style={{ fontSize:12, color:"rgba(255,255,255,0.35)", marginTop:2 }}>
             Last: {formatDate(pitcher.lastGameDate)} · {pitcher.lastPitches}p

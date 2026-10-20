@@ -2,7 +2,7 @@
 // Babel/JSX component, loaded via <script type="text/babel" src="components/shared.js"></script>.
 
 // ─── Shared UI ───────────────────────────────────────────────────────────────
-function Chip({ status, size="sm" }) {
+function Chip({ status, size="sm", label }) {
   const s = STATUS[status] || STATUS.available;
   return (
     <span style={{ display:"inline-flex", alignItems:"center", gap:5,
@@ -10,7 +10,7 @@ function Chip({ status, size="sm" }) {
       background:s.bg, border:`1px solid ${s.ring}`, color:s.color,
       fontSize: size==="lg" ? 13 : 11, fontWeight:700, letterSpacing:0.4, flexShrink:0 }}>
       <span style={{ width:6, height:6, borderRadius:"50%", background:s.color, flexShrink:0 }}/>
-      {s.label}
+      {label || s.label}
     </span>
   );
 }
@@ -80,7 +80,11 @@ function ContextPicker({ context, setContext, tournaments, gameDate }) {
       {context!=="regular" && selectedTourney && (
         <div style={{ marginBottom:10 }}>
           <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>TOURNAMENT DAY</label>
-          {dayNum ? (
+          {!selectedTourney.startDate ? (
+            <div role="alert" style={{ fontSize:12, fontWeight:600, color:"#f87171" }}>
+              This tournament has no start date. Set one in Settings → Tournaments before logging games to it.
+            </div>
+          ) : dayNum ? (
             <div style={{ fontSize:13, fontWeight:700, color:"#fbbf24" }}>
               Day {dayNum} of {getTourneyDays(selectedTourney)} <span style={{ fontWeight:400, color:"rgba(255,255,255,0.4)" }}>· from game date</span>
             </div>

@@ -289,7 +289,7 @@ const restCases = [
   ['spec: 25/0/0 -> rest served during tournament, eligible after it', [25, 0, 0], '2026-10-26'],
   ['spec: 25/45/0 = 70 -> 3 rest days starting day 3, eligible day 6', [25, 45, 0], '2026-10-28'],
   ['25/20/0 = 45 -> 2 rest days from day 2, eligible day 5', [25, 20, 0], '2026-10-27'],
-  ['<=20 total -> no rest', [10, 0, 10], null],
+  ['<=20 total -> no rest days, but not before the day after the tournament', [10, 0, 10], '2026-10-26'],
 ];
 for (const [name, perDay, expected] of restCases) {
   test(`9a. ${name}`, () => {
@@ -385,7 +385,7 @@ test('9m. getTourneyLimitViolation: over the tournament total', () => {
 test('9n. 12U thresholds (25/45/65) drive post-tournament rest', () => {
   logic.setCurrentRules({ maxPitches: 75, rest1: 25, rest2: 45, rest3: 65 });
   try {
-    assert.strictEqual(logic.getEligibleDateStr(tourneyPitcher([25]), [T3]), null); // 25 -> no rest
+    assert.strictEqual(logic.getEligibleDateStr(tourneyPitcher([25]), [T3]), '2026-10-26'); // 25 -> no rest, floor Mon
     assert.strictEqual(logic.getEligibleDateStr(tourneyPitcher([20, 0, 26]), [T3]), '2026-10-28'); // 46 -> 2
   } finally {
     logic.setCurrentRules(logic.DEFAULT_RULES);

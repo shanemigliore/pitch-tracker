@@ -26,6 +26,7 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
       } else {
         const te = getTourneyEligibility(p, selectedTourney, checkDate, tournaments);
         return { ...p, eligible:te.eligible, status:te.eligible?"available":"resting", tourneyReason:te.reason,
+          tourneyChip:te.code==="day" ? "Done Today" : te.code==="total" ? "Limit Reached" : te.code==="ended" ? "N/A" : null,
           tourneyLeft:te.eligible ? te.pitchesLeft : null };
       }
     });
@@ -192,7 +193,7 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
                       <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>Resting</div>
                     )}
                   </div>
-                  <Chip status={p.status}/>
+                  <Chip status={p.status} label={viewMode!=="regular" ? p.tourneyChip : null}/>
                   <div style={{ color:"rgba(255,255,255,0.2)" }}>{I.chevron}</div>
                 </div>
               );

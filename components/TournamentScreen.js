@@ -55,15 +55,17 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
       maxDay1:limits[0].max, day1IsHardLimit:limits[0].isHard };
   }
 
+  const canSave = !!name.trim() && isIsoDate(startDate);
+
   function handleCreate() {
-    if (!name.trim()) return;
+    if (!canSave) return;
     onAddTourney({ id:newId(), name:name.trim(), startDate, ...limitFields(), createdAt:todayStr() });
     resetForm();
     setView("list");
   }
 
   function handleSaveEdit() {
-    if (!name.trim() || !editId) return;
+    if (!canSave || !editId) return;
     const original = tournaments.find(t=>t.id===editId);
     onUpdateTourney({ ...original, name:name.trim(), startDate, ...limitFields() });
     setEditId(null);
@@ -83,7 +85,9 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
             style={{ ...inputStyle, marginBottom:10 }}/>
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>START DATE</label>
           <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} aria-label="Start date"
-            style={{ ...inputStyle, marginBottom:10 }}/>
+            style={{ ...inputStyle, marginBottom:isIsoDate(startDate)?10:4,
+              border:isIsoDate(startDate)?inputStyle.border:"1px solid rgba(244,63,94,0.6)" }}/>
+          {!isIsoDate(startDate) && <div style={{ fontSize:11, color:"#f87171", marginBottom:10 }}>Start date is required</div>}
           <label style={{ ...sectionLabel, display:"block", marginBottom:4 }}>NUMBER OF DAYS</label>
           <div style={{ display:"flex", gap:8, marginBottom:days==="custom"?10:0 }}>
             {[["1","1"],["2","2"],["3","3"],["custom","Custom"]].map(([val,label])=>(
@@ -101,7 +105,10 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
               style={{ ...inputStyle, textAlign:"center", fontSize:18, fontWeight:800,
                 fontFamily:"'Bebas Neue',cursive" }}/>
           )}
-          {startDate && (
+          {days==="custom" && parseInt(customDays) > 14 && (
+            <div style={{ marginTop:6, fontSize:11, color:"#fb923c" }}>Maximum is 14 days — using 14.</div>
+          )}
+          {isIsoDate(startDate) && (
             <div style={{ marginTop:8, fontSize:11, color:"rgba(255,255,255,0.35)" }}>
               {formatDate(startDate)}{resolvedDays>1?` – ${formatDate(addDays(startDate, resolvedDays-1))}`:""}
             </div>
@@ -114,7 +121,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
             <div key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
               <div style={{ width:44, flexShrink:0, fontSize:12, fontWeight:700, color:"rgba(255,255,255,0.6)" }}>
                 Day {i+1}
-                {startDate && <div style={{ fontSize:9, fontWeight:500, color:"rgba(255,255,255,0.3)" }}>{formatDate(addDays(startDate,i))}</div>}
+                {isIsoDate(startDate) && <div style={{ fontSize:9, fontWeight:500, color:"rgba(255,255,255,0.3)" }}>{formatDate(addDays(startDate,i))}</div>}
               </div>
               <input type="number" min="1" placeholder={String(DEFAULT_TOURNEY_DAY_LIMIT)} value={l.max}
                 onChange={e=>setDayLimit(i,{ max:e.target.value })} aria-label={`Max pitches day ${i+1}`}
@@ -158,8 +165,8 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>NEW TOURNAMENT</h2>
         </div>
         {renderFormCards()}
-        <button onClick={handleCreate} disabled={!name.trim()}
-          style={{ ...primaryBtn, width:"100%", padding:14, opacity:name.trim()?1:0.4,
+        <button onClick={handleCreate} disabled={!canSave}
+          style={{ ...primaryBtn, width:"100%", padding:14, opacity:canSave?1:0.4,
             background:"linear-gradient(135deg,#d97706,#b45309)",
             boxShadow:"0 4px 20px rgba(217,119,6,0.35)" }}>
           🏆 Create Tournament
@@ -178,8 +185,8 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>EDIT TOURNAMENT</h2>
         </div>
         {renderFormCards()}
-        <button onClick={handleSaveEdit} disabled={!name.trim()}
-          style={{ ...primaryBtn, width:"100%", padding:14, opacity:name.trim()?1:0.4,
+        <button onClick={handleSaveEdit} disabled={!canSave}
+          style={{ ...primaryBtn, width:"100%", padding:14, opacity:canSave?1:0.4,
             background:"linear-gradient(135deg,#1d4ed8,#1e40af)",
             boxShadow:"0 4px 20px rgba(29,78,216,0.35)" }}>
           Save Changes
@@ -232,7 +239,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
         </div>
       ) : tournaments.map(t=>{
         const entries = roster.flatMap(p=>(p.history||[]).filter(h=>h.tournamentId===t.id));
-        const players = new Set(entries.map(e=>e.playerId||"?")).size;
+        const players = roster.filter(p=>(p.history||[]).some(h=>h.tournamentId===t.id)).length;
         const today = todayStr();
         const endDate = getTourneyEndDate(t);
         const limitSummary = getTourneyDayLimits(t).map(l=>`${l.max}${l.isHard?"H":"G"}`).join(" / ");
