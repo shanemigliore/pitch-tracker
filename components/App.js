@@ -323,7 +323,7 @@ function App({ role }) {
       {syncStatus==="offline" && (
         <div className="offline-banner" style={{ background:"rgba(244,63,94,0.12)", borderBottom:"1px solid rgba(244,63,94,0.3)",
           padding:"8px 16px", display:"flex", alignItems:"center", gap:8,
-          fontSize:12, color:"#f87171", fontWeight:600, position:"sticky", top:"env(safe-area-inset-top, 0px)", zIndex:30 }}>
+          fontSize:12, color:"#f87171", fontWeight:600, position:"sticky", top:"var(--top-gap)", zIndex:30 }}>
           {I.warning} Offline — changes will sync when reconnected
         </div>
       )}
@@ -331,7 +331,7 @@ function App({ role }) {
         <div className="offline-banner" onClick={()=>alert(`Sync error: ${lastSyncError || "Unknown error"}\n\nYour changes are saved on this device but couldn't be written to the server. This usually means a permissions problem, not a dropped connection - it won't fix itself by waiting.`)}
           style={{ background:"rgba(168,85,247,0.12)", borderBottom:"1px solid rgba(168,85,247,0.3)",
           padding:"8px 16px", display:"flex", alignItems:"center", gap:8, cursor:"pointer",
-          fontSize:12, color:"#c084fc", fontWeight:600, position:"sticky", top:"env(safe-area-inset-top, 0px)", zIndex:30 }}>
+          fontSize:12, color:"#c084fc", fontWeight:600, position:"sticky", top:"var(--top-gap)", zIndex:30 }}>
           {I.warning} Sync error — tap for details
         </div>
       )}
@@ -340,7 +340,7 @@ function App({ role }) {
           style={{ background:"rgba(56,189,248,0.12)", borderBottom:"1px solid rgba(56,189,248,0.3)",
           padding:"8px 16px", display:"flex", alignItems:"center", gap:8, cursor:"pointer",
           fontSize:12, color:"#38bdf8", fontWeight:600, position:"sticky",
-          top:`calc(env(safe-area-inset-top, 0px) + ${(syncStatus==="offline"||syncStatus==="error")?33:0}px)`, zIndex:29 }}>
+          top:`calc(var(--top-gap) + ${(syncStatus==="offline"||syncStatus==="error")?33:0}px)`, zIndex:29 }}>
           ⬆ Update available — tap to refresh
         </div>
       )}
@@ -352,7 +352,7 @@ function App({ role }) {
         borderBottom:"1px solid rgba(255,255,255,0.06)",
         padding:"10px 14px",
         position:"sticky",
-        top:`calc(env(safe-area-inset-top, 0px) + ${(((syncStatus==="offline"||syncStatus==="error")?1:0) + (updateAvailable?1:0)) * 33}px)`,
+        top:`calc(var(--top-gap) + ${(((syncStatus==="offline"||syncStatus==="error")?1:0) + (updateAvailable?1:0)) * 33}px)`,
         zIndex:20 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           {/* Logo */}

@@ -9,22 +9,27 @@
   <meta name="apple-mobile-web-app-title" content="Prime Pitching"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#080c14"/>
-  <meta name="app-version" content="v3.9"/>
+  <meta name="app-version" content="v3.10"/>
   <title>Prime Pitching</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="assets/logo.png"/>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
+    /* Home-screen app: status bar + 32px. iOS 26.1+ paints a blur/gradient over the top of
+       black-translucent home-screen apps that reaches below the status bar.
+       Keeping only a solid strip in that band leaves nothing visible to blur. */
+    :root { --top-gap: env(safe-area-inset-top, 0px); }
+    @media (display-mode: standalone) { :root { --top-gap: calc(env(safe-area-inset-top, 0px) + 32px); } }
     html, body { margin: 0; padding: 0; background: #080c14; height: 100%; overscroll-behavior: none; font-family: 'Barlow', sans-serif; }
     body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
-           padding-top: env(safe-area-inset-top, 0px); }
+           padding-top: var(--top-gap); }
     input, button, select, textarea { font-family: inherit; }
     * { -webkit-overflow-scrolling: touch; }
     #root { height: 100%; }
     /* Solid cover over the status-bar area (black-translucent lets content scroll
        under it) so iOS 26+'s top-edge blur has nothing translucent to pick up. */
     body::before { content: ""; position: fixed; top: 0; left: 0; right: 0;
-                   height: env(safe-area-inset-top, 0px); background: #080c14; z-index: 1000; }
+                   height: var(--top-gap); background: #080c14; z-index: 1000; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
     .spinner { animation: spin 0.9s linear infinite; display: inline-block; }
@@ -91,7 +96,7 @@
 
 
 // ─── App version (bump minor for each PR) ────────────────────────────────────
-const APP_VERSION = "v3.9";
+const APP_VERSION = "v3.10";
 const LOGO_URI = "assets/logo.png";
 
 // ─── Pure logic (rest-day/eligibility/date/device-id math) ───────────────────
