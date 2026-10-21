@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Prime Pitching"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#080c14"/>
-  <meta name="app-version" content="v3.8"/>
+  <meta name="app-version" content="v3.9"/>
   <title>Prime Pitching</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="assets/logo.png"/>
@@ -21,6 +21,10 @@
     input, button, select, textarea { font-family: inherit; }
     * { -webkit-overflow-scrolling: touch; }
     #root { height: 100%; }
+    /* Solid cover over the status-bar area (black-translucent lets content scroll
+       under it) so iOS 26+'s top-edge blur has nothing translucent to pick up. */
+    body::before { content: ""; position: fixed; top: 0; left: 0; right: 0;
+                   height: env(safe-area-inset-top, 0px); background: #080c14; z-index: 1000; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
     .spinner { animation: spin 0.9s linear infinite; display: inline-block; }
@@ -87,7 +91,7 @@
 
 
 // ─── App version (bump minor for each PR) ────────────────────────────────────
-const APP_VERSION = "v3.8";
+const APP_VERSION = "v3.9";
 const LOGO_URI = "assets/logo.png";
 
 // ─── Pure logic (rest-day/eligibility/date/device-id math) ───────────────────
@@ -105,8 +109,8 @@ const {
   getLiveGamePitcherIds, getRestThresholdInfo, getLivePitcherBudget, liveGameToLogEntries,
   applyLiveGameAction,
   formatDate, todayStr, addDays, toLocalDateStr, isIsoDate, newId,
-  getDeviceId, getCoachName, setCoachName, recomputeLast,
-  getActiveTourney, getSubjectKey,
+  getCoachName, setCoachName, recomputeLast,
+  getActiveTourney,
   getSeasonName, compareSeasonsDesc,
 } = window.PitchLogic;
 
@@ -136,7 +140,6 @@ const { STATUS, I, inputStyle, primaryBtn, cancelBtn, card, sectionLabel, sectio
   <script type="text/babel" data-presets="react" src="components/EditGameGroupModal.js"></script>
   <script type="text/babel" data-presets="react" src="components/SeasonHistory.js"></script>
   <script type="text/babel" data-presets="react" src="components/TeamPickerScreen.js"></script>
-  <script type="text/babel" data-presets="react" src="components/ActivityScreen.js"></script>
   <script type="text/babel" data-presets="react" src="components/Settings.js"></script>
   <script type="text/babel" data-presets="react" src="components/App.js"></script>
   <script type="text/babel" data-presets="react" src="components/AuthGate.js"></script>

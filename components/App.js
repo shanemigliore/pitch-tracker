@@ -63,8 +63,6 @@ function App({ role }) {
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [loaded,      setLoaded]      = useState(false);
   const [syncStatus,  setSyncStatus]  = useState("connecting");
-  const [auditLog,    setAuditLog]    = useState([]);
-  const [undidIds,    setUndidIds]    = useState(new Set());
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [liveGame,    setLiveGame]    = useState(null);
 
@@ -126,32 +124,6 @@ function App({ role }) {
     return () => { if (unsubFn) unsubFn(); };
   }, [teamId]);
 
-  // Subscribe to audit log for current team
-  useEffect(() => {
-    if (!teamId || !window.__fbWatchAudit) return;
-    setAuditLog([]);
-    setUndidIds(new Set());
-    // Capture teamId so the callback can detect if it fires after the team changed.
-    // Without this guard, a stale callback from a previous team fires after the new
-    // team's callback and can wipe out the new entries (since confirmed entries have
-    // no _local flag and get replaced by the stale team's empty-or-wrong entries).
-    const subscribedTeamId = teamId;
-    const unsub = window.__fbWatchAudit(teamId, entries => {
-      if (teamIdRef.current !== subscribedTeamId) return;
-      // Merge: keep local optimistic entries not yet confirmed in Firebase, then add Firebase data
-      const fbIds = new Set(entries.map(e => e.id));
-      setAuditLog(prev => {
-        const unconfirmed = prev.filter(e => e._local && !fbIds.has(e.id));
-        return [...unconfirmed, ...entries];
-      });
-      setUndidIds(prev => {
-        const fromDb = new Set(entries.filter(e => e.undone).map(e => e.id));
-        return new Set([...prev, ...fromDb]);
-      });
-    });
-    return () => unsub();
-  }, [teamId]);
-
   // Live game for current team - its own listener, written field-by-field by
   // the live-game handlers below rather than through the roster save effect.
   useEffect(() => {
@@ -193,90 +165,42 @@ function App({ role }) {
     return () => clearTimeout(saveTimeoutRef.current);
   }, [roster, tournaments, loaded]);
 
-  function pushAudit(action, detail, undoData, extra) {
-    try {
-      const tid = teamIdRef.current;
-      if (!tid || !window.__fbPushAudit) return;
-      const entryData = { ts: Date.now(), deviceId: getDeviceId(), device: getCoachName(), action, detail, undoData, ...(extra||{}) };
-      // Generate the real Firebase push key offline so the local entry has the correct id from the start
-      const pushKey = window.__fbAuditKey ? window.__fbAuditKey(tid) : null;
-      if (pushKey) {
-        setAuditLog(prev => [{ id: pushKey, _local: true, ...entryData }, ...prev]);
-      }
-      window.__fbPushAudit(tid, entryData, pushKey)
-        .catch(err => {
-          console.warn("[pushAudit] Firebase write failed:", err);
-          // The optimistic local entry above will never get confirmed by the
-          // Firebase listener now - flag it so ActivityScreen can show it as
-          // failed instead of leaving it looking like a normal, eventually-
-          // synced entry forever.
-          if (pushKey) {
-            setAuditLog(prev => prev.map(e => e.id === pushKey ? { ...e, _failed: true } : e));
-          }
-        });
-    } catch(e) { console.warn("[pushAudit] error:", e); }
-  }
-
   const addPlayer = useCallback(p => {
     setRoster(r => [...r, p]);
-    pushAudit("ADD_PITCHER", `Added ${p.name} #${p.jersey}`, { type:"DELETE_PITCHER", pitcherId: p.id });
   }, []);
 
-  const deletePlayer = useCallback((id, opts) => {
-    const pitcher = rosterRef.current.find(p => p.id === id);
+  const deletePlayer = useCallback(id => {
     setRoster(r => r.filter(p => p.id !== id));
     setSelectedPlayer(null);
-    if (pitcher && !opts?.skipAudit) pushAudit("DELETE_PITCHER", `Deleted ${pitcher.name} #${pitcher.jersey}`, { type:"RESTORE_PITCHER", pitcher });
-    return !!pitcher;
   }, []);
 
-  const editPlayer = useCallback((id, updates, opts) => {
-    const pitcher = rosterRef.current.find(p => p.id === id);
-    if (!pitcher) return false;
+  const editPlayer = useCallback((id, updates) => {
     setRoster(r => r.map(p => p.id === id ? {...p,...updates} : p));
     setSelectedPlayer(prev => prev && prev.id === id ? {...prev,...updates} : prev);
-    if (!opts?.skipAudit && (updates.name !== undefined || updates.jersey !== undefined)) {
-      pushAudit("EDIT_PITCHER", `Edited ${updates.name || pitcher.name} #${updates.jersey ?? pitcher.jersey}`,
-        { type:"RESTORE_PITCHER_META", pitcherId: id, name: pitcher.name, jersey: pitcher.jersey });
-    }
-    return true;
   }, []);
 
   const addTourney = useCallback(t => {
     setTournaments(ts => [...ts, t]);
-    pushAudit("ADD_TOURNEY", `Added tournament "${t.name}"`, { type:"DELETE_TOURNEY", tourneyId: t.id });
   }, []);
 
-  const deleteTourney = useCallback((id, opts) => {
-    const tourney = tournamentsRef.current.find(t => t.id === id);
+  const deleteTourney = useCallback(id => {
     setTournaments(ts => ts.filter(t => t.id !== id));
-    if (tourney && !opts?.skipAudit) pushAudit("DELETE_TOURNEY", `Deleted tournament "${tourney.name}"`, { type:"RESTORE_TOURNEY", tourney });
-    return !!tourney;
   }, []);
 
   const updateTourney = useCallback(t => {
-    const old = tournamentsRef.current.find(x => x.id === t.id);
     setTournaments(ts => ts.map(x => x.id === t.id ? t : x));
-    if (old) pushAudit("EDIT_TOURNEY", `Edited tournament "${t.name}"`, { type:"RESTORE_TOURNEY", tourney: old });
   }, []);
 
   const logMultiple = useCallback((playerId, gameData) => {
     const entry = { ...gameData, gameId: gameData.gameId || newId() };
-    const player = rosterRef.current.find(p => p.id === playerId);
     setRoster(r => r.map(p => {
       if (p.id !== playerId) return p;
       const history = [...(p.history||[]), entry];
       return { ...p, ...recomputeLast(history), history };
     }));
-    const gi = { date:entry.date, opponent:entry.opponent||null, isTournament:!!entry.isTournament, tournamentName:entry.tournamentName||null, tourneyDay:entry.tourneyDay||null };
-    pushAudit("LOG_GAME", `${player?.name||playerId}: ${entry.pitches}p`,
-      { type:"DELETE_GAME", playerId, gameId: entry.gameId },
-      { sharedGameId: entry.sharedGameId||null, gameInfo: gi, pitcherName: player?.name||playerId, pitches: entry.pitches });
   }, []);
 
   const editGame = useCallback((playerId, gameId, updatedData) => {
-    const player = rosterRef.current.find(p => p.id === playerId);
-    const oldEntry = player?.history?.find(h => h.gameId === gameId);
     setRoster(r => r.map(p => {
       if (p.id !== playerId) return p;
       const history = (p.history||[]).map(h => h.gameId === gameId ? {...h,...updatedData} : h);
@@ -287,16 +211,9 @@ function App({ role }) {
       const history = (prev.history||[]).map(h => h.gameId === gameId ? {...h,...updatedData} : h);
       return { ...prev, ...recomputeLast(history), history };
     });
-    if (oldEntry) {
-      pushAudit("EDIT_GAME",
-        `Edited game for ${player?.name || playerId} on ${oldEntry.date} (${oldEntry.pitches}p → ${updatedData.pitches ?? oldEntry.pitches}p)`,
-        { type:"RESTORE_GAME", playerId, entry: oldEntry });
-    }
   }, []);
 
-  const deleteGame = useCallback((playerId, gameId, opts) => {
-    const player = rosterRef.current.find(p => p.id === playerId);
-    const entry = player?.history?.find(h => h.gameId === gameId);
+  const deleteGame = useCallback((playerId, gameId) => {
     setRoster(r => r.map(p => {
       if (p.id !== playerId) return p;
       const history = (p.history||[]).filter(h => h.gameId !== gameId);
@@ -307,34 +224,6 @@ function App({ role }) {
       const history = (prev.history||[]).filter(h => h.gameId !== gameId);
       return { ...prev, ...recomputeLast(history), history };
     });
-    if (entry && !opts?.skipAudit) {
-      pushAudit("DELETE_GAME",
-        `Deleted game for ${player?.name || playerId} on ${entry.date} (${entry.pitches}p)`,
-        { type:"RESTORE_GAME", playerId, entry });
-    }
-    return !!entry;
-  }, []);
-
-  const restoreGame = useCallback((playerId, entry) => {
-    const player = rosterRef.current.find(p => p.id === playerId);
-    if (!player) return false;
-    setRoster(r => r.map(p => {
-      if (p.id !== playerId) return p;
-      const exists = (p.history||[]).some(h => h.gameId === entry.gameId);
-      const history = exists
-        ? (p.history||[]).map(h => h.gameId === entry.gameId ? entry : h)
-        : [...(p.history||[]), entry].sort((a,b) => (a.date||'').localeCompare(b.date||''));
-      return { ...p, ...recomputeLast(history), history };
-    }));
-    setSelectedPlayer(prev => {
-      if (!prev || prev.id !== playerId) return prev;
-      const exists = (prev.history||[]).some(h => h.gameId === entry.gameId);
-      const history = exists
-        ? (prev.history||[]).map(h => h.gameId === entry.gameId ? entry : h)
-        : [...(prev.history||[]), entry].sort((a,b) => (a.date||'').localeCompare(b.date||''));
-      return { ...prev, ...recomputeLast(history), history };
-    });
-    return true;
   }, []);
 
   // ── Live game handlers ─────────────────────────────────────────────────
@@ -386,87 +275,8 @@ function App({ role }) {
   const discardLiveGame = useCallback(gameId => {
     const tid = teamIdRef.current;
     if (!tid || !window.__fbClaimLiveGame) return Promise.resolve(false);
-    return window.__fbClaimLiveGame(tid, gameId).then(raw => {
-      const game = normalizeLiveGame(raw);
-      if (!game) return false;
-      const names = getLiveGamePitcherIds(game).map(id => {
-        const p = rosterRef.current.find(x => x.id === id);
-        return `${p ? p.name : id} ${game.pitchers[id].pitches}p`;
-      });
-      // Not undoable, but the detail keeps the counts recoverable by hand.
-      pushAudit("DISCARD_LIVE_GAME",
-        `Discarded live game${game.opponent ? ` vs ${game.opponent}` : ""} (${formatDate(game.date)})${names.length ? `: ${names.join(", ")}` : ""}`,
-        null);
-      return true;
-    });
+    return window.__fbClaimLiveGame(tid, gameId).then(raw => !!normalizeLiveGame(raw));
   }, []);
-
-  // Takes the full audit entry (not just its undoData) so it can log a
-  // clean "Undid: <original detail>" entry and report back whether the
-  // undo actually found its target - callers use that to tell the user
-  // when an undo silently can't do anything (e.g. the pitcher it would
-  // restore data onto was since deleted) instead of pretending it worked.
-  // Entries already successfully undone this session, guarding against a
-  // same-tick double-invocation of executeUndo (e.g. a double-fired touch
-  // event). A plain ref, not React state: rosterRef/tournamentsRef are only
-  // reassigned during a render, which React 18 batches/defers, so a second
-  // synchronous call before any render happens would otherwise still see
-  // stale state and re-run the restore - a ref mutates immediately and
-  // executeUndo runs synchronously start-to-finish, so this is race-free
-  // regardless of render timing. (A normal UI double-click doesn't hit this
-  // path at all - React removes/relabels the Undo button after the first
-  // click's state change lands - but this closes the gap for anything that
-  // can invoke the handler twice without a render in between.)
-  const undoneEntryIdsRef = useRef(new Set());
-
-  const executeUndo = useCallback((entry) => {
-    const undoData = entry?.undoData;
-    if (!undoData) return false;
-    if (undoneEntryIdsRef.current.has(entry.id)) return true; // already done - nothing more to do, not a failure
-    let ok = true;
-    switch (undoData.type) {
-      case "DELETE_GAME":
-        ok = deleteGame(undoData.playerId, undoData.gameId, { skipAudit:true });
-        break;
-      case "RESTORE_GAME":
-        ok = restoreGame(undoData.playerId, undoData.entry);
-        break;
-      case "DELETE_PITCHER":
-        ok = deletePlayer(undoData.pitcherId, { skipAudit:true });
-        break;
-      case "RESTORE_PITCHER":
-        // The exists-check runs INSIDE the updater, against React's real
-        // queued state at flush time, not a possibly-stale outer variable -
-        // safe even if this line somehow ran more than once for the same
-        // entry (defense in depth on top of the ref guard above).
-        setRoster(r => r.some(p => p.id === undoData.pitcher.id) ? r : [...r, undoData.pitcher]);
-        break;
-      case "RESTORE_PITCHER_META":
-        ok = editPlayer(undoData.pitcherId, { name:undoData.name, jersey:undoData.jersey }, { skipAudit:true });
-        break;
-      case "DELETE_TOURNEY":
-        ok = deleteTourney(undoData.tourneyId, { skipAudit:true });
-        break;
-      case "RESTORE_TOURNEY":
-        setTournaments(ts => {
-          const exists = ts.some(t => t.id === undoData.tourney.id);
-          return exists
-            ? ts.map(t => t.id === undoData.tourney.id ? undoData.tourney : t)
-            : [...ts, undoData.tourney];
-        });
-        break;
-      default:
-        return false;
-    }
-    if (ok) {
-      undoneEntryIdsRef.current.add(entry.id);
-      // One consistent, clearly-labeled entry per undo, in place of the
-      // mislabeled duplicate (or, for restores, the total silence) this
-      // used to produce - undoData:null so an UNDO entry can't itself be undone.
-      pushAudit("UNDO", `Undid: ${entry.detail}`, null);
-    }
-    return ok;
-  }, [deleteGame, restoreGame, deletePlayer, editPlayer, deleteTourney]);
 
   // ── Team picker screen ──────────────────────────────────────────────────
   if (!teamId || showTeamPicker) {
@@ -507,13 +317,13 @@ function App({ role }) {
 
   return (
     <div style={{ background:"#080c14", minHeight:"100dvh", maxWidth:430, margin:"0 auto",
-      fontFamily:"'Barlow',sans-serif", color:"#f8fafc", position:"relative", overflowX:"hidden",
+      fontFamily:"'Barlow',sans-serif", color:"#f8fafc", position:"relative", overflowX:"clip",
       backgroundImage:"radial-gradient(ellipse at 20% 0%,rgba(30,58,138,0.25) 0%,transparent 60%),radial-gradient(ellipse at 80% 100%,rgba(22,101,52,0.15) 0%,transparent 60%)" }}>
 
       {syncStatus==="offline" && (
         <div className="offline-banner" style={{ background:"rgba(244,63,94,0.12)", borderBottom:"1px solid rgba(244,63,94,0.3)",
           padding:"8px 16px", display:"flex", alignItems:"center", gap:8,
-          fontSize:12, color:"#f87171", fontWeight:600, position:"sticky", top:0, zIndex:30 }}>
+          fontSize:12, color:"#f87171", fontWeight:600, position:"sticky", top:"env(safe-area-inset-top, 0px)", zIndex:30 }}>
           {I.warning} Offline — changes will sync when reconnected
         </div>
       )}
@@ -521,7 +331,7 @@ function App({ role }) {
         <div className="offline-banner" onClick={()=>alert(`Sync error: ${lastSyncError || "Unknown error"}\n\nYour changes are saved on this device but couldn't be written to the server. This usually means a permissions problem, not a dropped connection - it won't fix itself by waiting.`)}
           style={{ background:"rgba(168,85,247,0.12)", borderBottom:"1px solid rgba(168,85,247,0.3)",
           padding:"8px 16px", display:"flex", alignItems:"center", gap:8, cursor:"pointer",
-          fontSize:12, color:"#c084fc", fontWeight:600, position:"sticky", top:0, zIndex:30 }}>
+          fontSize:12, color:"#c084fc", fontWeight:600, position:"sticky", top:"env(safe-area-inset-top, 0px)", zIndex:30 }}>
           {I.warning} Sync error — tap for details
         </div>
       )}
@@ -530,17 +340,19 @@ function App({ role }) {
           style={{ background:"rgba(56,189,248,0.12)", borderBottom:"1px solid rgba(56,189,248,0.3)",
           padding:"8px 16px", display:"flex", alignItems:"center", gap:8, cursor:"pointer",
           fontSize:12, color:"#38bdf8", fontWeight:600, position:"sticky",
-          top:(syncStatus==="offline"||syncStatus==="error")?33:0, zIndex:29 }}>
+          top:`calc(env(safe-area-inset-top, 0px) + ${(syncStatus==="offline"||syncStatus==="error")?33:0}px)`, zIndex:29 }}>
           ⬆ Update available — tap to refresh
         </div>
       )}
 
       {/* ── Header ── */}
-      <div style={{ background:"rgba(8,12,20,0.9)", backdropFilter:"blur(16px)",
+      {/* Opaque, no backdrop-filter, pinned below the status bar: iOS 26+ blurs
+          whatever translucent content sits in/near the status-bar area. */}
+      <div style={{ background:"#080c14",
         borderBottom:"1px solid rgba(255,255,255,0.06)",
         padding:"10px 14px",
         position:"sticky",
-        top:(((syncStatus==="offline"||syncStatus==="error")?1:0) + (updateAvailable?1:0)) * 33,
+        top:`calc(env(safe-area-inset-top, 0px) + ${(((syncStatus==="offline"||syncStatus==="error")?1:0) + (updateAvailable?1:0)) * 33}px)`,
         zIndex:20 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           {/* Logo */}
@@ -598,11 +410,7 @@ function App({ role }) {
           <ScreenBoundary>
             <Settings roster={roster} onAddPlayer={addPlayer} onDeletePlayer={deletePlayer}
               tournaments={tournaments} onAddTourney={addTourney} onDeleteTourney={deleteTourney} onUpdateTourney={updateTourney}
-              auditLog={auditLog} onUndo={executeUndo} role={role} onLogout={logout}
-              undidIds={undidIds} onUndid={id => {
-                setUndidIds(s => new Set([...s, id]));
-                if (window.__fbMarkAuditUndone) window.__fbMarkAuditUndone(teamId, id);
-              }}/>
+              role={role} onLogout={logout}/>
           </ScreenBoundary>
         )}
       </div>

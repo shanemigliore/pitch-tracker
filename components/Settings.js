@@ -1,4 +1,4 @@
-// Settings — the Settings tab: add pitchers, manage tournaments, activity log.
+// Settings — the Settings tab: add pitchers, manage tournaments, account.
 // A small sub-nav over three sections that used to be their own top-level tabs.
 // Babel/JSX component, loaded via <script type="text/babel" src="components/Settings.js"></script>.
 
@@ -201,13 +201,12 @@ function AccountSection({ role, onLogout }) {
 // SCREEN: SETTINGS
 // ══════════════════════════════════════════════════════════════════════════════
 function Settings({ roster, onAddPlayer, onDeletePlayer, tournaments, onAddTourney, onDeleteTourney, onUpdateTourney,
-  auditLog, onUndo, undidIds, onUndid, role, onLogout }) {
+  role, onLogout }) {
   const [section, setSection] = useState("roster");
 
   const sections = [
     ["roster", "Roster"],
     ["tournaments", "Tournaments"],
-    ["activity", "Activity"],
     ["account", "Account"],
   ];
 
@@ -233,9 +232,6 @@ function Settings({ roster, onAddPlayer, onDeletePlayer, tournaments, onAddTourn
       {section==="tournaments" && (
         <TournamentScreen roster={roster} tournaments={tournaments}
           onAddTourney={onAddTourney} onDeleteTourney={onDeleteTourney} onUpdateTourney={onUpdateTourney}/>
-      )}
-      {section==="activity" && (
-        <ActivityScreen auditLog={auditLog} roster={roster} onUndo={onUndo} undidIds={undidIds} onUndid={onUndid}/>
       )}
       {section==="account" && <AccountSection role={role} onLogout={onLogout}/>}
     </div>
