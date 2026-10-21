@@ -101,7 +101,7 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - Firebase Realtime Database (email/password auth via two shared accounts — see Auth below)
 - No build step, no bundler, no npm
 
-**Current version:** v3.9
+**Current version:** v3.10
 
 ---
 
@@ -458,7 +458,7 @@ selectedPlayer    // Pitcher | null — active drill-in on Roster tab
 
 **No audit log / undo (removed v3.9):** the Settings → Activity log never showed reliably and was removed along with undo. Fixing a mistake = edit/delete the game on the Season tab or in `PitcherDetail`, or edit the pitcher/tournament directly.
 
-**iOS status bar / sticky header:** the app runs under the status bar (`black-translucent` + `viewport-fit=cover`). `body::before` (in `index.html`) is a fixed opaque strip of height `env(safe-area-inset-top)`, and the sticky header + banners in `App.js` pin at `env(safe-area-inset-top)` rather than `0`. The App wrapper uses `overflowX:"clip"`, not `"hidden"` — `hidden` makes it a scroll container, so `sticky` binds to it instead of the viewport and the header never sticks (and the env() offset then just pushes it down). Keep the header opaque with no `backdrop-filter` — iOS 26+ applies a top-edge blur that smears translucent content near the status bar.
+**iOS status bar / sticky header:** the app runs under the status bar (`black-translucent` + `viewport-fit=cover`). `--top-gap` (`:root` in `index.html`) = `env(safe-area-inset-top) + 32px` in the installed home-screen app (`@media (display-mode: standalone)`), just the inset in a browser tab. `body::before` is a fixed opaque strip of that height, body `padding-top` matches, and the sticky header + banners in `App.js` pin at `var(--top-gap)` rather than `0`. The extra 32px exists because iOS 26.1+ paints its own blur/gradient scrim over the top of `black-translucent` home-screen apps (it sits above page content, so making the header opaque alone didn't help — v3.9) and the scrim reaches below the status bar; only the plain strip sits in that band now. If the logo is still soft, raise the 32; the alternative fix is removing the `apple-mobile-web-app-status-bar-style` meta, which needs every device to re-add the app to the home screen. The App wrapper uses `overflowX:"clip"`, not `"hidden"` — `hidden` makes it a scroll container, so `sticky` binds to it instead of the viewport and the header never sticks (and the env() offset then just pushes it down). Keep the header opaque with no `backdrop-filter` — iOS 26+ applies a top-edge blur that smears translucent content near the status bar.
 
 **Team selection:** Stored in `localStorage` under `TEAM_ID_KEY = "pt_selected_team_id"`. On load, if a stored ID exists the app skips `TeamPickerScreen` and goes straight to the team.
 
