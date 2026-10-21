@@ -1,6 +1,6 @@
 // AuthGate — password + coach-name gate shown before the app until a coach or
 // admin signs in (once per device — Firebase persists the session across
-// reloads and version bumps) and provides a name for the audit log.
+// reloads and version bumps) and provides a name (shown as who started a live game).
 // Babel/JSX component, loaded via <script type="text/babel" src="components/AuthGate.js"></script>.
 function AuthGate() {
   const [status, setStatus]     = useState("loading"); // loading | needsPassword | needsName | ready
@@ -89,7 +89,7 @@ function AuthGate() {
       <form onSubmit={submitName} style={{ width:"100%", maxWidth:320 }}>
         <label style={{ ...sectionLabel, display:"block", marginBottom:6 }}>YOUR NAME</label>
         <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)", marginBottom:10, lineHeight:1.4 }}>
-          Shown in the activity log next to changes you make. You'll only need to enter this once on this device.
+          Shown to other coaches when you start a live game. You'll only need to enter this once on this device.
         </div>
         <input value={nameInput} autoFocus
           onChange={e=>setNameInput(e.target.value)}
