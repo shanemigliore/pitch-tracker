@@ -517,6 +517,109 @@ test('10l. sanitizeLiveCount handles exponent-notation numbers', () => {
   assert.strictEqual(logic.sanitizeLiveCount(12.7), 12);
 });
 
+// ── 11. Live rings + milestones (v3.11) ──────────────────────────────────
+
+function liveBudget(pitcher, count, overrides) {
+  return logic.getLivePitcherBudget(pitcher,
+    liveGame(Object.assign({ pitchers: { [pitcher.id]: { pitches: count, status: 'active', order: 1 } } }, overrides)), []);
+}
+function liveTourneyBudget(pitcher, count, date) {
+  return logic.getLivePitcherBudget(pitcher, liveGame({ context: 'lt', date,
+    pitchers: { [pitcher.id]: { pitches: count, status: 'active', order: 1 } } }), [LT]);
+}
+const texts = b => b.milestones.map(m => m.text);
+const fresh = () => ({ id: 'm', name: 'M', jersey: '7', history: [] });
+
+test('11a. regular: one TODAY ring tracking today\'s pitches vs max, rest ticks inside the ring', () => {
+  const b = liveBudget(fresh(), 12);
+  assert.strictEqual(b.rings.length, 1);
+  assert.deepStrictEqual(b.rings[0], { key: 'today', label: 'TODAY', value: 12, max: 55, ticks: [20, 40], guideline: false });
+});
+
+test('11b. regular 10U rest step edges: 15 none, 16 -> 5 until, 20 -> next pitch, 21/23 crossed, 24 none', () => {
+  assert.deepStrictEqual(texts(liveBudget(fresh(), 15)), []);
+  assert.deepStrictEqual(texts(liveBudget(fresh(), 16)), ['5 pitches until 1 rest day (at 21p)']);
+  const at20 = liveBudget(fresh(), 20).milestones;
+  assert.strictEqual(at20.length, 1);
+  assert.strictEqual(at20[0].text, 'Next pitch = 1 rest day');
+  assert.strictEqual(at20[0].level, 'urgent');
+  assert.deepStrictEqual(texts(liveBudget(fresh(), 21)), ['Now 1 rest day']);
+  assert.deepStrictEqual(texts(liveBudget(fresh(), 23)), ['Now 1 rest day']);
+  assert.deepStrictEqual(texts(liveBudget(fresh(), 24)), []);
+});
+
+test('11c. regular: daily max approach and reach, ordered most urgent first', () => {
+  assert.deepStrictEqual(texts(liveBudget(fresh(), 52)), ['3 pitches to daily max (55p)']);
+  assert.deepStrictEqual(texts(liveBudget(fresh(), 55)), ['At daily max (55p) — finish batter only']);
+  assert.deepStrictEqual(texts(liveBudget(fresh(), 56)), ['5 pitches until 3 rest days (at 61p)']);
+});
+
+test('11d. regular: rest step above the daily max (60 on 55) still warns, nothing at the cap once over', () => {
+  assert.deepStrictEqual(texts(liveBudget(fresh(), 58)), ['3 pitches until 3 rest days (at 61p)']);
+  assert.deepStrictEqual(texts(liveBudget(fresh(), 60)), ['Next pitch = 3 rest days']);
+  assert.deepStrictEqual(texts(liveBudget(fresh(), 61)), ['Now 3 rest days']);
+});
+
+test('11e. regular: pitches logged earlier today count toward rest steps and the ring', () => {
+  const p = { id: 'd', name: 'D', jersey: '', history: [makeEntry({ date: '2026-10-20', pitches: 15 })] };
+  const b = liveBudget(p, 3);
+  assert.strictEqual(b.rings[0].value, 18);
+  assert.deepStrictEqual(texts(b), ['3 pitches until 1 rest day (at 21p)']);
+});
+
+test('11f. 12U rules (75, 25/45/65) drive ticks and steps', () => {
+  logic.setCurrentRules({ maxPitches: 75, rest1: 25, rest2: 45, rest3: 65 });
+  try {
+    const b = liveBudget(fresh(), 41);
+    assert.deepStrictEqual(b.rings[0].ticks, [25, 45, 65]);
+    assert.deepStrictEqual(texts(b), ['5 pitches until 2 rest days (at 46p)']);
+  } finally {
+    logic.setCurrentRules(logic.DEFAULT_RULES);
+  }
+});
+
+test('11g. tournament: DAY + TOURNEY rings; ticks on the tourney ring only', () => {
+  const b = liveTourneyBudget(fresh(), 10, '2026-10-23');
+  assert.deepStrictEqual(b.rings.map(r => [r.label, r.value, r.max, r.guideline]), [['DAY 1', 10, 50, false], ['TOURNEY', 10, 100, false]]);
+  assert.deepStrictEqual(b.rings[0].ticks, []);
+  assert.deepStrictEqual(b.rings[1].ticks, [20, 40, 60]);
+});
+
+test('11h. tournament: rest steps use the tournament total, worded "after tourney"', () => {
+  const p = tourneyPitcher([30, 0, 0], LT);
+  const b = liveTourneyBudget(p, 12, '2026-10-24'); // Day 2 (guideline 40): 12 today, 42 total
+  assert.deepStrictEqual(b.rings.map(r => r.value), [12, 42]);
+  assert.strictEqual(b.rings[0].guideline, true);
+  assert.deepStrictEqual(texts(b), ['Now 2 rest days after tourney']);
+  assert.deepStrictEqual(texts(liveTourneyBudget(p, 8, '2026-10-24')), ['3 pitches until 2 rest days after tourney (at 41p total)']);
+});
+
+test('11i. tournament: day guideline warns softly, never "At ... finish batter"', () => {
+  const p = fresh();
+  const near = liveTourneyBudget(p, 37, '2026-10-24').milestones.find(m => m.kind === 'limit');
+  assert.strictEqual(near.level, 'soft');
+  assert.strictEqual(near.text, '3 pitches to Day 2 guideline (40p)');
+  assert.ok(!texts(liveTourneyBudget(p, 40, '2026-10-24')).some(t => t.startsWith('At ')));
+});
+
+test('11j. tournament: day hard limit and tourney total both warn', () => {
+  const hard = liveTourneyBudget(fresh(), 50, '2026-10-23');
+  assert.strictEqual(hard.milestones[0].text, 'At Day 1 limit (50p) — finish batter only');
+  const p = tourneyPitcher([50, 40, 0], LT); // 90 total going into Day 3
+  assert.deepStrictEqual(texts(liveTourneyBudget(p, 6, '2026-10-25')), ['4 pitches to tourney limit (100p)']);
+});
+
+test('11k. getLiveMilestones ignores malformed limits/rules', () => {
+  assert.deepStrictEqual(logic.getLiveMilestones({ restUsed: 0, limits: [{ label: 'x', used: 0, max: 0 }, { label: 'y', used: 0 }] }), []);
+  logic.setCurrentRules({ maxPitches: 55, rest1: undefined, rest2: 40, rest3: 60 });
+  try {
+    assert.deepStrictEqual(logic.getLiveMilestones({ restUsed: 18, limits: [] }), []);
+    assert.deepStrictEqual(logic.getRestTicks(55), [40]);
+  } finally {
+    logic.setCurrentRules(logic.DEFAULT_RULES);
+  }
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────
 
 console.log('');

@@ -15,18 +15,27 @@ function Chip({ status, size="sm", label }) {
   );
 }
 
-function RadialArc({ value, max, size=120, strokeW=9, color="#38bdf8" }) {
+// ticks: values to mark on the ring (e.g. rest-day steps). guideline: a soft
+// limit - dashed track, and it tops out amber instead of red.
+function RadialArc({ value, max, size=120, strokeW=9, color="#38bdf8", ticks=[], guideline=false }) {
   const r = (size - strokeW) / 2;
   const cx = size / 2, cy = size / 2;
   const circ = 2 * Math.PI * r;
   const pct = Math.min(value / max, 1);
-  const arcColor = pct >= 1 ? "#f43f5e" : pct >= (max-15)/max ? "#fb923c" : color;
+  const arcColor = pct >= 1 ? (guideline ? "#fbbf24" : "#f43f5e") : pct >= (max-15)/max ? "#fb923c" : color;
   return (
     <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={strokeW}/>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={guideline?"rgba(255,255,255,0.18)":"rgba(255,255,255,0.06)"}
+        strokeWidth={strokeW} strokeDasharray={guideline?"3 3":undefined}/>
       <circle cx={cx} cy={cy} r={r} fill="none" stroke={arcColor} strokeWidth={strokeW}
         strokeDasharray={circ} strokeDashoffset={circ*(1-pct)}
         strokeLinecap="round" style={{ transition:"stroke-dashoffset 0.3s,stroke 0.3s" }}/>
+      {ticks.filter(t=>t>0 && t<max).map(t=>{
+        const a = 2 * Math.PI * t / max, c = Math.cos(a), s = Math.sin(a);
+        const r0 = r - strokeW/2 - 1, r1 = r + strokeW/2 + 1;
+        return <line key={t} x1={cx+r0*c} y1={cy+r0*s} x2={cx+r1*c} y2={cy+r1*s}
+          stroke="rgba(255,255,255,0.7)" strokeWidth={1.5}/>;
+      })}
     </svg>
   );
 }

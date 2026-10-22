@@ -132,7 +132,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
         </div>
         <button onClick={start} disabled={starting || setupOutside}
           style={{ ...primaryBtn, width:"100%", padding:14, opacity:(starting||setupOutside)?0.5:1,
-            background:"linear-gradient(135deg,#dc2626,#b91c1c)", boxShadow:"0 4px 20px rgba(220,38,38,0.35)" }}>
+            background:"linear-gradient(135deg,#16a34a,#15803d)", boxShadow:"0 4px 20px rgba(22,163,74,0.4)" }}>
           {starting ? "Starting…" : "● Start Live Game"}
         </button>
         <p style={{ fontSize:11, color:"rgba(255,255,255,0.35)", textAlign:"center", marginTop:10 }}>
@@ -234,6 +234,12 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
     return `${now}${b.restAfterTourney?" after tourney":""}${next}`;
   }
   function leftColor(n) { return n<0 ? "#f43f5e" : n<=10 ? "#fb923c" : "#4ade80"; }
+  const MILESTONE_STYLE = {
+    urgent: { background:"rgba(251,146,60,0.2)", border:"1px solid rgba(251,146,60,0.6)", color:"#fdba74" },
+    warn:   { background:"rgba(251,191,36,0.12)", border:"1px solid rgba(251,191,36,0.45)", color:"#fbbf24" },
+    soft:   { background:"rgba(251,191,36,0.05)", border:"1px dashed rgba(251,191,36,0.35)", color:"rgba(251,191,36,0.8)" },
+    info:   { background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.75)" },
+  };
 
   return (
     <div style={{ padding:"0 16px 110px" }}>
@@ -279,23 +285,42 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
           const isActive = e.status==="active";
           const warn = !b.eligible ? b.reason : null;
           return (
-            <div key={id} style={{ marginBottom:8, padding:"10px 12px", borderRadius:12,
-              background:isActive?"rgba(56,189,248,0.06)":"rgba(255,255,255,0.02)",
-              border:`1px solid ${isActive?"rgba(56,189,248,0.3)":"rgba(255,255,255,0.07)"}`,
-              opacity:isActive?1:0.75 }}>
+            <div key={id} style={{ marginBottom:8, padding:isActive?"9px 11px":"10px 12px", borderRadius:12,
+              background:isActive?"rgba(56,189,248,0.14)":"rgba(255,255,255,0.02)",
+              border:isActive?"2px solid #38bdf8":"1px solid rgba(255,255,255,0.07)",
+              boxShadow:isActive?"0 0 0 3px rgba(56,189,248,0.12), 0 0 18px rgba(56,189,248,0.25)":"none",
+              opacity:isActive?1:0.55 }}>
               <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-                <div style={{ position:"relative", width:52, height:52, flexShrink:0 }}>
-                  <RadialArc value={b.arcValue} max={Math.max(1,b.arcMax)} size={52} strokeW={5}/>
-                  <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
-                    fontFamily:"'Bebas Neue',cursive", fontSize:13, color:"#38bdf8" }}>
-                    {p.jersey?`#${p.jersey}`:p.name[0]}
-                  </div>
-                </div>
+                {(()=>{
+                  // One ring per limit: today's max (regular), or Day N + tourney total.
+                  const ringSize = b.rings.length>1 ? 46 : 52;
+                  return (
+                    <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                      {b.rings.map(ring=>(
+                        <div key={ring.key} style={{ display:"flex", flexDirection:"column", alignItems:"center" }}>
+                          <div style={{ position:"relative", width:ringSize, height:ringSize }}
+                            aria-label={`${ring.value} of ${ring.max} pitches, ${ring.label.toLowerCase()}${ring.guideline?" guideline":""}`} role="img">
+                            <RadialArc value={ring.value} max={ring.max} size={ringSize} strokeW={5}
+                              ticks={ring.ticks} guideline={ring.guideline}/>
+                            <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
+                              fontFamily:"'Bebas Neue',cursive", fontSize:ringSize>48?24:20, lineHeight:1, color:"#f8fafc" }}>
+                              {ring.value}
+                            </div>
+                          </div>
+                          <div style={{ fontSize:8, fontWeight:800, letterSpacing:0.6, marginTop:2, color:"rgba(255,255,255,0.45)" }}>
+                            {ring.label}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                     <span style={{ fontSize:14, fontWeight:700, color:"#f8fafc", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</span>
+                    {p.jersey && <span style={{ fontSize:12, fontWeight:700, color:"rgba(255,255,255,0.45)", flexShrink:0 }}>#{p.jersey}</span>}
                     <span style={{ fontSize:9, fontWeight:800, letterSpacing:0.8, padding:"2px 6px", borderRadius:6, flexShrink:0,
-                      background:isActive?"rgba(239,68,68,0.18)":"rgba(255,255,255,0.08)", color:isActive?"#f87171":"rgba(255,255,255,0.45)" }}>
+                      background:isActive?"rgba(56,189,248,0.22)":"rgba(255,255,255,0.08)", color:isActive?"#7dd3fc":"rgba(255,255,255,0.45)" }}>
                       {isActive?"PITCHING":"LEFT GAME"}
                     </span>
                   </div>
@@ -309,6 +334,16 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
                   <div style={{ fontSize:9, fontWeight:700, color:leftColor(b.pitchesLeft) }}>{b.pitchesLeft<0?"OVER":b.leftLabel.toUpperCase()}</div>
                 </div>
               </div>
+              {isActive && b.milestones.length>0 && (
+                <div role="status" aria-live="polite" style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:8 }}>
+                  {b.milestones.map(m=>(
+                    <div key={m.text} style={{ ...MILESTONE_STYLE[m.level], borderRadius:8, padding:"6px 10px",
+                      fontSize:m.level==="urgent"?13:12, fontWeight:700 }}>
+                      {m.level==="info" ? "→ " : m.level==="soft" ? "ⓘ " : "⚠ "}{m.text}
+                    </div>
+                  ))}
+                </div>
+              )}
               <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                 <button type="button" onClick={()=>bump(id,-1)} aria-label={`Subtract 1 pitch for ${p.name}`}
                   style={{ flex:1, padding:"9px 0", borderRadius:8, background:"rgba(255,255,255,0.05)",

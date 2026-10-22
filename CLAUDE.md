@@ -101,7 +101,7 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - Firebase Realtime Database (email/password auth via two shared accounts — see Auth below)
 - No build step, no bundler, no npm
 
-**Current version:** v3.10
+**Current version:** v3.11
 
 ---
 
@@ -346,7 +346,7 @@ specific principle.
 |-----------|------|--------|---------|
 | `EligibilityScreen` | `components/EligibilityScreen.js` | `roster` | **The Roster tab.** Pitcher list grouped by availability for a chosen date (regular season or a specific tournament's budget), tap a pitcher to drill into `PitcherDetail`. (Filename predates the merge with the old standalone roster list.) |
 | `PitcherDetail` | `components/PitcherDetail.js` | `roster` (drill-in) | Pitcher stats, editable season history, edit name/jersey, remove from roster. Logging a new game happens on the Game Log tab, not here. |
-| `LiveGameScreen` | `components/LiveGameScreen.js` | `live` | **The Live tab.** Running pitch counts for the game in progress, shared live across devices via `/teams/{teamId}/liveGame`. Setup (date defaults to today, `ContextPicker`, opponent + recent-opponent chips) → in-game cards (−1/+1/+5 + tap-to-type running total, pitches left, rest hint, "Left game" / "Put back in…" / Remove) → available pitchers (tap to bring in) → not-available list with reasons → **Log Complete Game** (same checks/entries as Game Log) or Discard. The tab icon gets a pulsing red dot while a game is live. |
+| `LiveGameScreen` | `components/LiveGameScreen.js` | `live` | **The Live tab.** Running pitch counts for the game in progress, shared live across devices via `/teams/{teamId}/liveGame`. Setup (date defaults to today, `ContextPicker`, opponent + recent-opponent chips) → in-game cards (rings with the count each tracks inside — one TODAY ring regular, DAY N + TOURNEY in a tournament, rest steps as ticks; the active pitcher's card has a 2px blue border + glow and shows amber milestone banners; −1/+1/+5 + tap-to-type running total, pitches left, rest hint, "Left game" / "Put back in…" / Remove) → available pitchers (tap to bring in) → not-available list with reasons → **Log Complete Game** (same checks/entries as Game Log) or Discard. The tab icon gets a pulsing red dot while a game is live. |
 | `GameLogScreen` | `components/GameLogScreen.js` | `gamelog` | Log a **new** game for multiple pitchers at once (two-step: who pitched, then pitch counts). Entry-only — browsing/editing past games moved to the Season tab. |
 | `SeasonHistory` | `components/SeasonHistory.js` | `season` | **The Season tab.** Chronological game history with leaderboard. Tournament games collapse into one container per tournament (day-by-day breakdown inside), positioned by its most recent game date, so the whole season is browsable as one continuous list without switching to a separate tournament view. |
 | `Settings` | `components/Settings.js` | `settings` | **The Settings tab.** Sub-nav over three sections: Roster (add a pitcher — `AddPitcherSection`, same file), Tournaments (renders `TournamentScreen`), Account (signed-in name/role + log out — `AccountSection`, same file). |
@@ -363,7 +363,7 @@ specific principle.
 | `AccountSection` | `components/Settings.js` | Shows signed-in name + role (Admin/Coach) and a confirm-then-log-out button — Settings' Account sub-section |
 | `ContextPicker` | `components/shared.js` | Regular season vs. tournament picker (shared by log forms) |
 | `Chip` | `components/shared.js` | Small colored status badge |
-| `RadialArc` | `components/shared.js` | SVG radial progress ring (pitch count vs. max) |
+| `RadialArc` | `components/shared.js` | SVG radial progress ring (pitch count vs. max). Optional `ticks` (values marked on the ring) and `guideline` (dashed track, tops out amber not red) |
 | `ScreenBoundary` | `components/shared.js` | React error boundary wrapping each screen; shows error + Back button |
 
 ---
@@ -424,7 +424,9 @@ selectedPlayer    // Pitcher | null — active drill-in on Roster tab
 | `getTourneyLimitViolation(pitcher, t, dateStr, count, tournaments)` | Save-time check for a tournament game: `null`, `{level:"note"}` (guideline, non-blocking) or `{level:"violation"}` |
 | `getGameLogCheck(pitcher, {context, tourney, date, count, tournaments})` | Save-time rule check shared by Game Log and Live: regular-season rest owed, or `getTourneyLimitViolation` |
 | `buildGameEntries({pitchers, date, opponent, context, tourney, sharedGameId})` | HistoryEntry payloads (`{playerId, data}`) for one game — shared by Game Log and Live |
-| `getLivePitcherBudget(pitcher, liveGame, tournaments)` | Live tab per-pitcher view: `{ inGame, hasLeft, count, eligible, reason, priorToday, pitchesLeft, leftLabel, arcValue, arcMax, note, rest }`. Eligibility is from logged history only (so it doesn't flip mid-game); pitches left includes the live count. Regular: `maxPitches` per day minus already-logged same-day pitches + live count. Tournament: tighter of the day's hard limit and the total |
+| `getLivePitcherBudget(pitcher, liveGame, tournaments)` | Live tab per-pitcher view: `{ inGame, hasLeft, count, eligible, reason, priorToday, pitchesLeft, leftLabel, arcValue, arcMax, note, rest }`. Eligibility is from logged history only (so it doesn't flip mid-game); pitches left includes the live count. Regular: `maxPitches` per day minus already-logged same-day pitches + live count. Tournament: tighter of the day's hard limit and the total. Also `rings` (`[{key,label,value,max,ticks,guideline}]` — one TODAY ring for regular, DAY N + TOURNEY for a tournament) and `milestones` (from `getLiveMilestones`) |
+| `getLiveMilestones({restUsed, limits, restAfterTourney})` | Live-tab warnings, most urgent first: each rest step from 5 pitches out (`Next pitch = N rest days` at exactly the step, since rest is strict `>`), a 3-pitch `Now N rest days` after crossing, and each limit from 5 left (`At … — finish batter only` when reached; guideline limits only warn, level `soft`). Steps above the daily max still warn. Count-based, so every device shows the same |
+| `getRestTicks(max)` | Team rest steps that fit inside a ring of size `max` (tick marks) |
 | `getRestThresholdInfo(pitches)` | `{ restDays, nextAt, nextRestDays }` — next rest threshold (strict `>`, so `nextAt = restN + 1`) |
 | `applyLiveGameAction(raw, gameId, action)` | Pure reducer for Live-tab edits (`setField`/`bump`/`setCount`/`add`/`undoAdd`/`markLeft`/`putBack`/`remove`) on the raw server value; returns the new value or `undefined` (abort) when the game id doesn't match or the target pitcher isn't in the game. `add` auto-marks active pitchers left; `undoAdd` refuses once the new pitcher has thrown; counts clamp to 0..999 |
 | `liveGameToLogEntries(liveGame, tournaments, sharedGameId)` | `{ entries, dropped }` — 0-count pitchers dropped, entry order preserved |
