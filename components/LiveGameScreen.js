@@ -246,11 +246,11 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
     const icon = st.level==="soft" ? "ⓘ " : "⚠ ";
     const one = { overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" };
     return (
-      <div role="status" aria-live={isActive?"polite":"off"} style={{ ...st2, display:"flex", height:48, boxSizing:"border-box",
+      <div style={{ ...st2, display:"flex", height:48, boxSizing:"border-box",
         borderRadius:8, marginBottom:8, overflow:"hidden" }}>
-        <div style={{ width:84, flexShrink:0, padding:"5px 8px", display:"flex", flexDirection:"column", justifyContent:"center",
+        <div style={{ width:80, flexShrink:0, padding:"5px 8px", display:"flex", flexDirection:"column", justifyContent:"center",
           borderRight:"1px solid rgba(255,255,255,0.1)" }}>
-          <div style={{ fontSize:8, fontWeight:800, letterSpacing:0.6, opacity:0.75, ...one }}>{st.restAfterTourney?"TOURNEY REST":"REST"}</div>
+          <div style={{ fontSize:8, fontWeight:800, letterSpacing:0.2, opacity:0.75, ...one }}>{st.restAfterTourney?"TOURNEY REST":"REST"}</div>
           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
             <span style={{ fontFamily:"'Bebas Neue',cursive", fontSize:19, lineHeight:1.1, color:"#f8fafc" }}>{restVal}</span>
             {st.justCrossed && isActive && <span style={{ fontSize:8, fontWeight:800, padding:"1px 4px", borderRadius:4,
@@ -258,7 +258,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
           </div>
         </div>
         <div style={{ flex:1, minWidth:0, padding:"5px 10px", display:"flex", flexDirection:"column", justifyContent:"center" }}>
-          <div style={{ fontSize:st.alert?11:8, fontWeight:800, letterSpacing:st.alert?0:0.6, opacity:st.alert?1:0.75, ...one }}>
+          <div role={isActive?"status":undefined} aria-live={isActive?"polite":undefined} style={{ fontSize:st.alert?11:8, fontWeight:800, letterSpacing:st.alert?0:0.6, opacity:st.alert?1:0.75, ...one }}>
             {st.alert ? `${icon}${st.alert}` : "NEXT"}
           </div>
           <div style={{ fontSize:13, fontWeight:700, color:"#f8fafc", ...one }}>{st.next}</div>
