@@ -30,10 +30,10 @@ function RadialArc({ value, max, size=120, strokeW=9, color="#38bdf8", ticks=[],
       <circle cx={cx} cy={cy} r={r} fill="none" stroke={arcColor} strokeWidth={strokeW}
         strokeDasharray={circ} strokeDashoffset={circ*(1-pct)}
         strokeLinecap="round" style={{ transition:"stroke-dashoffset 0.3s,stroke 0.3s" }}/>
-      {ticks.filter(t=>t>0 && t<max).map(t=>{
+      {ticks.filter(t=>t>0 && t<max).map((t,i)=>{
         const a = 2 * Math.PI * t / max, c = Math.cos(a), s = Math.sin(a);
         const r0 = r - strokeW/2 - 1, r1 = r + strokeW/2 + 1;
-        return <line key={t} x1={cx+r0*c} y1={cy+r0*s} x2={cx+r1*c} y2={cy+r1*s}
+        return <line key={i} x1={cx+r0*c} y1={cy+r0*s} x2={cx+r1*c} y2={cy+r1*s}
           stroke="rgba(255,255,255,0.7)" strokeWidth={1.5}/>;
       })}
     </svg>

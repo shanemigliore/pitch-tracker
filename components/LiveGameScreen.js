@@ -293,7 +293,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
               <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
                 {(()=>{
                   // One ring per limit: today's max (regular), or Day N + tourney total.
-                  const ringSize = b.rings.length>1 ? 46 : 52;
+                  const ringSize = b.rings.length>1 ? 44 : 52;
                   return (
                     <div style={{ display:"flex", gap:6, flexShrink:0 }}>
                       {b.rings.map(ring=>(
@@ -303,7 +303,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
                             <RadialArc value={ring.value} max={ring.max} size={ringSize} strokeW={5}
                               ticks={ring.ticks} guideline={ring.guideline}/>
                             <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
-                              fontFamily:"'Bebas Neue',cursive", fontSize:ringSize>48?24:20, lineHeight:1, color:"#f8fafc" }}>
+                              fontFamily:"'Bebas Neue',cursive", fontSize:ringSize>48?24:19, lineHeight:1, color:"#f8fafc" }}>
                               {ring.value}
                             </div>
                           </div>
@@ -316,22 +316,22 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
                   );
                 })()}
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <span style={{ fontSize:14, fontWeight:700, color:"#f8fafc", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</span>
+                  <div style={{ fontSize:14, fontWeight:700, color:"#f8fafc", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:2 }}>
                     {p.jersey && <span style={{ fontSize:12, fontWeight:700, color:"rgba(255,255,255,0.45)", flexShrink:0 }}>#{p.jersey}</span>}
                     <span style={{ fontSize:9, fontWeight:800, letterSpacing:0.8, padding:"2px 6px", borderRadius:6, flexShrink:0,
                       background:isActive?"rgba(56,189,248,0.22)":"rgba(255,255,255,0.08)", color:isActive?"#7dd3fc":"rgba(255,255,255,0.45)" }}>
                       {isActive?"PITCHING":"LEFT GAME"}
                     </span>
                   </div>
-                  <div style={{ fontSize:11, color:"rgba(255,255,255,0.45)", marginTop:2 }}>{restText(b)}</div>
+                  <div style={{ fontSize:11, color:"rgba(255,255,255,0.45)", marginTop:3 }}>{restText(b)}</div>
                   {b.priorToday>0 && <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>Includes {b.priorToday}p already logged today</div>}
                 </div>
                 <div style={{ textAlign:"right", flexShrink:0 }}>
                   <div style={{ fontSize:26, lineHeight:1, fontWeight:800, fontFamily:"'Bebas Neue',cursive", color:leftColor(b.pitchesLeft) }}>
                     {b.pitchesLeft<0 ? `+${-b.pitchesLeft}` : b.pitchesLeft}
                   </div>
-                  <div style={{ fontSize:9, fontWeight:700, color:leftColor(b.pitchesLeft) }}>{b.pitchesLeft<0?"OVER":b.leftLabel.toUpperCase()}</div>
+                  <div style={{ fontSize:9, fontWeight:700, maxWidth:50, marginLeft:"auto", color:leftColor(b.pitchesLeft) }}>{b.pitchesLeft<0?"OVER":b.leftLabel.toUpperCase()}</div>
                 </div>
               </div>
               {isActive && b.milestones.length>0 && (
