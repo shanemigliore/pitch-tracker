@@ -252,9 +252,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
           borderRight:"1px solid rgba(255,255,255,0.1)" }}>
           <div style={{ fontSize:8, fontWeight:800, letterSpacing:0.2, opacity:0.75, ...one }}>{st.restAfterTourney?"TOURNEY REST":"REST"}</div>
           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-            <span style={{ fontFamily:"'Bebas Neue',cursive", fontSize:19, lineHeight:1.1, color:"#f8fafc" }}>{restVal}</span>
-            {st.justCrossed && isActive && <span style={{ fontSize:8, fontWeight:800, padding:"1px 4px", borderRadius:4,
-              background:"rgba(56,189,248,0.3)", color:"#e0f2fe" }}>NEW</span>}
+            <span style={{ fontFamily:"'Bebas Neue',cursive", fontSize:19, lineHeight:1.1, color:"#f8fafc", whiteSpace:"nowrap" }}>{restVal}</span>
           </div>
         </div>
         <div style={{ flex:1, minWidth:0, padding:"5px 10px", display:"flex", flexDirection:"column", justifyContent:"center" }}>
