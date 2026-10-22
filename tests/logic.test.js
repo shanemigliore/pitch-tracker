@@ -620,6 +620,68 @@ test('11k. getLiveMilestones ignores malformed limits/rules', () => {
   }
 });
 
+// ── 12. Live status box (v3.12) ──────────────────────────────────────────
+
+const st = (n, p = fresh()) => liveBudget(p, n).status;
+
+test('12a. regular: always a rest value + next milestone, even far away', () => {
+  assert.deepStrictEqual(st(0), { restDays: 0, restAfterTourney: false, justCrossed: false,
+    next: '21 pitches → 1 rest day (at 21p)', alert: null, level: 'neutral' });
+  assert.strictEqual(st(24).next, '17 pitches → 2 rest days (at 41p)');
+  assert.strictEqual(st(24).restDays, 1);
+});
+
+test('12b. regular: level follows the 5-pitch window; just-crossed is info', () => {
+  assert.deepStrictEqual([15, 16, 19, 20, 21, 23, 24].map(n => st(n).level),
+    ['neutral', 'warn', 'warn', 'urgent', 'info', 'info', 'neutral']);
+  assert.strictEqual(st(20).next, 'Next pitch = 1 rest day');
+  assert.strictEqual(st(21).justCrossed, true);
+});
+
+test('12c. regular: limit wins ties and is nearer; at/over the max is an alert, next stays visible', () => {
+  assert.strictEqual(st(52).next, '3 pitches to daily max (55p)');
+  const at = st(55);
+  assert.strictEqual(at.alert, 'At daily max · finish batter');
+  assert.strictEqual(at.level, 'urgent');
+  assert.strictEqual(at.next, '6 pitches → 3 rest days (at 61p)');
+  const over = st(58);
+  assert.strictEqual(over.alert, 'Over daily max +3 · finish batter');
+  assert.strictEqual(over.level, 'over');
+  assert.strictEqual(over.next, '3 pitches → 3 rest days (at 61p)');
+  assert.strictEqual(st(61).next, 'Max rest reached');
+});
+
+test('12d. regular: ineligible (resting) pitcher put in by mistake gets the reason as the alert', () => {
+  const p = { id: 'r', name: 'R', jersey: '', history: [makeEntry({ date: '2026-10-19', pitches: 50 })] };
+  const s = st(3, p);
+  assert.ok(/^Resting — eligible/.test(s.alert), s.alert);
+  assert.strictEqual(s.level, 'urgent');
+});
+
+test('12e. tournament: rest from the total, guideline at/over is a soft alert, hard limit beats it', () => {
+  const p = tourneyPitcher([30, 0, 0], LT);
+  const s = logic.getLivePitcherBudget(p, liveGame({ context: 'lt', date: '2026-10-24',
+    pitchers: { m: { pitches: 0, status: 'active', order: 1 } } }), [LT]).status;
+  assert.strictEqual(s.restAfterTourney, true);
+  const at = (q, n, d) => logic.getLivePitcherBudget(q, liveGame({ context: 'lt', date: d,
+    pitchers: { [q.id]: { pitches: n, status: 'active', order: 1 } } }), [LT]).status;
+  assert.strictEqual(at(p, 8, '2026-10-24').next, '3 pitches → 2 rest days (at 41p)');
+  const g = at(fresh(), 42, '2026-10-24'); // Day 2 guideline 40
+  assert.strictEqual(g.alert, 'Over Day 2 guideline (42/40p)');
+  assert.ok(['soft', 'warn', 'urgent'].includes(g.level));
+  assert.strictEqual(at(fresh(), 50, '2026-10-23').alert, 'At Day 1 limit · finish batter');
+  const total = at(tourneyPitcher([50, 40, 0], LT), 12, '2026-10-25');
+  assert.strictEqual(total.alert, 'Over tourney limit +2 · finish batter');
+});
+
+test('12f. getLiveStatus never throws or prints NaN on junk input', () => {
+  for (const input of [{}, { restUsed: NaN }, { restUsed: 'x', limits: [{ label: 'x', used: NaN, max: 10 }, null].filter(Boolean) },
+    { restUsed: 5, limits: [{ label: 'y', used: 3, max: -1 }] }]) {
+    const s = logic.getLiveStatus(input);
+    assert.ok(!/NaN|undefined/.test(`${s.next}|${s.alert}|${s.restDays}`), JSON.stringify(s));
+  }
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────
 
 console.log('');

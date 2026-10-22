@@ -227,19 +227,45 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
       .catch(err => alert(`Couldn't discard the game: ${err && err.message ? err.message : err}`));
   }
 
-  function restText(b) {
-    const r = b.rest;
-    const now = r.restDays===0 ? "No rest" : `${r.restDays}d rest`;
-    const next = r.nextAt ? ` · ${r.nextRestDays}d at ${r.nextAt}p${b.restAfterTourney?" total":""}` : "";
-    return `${now}${b.restAfterTourney?" after tourney":""}${next}`;
-  }
   function leftColor(n) { return n<0 ? "#f43f5e" : n<=10 ? "#fb923c" : "#4ade80"; }
-  const MILESTONE_STYLE = {
-    urgent: { background:"rgba(251,146,60,0.2)", border:"1px solid rgba(251,146,60,0.6)", color:"#fdba74" },
-    warn:   { background:"rgba(251,191,36,0.12)", border:"1px solid rgba(251,191,36,0.45)", color:"#fbbf24" },
-    soft:   { background:"rgba(251,191,36,0.05)", border:"1px dashed rgba(251,191,36,0.35)", color:"rgba(251,191,36,0.8)" },
-    info:   { background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.75)" },
+  // Status box colors by getLiveStatus level.
+  const STATUS_STYLE = {
+    over:    { background:"rgba(244,63,94,0.16)", border:"1px solid rgba(244,63,94,0.6)", color:"#fda4af" },
+    urgent:  { background:"rgba(251,146,60,0.2)", border:"1px solid rgba(251,146,60,0.6)", color:"#fdba74" },
+    warn:    { background:"rgba(251,191,36,0.12)", border:"1px solid rgba(251,191,36,0.45)", color:"#fbbf24" },
+    soft:    { background:"rgba(251,191,36,0.05)", border:"1px dashed rgba(251,191,36,0.35)", color:"rgba(251,191,36,0.85)" },
+    info:    { background:"rgba(56,189,248,0.08)", border:"1px solid rgba(56,189,248,0.4)", color:"#7dd3fc" },
+    neutral: { background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.12)", color:"rgba(255,255,255,0.8)" },
   };
+  // Always rendered at a fixed height (one rest value, one alert/label line,
+  // one milestone line) so the pitch buttons and "Left game" below never move.
+  function statusBox(b, isActive) {
+    const st = b.status;
+    const st2 = STATUS_STYLE[isActive ? st.level : "neutral"] || STATUS_STYLE.neutral;
+    const restVal = st.restDays===0 ? "NONE" : `${st.restDays} DAY${st.restDays===1?"":"S"}`;
+    const icon = st.level==="soft" ? "ⓘ " : "⚠ ";
+    const one = { overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" };
+    return (
+      <div style={{ ...st2, display:"flex", height:48, boxSizing:"border-box",
+        borderRadius:8, marginBottom:8, overflow:"hidden" }}>
+        <div style={{ width:80, flexShrink:0, padding:"5px 8px", display:"flex", flexDirection:"column", justifyContent:"center",
+          borderRight:"1px solid rgba(255,255,255,0.1)" }}>
+          <div style={{ fontSize:8, fontWeight:800, letterSpacing:0.2, opacity:0.75, ...one }}>{st.restAfterTourney?"TOURNEY REST":"REST"}</div>
+          <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+            <span style={{ fontFamily:"'Bebas Neue',cursive", fontSize:19, lineHeight:1.1, color:"#f8fafc" }}>{restVal}</span>
+            {st.justCrossed && isActive && <span style={{ fontSize:8, fontWeight:800, padding:"1px 4px", borderRadius:4,
+              background:"rgba(56,189,248,0.3)", color:"#e0f2fe" }}>NEW</span>}
+          </div>
+        </div>
+        <div style={{ flex:1, minWidth:0, padding:"5px 10px", display:"flex", flexDirection:"column", justifyContent:"center" }}>
+          <div role={isActive?"status":undefined} aria-live={isActive?"polite":undefined} style={{ fontSize:st.alert?11:8, fontWeight:800, letterSpacing:st.alert?0:0.6, opacity:st.alert?1:0.75, ...one }}>
+            {st.alert ? `${icon}${st.alert}` : "NEXT"}
+          </div>
+          <div style={{ fontSize:13, fontWeight:700, color:"#f8fafc", ...one }}>{st.next}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding:"0 16px 110px" }}>
@@ -283,7 +309,6 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
         {inGameIds.map(id=>{
           const p = rosterById.get(id), b = budgets.get(id), e = liveGame.pitchers[id];
           const isActive = e.status==="active";
-          const warn = !b.eligible ? b.reason : null;
           return (
             <div key={id} style={{ marginBottom:8, padding:isActive?"9px 11px":"10px 12px", borderRadius:12,
               background:isActive?"rgba(56,189,248,0.14)":"rgba(255,255,255,0.02)",
@@ -324,7 +349,6 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
                       {isActive?"PITCHING":"LEFT GAME"}
                     </span>
                   </div>
-                  <div style={{ fontSize:11, color:"rgba(255,255,255,0.45)", marginTop:3 }}>{restText(b)}</div>
                   {b.priorToday>0 && <div style={{ fontSize:10, color:"rgba(255,255,255,0.35)" }}>Includes {b.priorToday}p already logged today</div>}
                 </div>
                 <div style={{ textAlign:"right", flexShrink:0 }}>
@@ -334,16 +358,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
                   <div style={{ fontSize:9, fontWeight:700, maxWidth:50, marginLeft:"auto", color:leftColor(b.pitchesLeft) }}>{b.pitchesLeft<0?"OVER":b.leftLabel.toUpperCase()}</div>
                 </div>
               </div>
-              {isActive && b.milestones.length>0 && (
-                <div role="status" aria-live="polite" style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:8 }}>
-                  {b.milestones.map(m=>(
-                    <div key={m.text} style={{ ...MILESTONE_STYLE[m.level], borderRadius:8, padding:"6px 10px",
-                      fontSize:m.level==="urgent"?13:12, fontWeight:700 }}>
-                      {m.level==="info" ? "→ " : m.level==="soft" ? "ⓘ " : "⚠ "}{m.text}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {statusBox(b, isActive)}
               <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                 <button type="button" onClick={()=>bump(id,-1)} aria-label={`Subtract 1 pitch for ${p.name}`}
                   style={{ flex:1, padding:"9px 0", borderRadius:8, background:"rgba(255,255,255,0.05)",
@@ -362,11 +377,6 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
                       border:"1px solid rgba(37,99,235,0.3)", color:"#60a5fa", fontSize:13, fontWeight:700, cursor:"pointer" }}>+{d}</button>
                 ))}
               </div>
-              {b.pitchesLeft<0 && (
-                <div style={{ marginTop:6, fontSize:11, fontWeight:600, color:"#f87171" }}>⚠ Over the limit — allowed only to finish a batter</div>
-              )}
-              {b.note && <div style={{ marginTop:6, fontSize:11, fontWeight:600, color:"rgba(251,191,36,0.75)" }}>ⓘ {b.note}</div>}
-              {warn && <div style={{ marginTop:6, fontSize:11, fontWeight:600, color:"#fb923c" }}>⚠ {warn}</div>}
               <div style={{ display:"flex", gap:8, marginTop:8 }}>
                 {isActive ? (
                   <button type="button" onClick={()=>markLeft(id)}
