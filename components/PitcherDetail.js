@@ -1,5 +1,5 @@
 // PitcherDetail — pitcher stats, editable season history (Roster drill-in).
-// Logging a new game happens on the Game Log tab, not here - one place to log,
+// Logging a new game happens on the Log Game tab, not here - one place to log,
 // not two.
 // Babel/JSX component, loaded via <script type="text/babel" src="components/PitcherDetail.js"></script>.
 

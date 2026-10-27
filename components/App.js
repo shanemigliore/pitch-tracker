@@ -7,7 +7,7 @@
 const TABS = [
   { id:"roster",   label:"Roster",   icon:I.roster   },
   { id:"live",     label:"Live",     icon:I.live     },
-  { id:"gamelog",  label:"Game Log", icon:I.gamelog  },
+  { id:"gamelog",  label:"Log Game", icon:I.gamelog  },
   { id:"season",   label:"Season",   icon:I.history  },
   { id:"settings", label:"Settings", icon:I.settings },
 ];
@@ -416,8 +416,10 @@ function App({ role }) {
       </div>
 
       {/* ── Bottom nav ── */}
-      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)",
-        width:"100%", maxWidth:430, background:"rgba(8,12,20,0.97)", backdropFilter:"blur(20px)",
+      {/* Fixed, so body's side padding doesn't reach it: pin between the safe-area
+          insets and center within them (left+right+maxWidth+auto margins). */}
+      <div style={{ position:"fixed", bottom:0, left:"var(--safe-l)", right:"var(--safe-r)", margin:"0 auto",
+        maxWidth:430, background:"rgba(8,12,20,0.97)", backdropFilter:"blur(20px)",
         borderTop:"1px solid rgba(255,255,255,0.07)", paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
         <div style={{ display:"flex" }}>
           {TABS.map(t=>{

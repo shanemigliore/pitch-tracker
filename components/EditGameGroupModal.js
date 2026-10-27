@@ -47,7 +47,8 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:50,
-      display:"flex", alignItems:"flex-end", justifyContent:"center" }}
+      display:"flex", alignItems:"flex-end", justifyContent:"center",
+      paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)" }}
       onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
       <div style={{ width:"100%", maxWidth:430, background:"#0f1623",
         border:"1px solid rgba(255,255,255,0.12)", borderRadius:"20px 20px 0 0",

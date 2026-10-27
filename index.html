@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Prime Pitching"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#080c14"/>
-  <meta name="app-version" content="v3.13"/>
+  <meta name="app-version" content="v3.14"/>
   <title>Prime Pitching</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="assets/logo.png"/>
@@ -18,11 +18,15 @@
     /* Home-screen app: status bar + 32px. iOS 26.1+ paints a blur/gradient over the top of
        black-translucent home-screen apps that reaches below the status bar.
        Keeping only a solid strip in that band leaves nothing visible to blur. */
-    :root { --top-gap: env(safe-area-inset-top, 0px); }
+    :root { --top-gap: env(safe-area-inset-top, 0px);
+            /* Side insets: iPhone Duo's closed screen puts the status pill in the top-right
+               corner and reports it as a right inset; landscape notches report left/right.
+               Separate left/right values - the insets can be asymmetric. */
+            --safe-l: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-right, 0px); }
     @media (display-mode: standalone) { :root { --top-gap: calc(env(safe-area-inset-top, 0px) + 32px); } }
     html, body { margin: 0; padding: 0; background: #080c14; height: 100%; overscroll-behavior: none; font-family: 'Barlow', sans-serif; }
     body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
-           padding-top: var(--top-gap); }
+           padding-top: var(--top-gap); padding-left: var(--safe-l); padding-right: var(--safe-r); }
     input, button, select, textarea { font-family: inherit; }
     * { -webkit-overflow-scrolling: touch; }
     #root { height: 100%; }
@@ -36,17 +40,6 @@
     .offline-banner { animation: fadeIn 0.3s ease; }
     @keyframes livePulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.75); } }
     .live-dot { animation: livePulse 1.6s ease-in-out infinite; }
-    /* Portrait-only: show an overlay in landscape telling the user to rotate back */
-    #landscape-block {
-      display: none;
-      position: fixed; inset: 0; z-index: 9999;
-      background: #080c14;
-      flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-      color: #f8fafc; font-family: 'Barlow', sans-serif; text-align: center; padding: 32px;
-    }
-    @media (orientation: landscape) {
-      #landscape-block { display: flex; }
-    }
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 
@@ -70,11 +63,6 @@
 
 </head>
 <body>
-<div id="landscape-block">
-  <div style="font-size:48px">📱</div>
-  <div style="font-size:20px;font-weight:800;letter-spacing:1px">ROTATE YOUR DEVICE</div>
-  <div style="font-size:14px;color:rgba(255,255,255,0.5)">Prime Pitching works best in portrait mode</div>
-</div>
   <div id="root"></div>
 
   <!-- Firebase initialisation (runs before React) -->
@@ -96,7 +84,7 @@
 
 
 // ─── App version (bump minor for each PR) ────────────────────────────────────
-const APP_VERSION = "v3.13";
+const APP_VERSION = "v3.14";
 const LOGO_URI = "assets/logo.png";
 
 // ─── Pure logic (rest-day/eligibility/date/device-id math) ───────────────────
