@@ -3,7 +3,7 @@
 // Babel/JSX component, loaded via <script type="text/babel" src="components/GameLogScreen.js"></script>.
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SCREEN: GAME LOG — enter a new game
+// SCREEN: LOG GAME — enter a new game
 // ══════════════════════════════════════════════════════════════════════════════
 function GameLogScreen({ roster, onLogMultiple, tournaments }) {
   const [gameDate, setGameDate] = useState(todayStr());
@@ -91,7 +91,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
   return (
     <div style={{ padding:"0 16px 110px" }}>
       <div style={{ padding:"16px 0 14px" }}>
-        <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>GAME LOG</h2>
+        <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>LOG GAME</h2>
         <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>Record pitch counts for a game</p>
       </div>
 

@@ -170,6 +170,64 @@ function AddPitcherSection({ roster, onAdd, onDelete }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// DISPLAY INFO (Account, admin only) — viewport + safe-area insets as this device
+// reports them, so layouts for new screens (e.g. iPhone Duo folded/unfolded) can be
+// tuned to real numbers. Read-only; re-measures on resize/rotate.
+// ══════════════════════════════════════════════════════════════════════════════
+function DisplayInfoSection() {
+  const probeRef = useRef(null);
+  const [info, setInfo] = useState(null);
+
+  useEffect(()=>{
+    function measure() {
+      const el = probeRef.current;
+      if (!el) return;
+      const cs = getComputedStyle(el);
+      const px = v => Math.round(parseFloat(v) || 0);
+      setInfo({
+        viewport: `${window.innerWidth} × ${window.innerHeight}`,
+        screen: `${window.screen.width} × ${window.screen.height}`,
+        dpr: window.devicePixelRatio || 1,
+        orientation: window.matchMedia("(orientation: landscape)").matches ? "landscape" : "portrait",
+        mode: (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone) ? "Home Screen app" : "Browser",
+        insets: { top:px(cs.paddingTop), right:px(cs.paddingRight), bottom:px(cs.paddingBottom), left:px(cs.paddingLeft) },
+      });
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    return ()=>{ window.removeEventListener("resize", measure); window.removeEventListener("orientationchange", measure); };
+  }, []);
+
+  const row = (label, value) => (
+    <div style={{ display:"flex", justifyContent:"space-between", gap:12, fontSize:13, padding:"3px 0" }}>
+      <span style={{ color:"rgba(255,255,255,0.4)" }}>{label}</span>
+      <span style={{ color:"#f8fafc", fontFamily:"'DM Mono',monospace", textAlign:"right" }}>{value}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ ...card, marginTop:12, border:"1px solid rgba(255,255,255,0.12)" }}>
+      <p style={sectionTitle}>DISPLAY</p>
+      {/* Invisible probe: the browser resolves env() into its padding */}
+      <div ref={probeRef} aria-hidden="true" style={{ position:"fixed", visibility:"hidden", pointerEvents:"none", width:0, height:0,
+        paddingTop:"env(safe-area-inset-top, 0px)", paddingRight:"env(safe-area-inset-right, 0px)",
+        paddingBottom:"env(safe-area-inset-bottom, 0px)", paddingLeft:"env(safe-area-inset-left, 0px)" }}/>
+      {info && (
+        <div>
+          {row("Viewport (CSS px)", info.viewport)}
+          {row("Screen (CSS px)", info.screen)}
+          {row("Pixel ratio", info.dpr)}
+          {row("Orientation", info.orientation)}
+          {row("Mode", info.mode)}
+          {row("Safe area T / R / B / L", `${info.insets.top} / ${info.insets.right} / ${info.insets.bottom} / ${info.insets.left}`)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // ACCOUNT (Settings sub-section) — who's signed in + log out
 // ══════════════════════════════════════════════════════════════════════════════
 function AccountSection({ role, onLogout }) {
@@ -185,6 +243,8 @@ function AccountSection({ role, onLogout }) {
         <div style={{ fontSize:16, fontWeight:700, color:"#f8fafc", marginBottom:2 }}>{getCoachName() || "—"}</div>
         <div style={{ fontSize:13, color:"rgba(255,255,255,0.4)" }}>{role === "admin" ? "Admin" : "Coach"}</div>
       </div>
+
+      {role === "admin" && <DisplayInfoSection/>}
 
       <div style={{ ...card, marginTop:12, border:"1px solid rgba(244,63,94,0.15)" }}>
         <button onClick={handleLogout} style={{ width:"100%", background:"transparent",

@@ -409,7 +409,8 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose, rol
       {/* Manage modal */}
       {managing && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:60,
-          display:"flex", alignItems:"flex-end", justifyContent:"center" }}
+          display:"flex", alignItems:"flex-end", justifyContent:"center",
+          paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)" }}
           onClick={e=>{ if(e.target===e.currentTarget){ setManaging(null); setDeletePhase("idle"); setDeleteText(""); } }}>
           <div style={{ width:"100%", maxWidth:430, background:"#0f1623",
             border:"1px solid rgba(255,255,255,0.12)", borderRadius:"20px 20px 0 0",
