@@ -34,9 +34,11 @@
     @media (display-mode: standalone) and (min-width: 600px) { :root { --top-gap: 32px; } }
     /* Narrow screen with a right inset = the folded Duo's status pill, which only occupies the
        top-right corner (~164px tall - iOS doesn't report the height, measured from a device
-       screenshot). Cover just that corner and give the content below the full width; the
-       header and each screen's top row add var(--corner-r) themselves. */
-    @media (max-width: 520px) { :root { --corner-r: var(--safe-r); } }
+       screenshot, in the Home Screen app). Cover just that corner and give the content below
+       the full width; the header and each screen's top row add var(--corner-r) themselves.
+       Standalone only: the 164px was measured with the standalone --top-gap, and a browser tab
+       lays everything out 32px higher, which would put rows under the cover. */
+    @media (display-mode: standalone) and (max-width: 520px) { :root { --corner-r: var(--safe-r); } }
     html, body { margin: 0; padding: 0; background: #080c14; height: 100%; overscroll-behavior: none; font-family: 'Barlow', sans-serif; }
     body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
            padding-top: var(--top-gap); padding-left: var(--safe-l); padding-right: calc(var(--safe-r) - var(--corner-r)); }

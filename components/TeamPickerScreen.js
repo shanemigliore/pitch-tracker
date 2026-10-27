@@ -322,6 +322,7 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose, rol
 
   return (
     <div style={{ background:"#080c14", minHeight:"100vh", padding:"0 calc(16px + var(--corner-r)) 40px 16px",
+      maxWidth:430, margin:"0 auto",
       fontFamily:"'Barlow',sans-serif", color:"#f8fafc",
       backgroundImage:"radial-gradient(ellipse at 20% 0%,rgba(30,58,138,0.25) 0%,transparent 60%)" }}>
 
