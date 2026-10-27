@@ -7,6 +7,8 @@
  *         corner cover, top rows add var(--corner-r), full-width bottom nav,
  *         modal sheets keep the full inset), flat 32px --top-gap in a wide
  *         Home Screen app, DisplayInfoSection delayed re-measure + Refresh.
+ * v3.16 - wide frame: useLayout() (wide / rail / twoPane), left tab rail in wide
+ *         landscape, centeredColumn(), Live two-pane, header-only --hdr-r.
  * Run with: node tests/duo-layout.verify.test.js
  */
 'use strict';
@@ -38,12 +40,12 @@ test('meta app-version and APP_VERSION match', () => {
   assert(meta && js, 'both version markers present');
   assert.strictEqual(meta[1], js[1]);
 });
-test('version is v3.15 (minor bump from v3.14)', () => {
-  assert.strictEqual(html.match(/const APP_VERSION = "([^"]+)";/)[1], 'v3.15');
-  assert.strictEqual((html.match(/v3\.14/g) || []).length, 0, 'no stale v3.14 left in index.html');
+test('version is v3.16 (minor bump from v3.15)', () => {
+  assert.strictEqual(html.match(/const APP_VERSION = "([^"]+)";/)[1], 'v3.16');
+  assert.strictEqual((html.match(/v3\.15/g) || []).length, 0, 'no stale v3.15 left in index.html');
 });
 test('CLAUDE.md current version matches', () => {
-  assert(/\*\*Current version:\*\* v3\.15/.test(read('CLAUDE.md')));
+  assert(/\*\*Current version:\*\* v3\.16/.test(read('CLAUDE.md')));
 });
 
 // ── Landscape ───────────────────────────────────────────────────────────
@@ -52,8 +54,12 @@ test('no #landscape-block overlay anywhere', () => {
   for (const [f, s] of Object.entries(comps)) assert(!/landscape-block/.test(s), f);
   assert(!/ROTATE YOUR DEVICE/i.test(html));
 });
-test('no CSS orientation media query hiding content', () => {
-  assert(!/@media\s*\(orientation/.test(html));
+test('no CSS orientation media query hiding content (the only one sets --hdr-r)', () => {
+  const cssNC = html.slice(html.indexOf('<style>'), html.indexOf('</style>')).replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = [...cssNC.matchAll(/@media\s*([^{]*orientation[^{]*)\{([^{}]*\{[^}]*\})\s*\}/g)];
+  assert.strictEqual((cssNC.match(/orientation/g) || []).length, rules.length, 'every orientation use is a simple :root rule');
+  for (const m of rules) assert(/^\s*:root\s*\{\s*--hdr-r:\s*\d+px;?\s*\}\s*$/.test(m[2]), m[0]);
+  assert(!/display:\s*none|visibility:\s*hidden/.test(rules.map(m => m[2]).join('')));
 });
 test('manifest.json is valid JSON with orientation "any"', () => {
   const m = JSON.parse(read('manifest.json'));
@@ -120,7 +126,9 @@ test('every --corner-r use in components/ is additive (calc(Npx + var(--corner-r
       const [, prop, val] = m;
       const ok = (prop === 'marginRight' && val === 'var(--corner-r)') ||
                  (/^(padding|margin)$/.test(prop) && /calc\(\d+px \+ var\(--corner-r\)\)/.test(val)) ||
-                 (f === 'App.js' && prop === 'right' && val === 'calc(var(--safe-r) - var(--corner-r))');
+                 (f === 'App.js' && prop === 'right' && val === 'calc(var(--safe-r) - var(--corner-r))') ||
+                 // v3.16: the App header additionally reserves --hdr-r (still additive)
+                 (f === 'App.js' && prop === 'padding' && val === '10px calc(14px + var(--corner-r) + var(--hdr-r)) 10px 14px');
       if (!ok) bad.push(`${f}: ${prop}:${val}`);
     }
   }
@@ -142,7 +150,7 @@ test('every top-of-screen row adds var(--corner-r)', () => {
   // the App banners specifically
   const app = comps['App.js'];
   assert.strictEqual((app.match(/className="offline-banner"[\s\S]{0,400}?padding:"8px calc\(16px \+ var\(--corner-r\)\) 8px 16px"/g) || []).length, 3, '3 banners');
-  assert(/padding:"10px calc\(14px \+ var\(--corner-r\)\) 10px 14px"/.test(app), 'header');
+  assert(/padding:"10px calc\(14px \+ var\(--corner-r\) \+ var\(--hdr-r\)\) 10px 14px"/.test(app), 'header');
 });
 test('viewport-fit=cover still set (needed for env() insets to be non-zero)', () => {
   assert(/viewport-fit=cover/.test(html));
@@ -163,17 +171,50 @@ test('every position:fixed element in components/ handles side insets (or is a h
       // Only the bottom nav may pin to the corner-adjusted right edge (the pill isn't near the bottom).
       const pinned = /left:\s*["']var\(--safe-l\)["']/.test(st) &&
         (/right:\s*["']var\(--safe-r\)["']/.test(st) || (f === 'App.js' && /right:\s*["']calc\(var\(--safe-r\) - var\(--corner-r\)\)["']/.test(st)));
-      if (!(isProbe || padded || pinned)) offenders.push(`${f}:${line}`);
+      // v3.16 left tab rail: pinned at the left inset with a fixed width (never reaches the right side).
+      const rail = f === 'App.js' && /left:\s*["']var\(--safe-l\)["']/.test(st) && /width:\s*layout\.railWidth/.test(st) && !/right:/.test(st);
+      if (!(isProbe || padded || pinned || rail)) offenders.push(`${f}:${line}`);
     }
   }
   assert.deepStrictEqual(offenders, []);
 });
-test('bottom nav is pinned between insets (corner mode: full width on the right) and centered (no translateX/100% width)', () => {
-  const nav = comps['App.js'].match(/Bottom nav[\s\S]*?style=\{\{([^]*?)\}\}/);
-  assert(nav);
-  assert(/left:"var\(--safe-l\)"/.test(nav[1]) && /right:"calc\(var\(--safe-r\) - var\(--corner-r\)\)"/.test(nav[1]));
-  assert(/margin:"0 auto"/.test(nav[1]) && /maxWidth:430/.test(nav[1]));
-  assert(!/translateX/.test(nav[1]), 'translateX centering would ignore asymmetric insets');
+test('bottom nav: fixed outer box pinned between insets (corner mode: full width on the right), inner bar placed with centeredColumn (no translateX)', () => {
+  const app = comps['App.js'];
+  const sec = app.slice(app.indexOf('layout.rail ? ('), app.indexOf('TABS.map(t=>tabButton(t, false))'));
+  const styles = [...sec.matchAll(/style=\{\{([^]*?)\}\}/g)].map(m => m[1]);
+  const outer = styles.find(st => /position:"fixed", bottom:0/.test(st));
+  assert(outer, 'outer fixed box');
+  assert(/left:"var\(--safe-l\)"/.test(outer) && /right:"calc\(var\(--safe-r\) - var\(--corner-r\)\)"/.test(outer), outer);
+  assert(!/background|border/.test(outer), 'outer box is an invisible positioning box');
+  const inner = styles[styles.indexOf(outer) + 1];
+  assert(/\.\.\.centeredColumn\(layout\.wide \? "100%" : "min\(430px, 100%\)"\)/.test(inner), inner);
+  assert(/background:/.test(inner), 'inner bar carries the background');
+  assert(!/translateX/.test(sec), 'translateX centering would ignore asymmetric insets');
+});
+test('tabs: left rail XOR bottom bar (one ternary on layout.rail), both built from tabButton', () => {
+  const app = comps['App.js'];
+  assert.strictEqual((app.match(/\{layout\.rail \? \(\s*<nav aria-label="Tabs"/g) || []).length, 1);
+  assert.strictEqual((app.match(/TABS\.map\(t=>tabButton\(t, true\)\)/g) || []).length, 1, 'rail');
+  assert.strictEqual((app.match(/TABS\.map\(t=>tabButton\(t, false\)\)/g) || []).length, 1, 'bottom bar');
+  assert.strictEqual((app.match(/TABS\.map/g) || []).length, 2, 'no third tab list');
+  const nav = app.match(/<nav aria-label="Tabs" style=\{\{([^]*?)\}\}/)[1];
+  for (const re of [/position:"fixed"/, /top:0/, /bottom:0/, /left:"var\(--safe-l\)"/, /width:layout\.railWidth/, /zIndex:25/, /paddingTop:"calc\(var\(--top-gap\) \+ 8px\)"/, /background:"#080c14"/])
+    assert(re.test(nav), 'rail ' + re);
+  // live dot is inside tabButton, so the rail gets it too
+  const tb = app.slice(app.indexOf('const tabButton'), app.indexOf('...centeredColumn(colWidth)'));
+  assert(/t\.id==="live" && liveGame && \(\s*<span className="live-dot"/.test(tb), 'live dot in tabButton');
+  // modals stack above the rail
+  for (const f of ['EditGameModal.js', 'EditGameGroupModal.js', 'EligibilityScreen.js', 'TeamPickerScreen.js'])
+    for (const m of comps[f].matchAll(/position:"fixed", inset:0[^}]*zIndex:(\d+)/g)) assert(+m[1] > 25, f + ' z ' + m[1]);
+});
+test('App wrapper: centeredColumn(colWidth), paddingLeft railWidth only with the rail; screens in a 430 column unless Live two-pane', () => {
+  const app = comps['App.js'];
+  assert(/const colWidth = layout\.rail \? "100%" : layout\.wide \? "min\(1100px, 100%\)" : "min\(430px, 100%\)";/.test(app));
+  assert(/minHeight:"100dvh", \.\.\.centeredColumn\(colWidth\),\s*paddingLeft: layout\.rail \? layout\.railWidth : 0,/.test(app));
+  assert(/const liveTwoPane = layout\.twoPane && tab==="live";/.test(app));
+  assert(/const screenWrap = \(layout\.wide && !liveTwoPane\) \? \{ width:"min\(430px, 100%\)", margin:"0 auto" \} : null;/.test(app));
+  assert(/<LiveGameScreen [^>]*twoPane=\{liveTwoPane\}/.test(app));
+  assert(!/maxWidth:430, margin:"0 auto"/.test(app), 'old fixed 430 wrapper gone');
 });
 test('no 100vw widths (would overflow past body side padding)', () => {
   for (const [f, s] of Object.entries(comps)) assert(!/100vw/.test(s), f);
@@ -183,7 +224,8 @@ test('no 100vw widths (would overflow past body side padding)', () => {
 test('TeamPickerScreen page is a centered <=430px column (clear of the unfolded Duo corner icons)', () => {
   const tp = comps['TeamPickerScreen.js'];
   const root = tp.match(/return \(\s*<div style=\{\{([^]*?)\}\}>/g).pop();
-  assert(/minHeight:"100vh"/.test(root) && /maxWidth:430/.test(root) && /margin:"0 auto"/.test(root), root);
+  assert(/minHeight:"100vh"/.test(root) && /\.\.\.centeredColumn\("min\(430px, 100%\)"\)/.test(root), root);
+  assert(!/maxWidth:430|margin:"0 auto"/.test(root), 'centeredColumn replaces maxWidth + auto margins');
   assert(/padding:"0 calc\(16px \+ var\(--corner-r\)\) 40px 16px"/.test(root), 'still corner-padded');
 });
 
@@ -254,6 +296,155 @@ test('DisplayInfoSection is read-only (no storage / Firebase / network)', () => 
 test('hooks used by DisplayInfoSection are destructured in the head-shell', () => {
   assert(/const \{[^}]*\buseRef\b[^}]*\} = React;/.test(html));
   assert(/const \{[^}]*\buseEffect\b[^}]*\} = React;/.test(html));
+});
+
+// ── v3.16 wide layouts ──────────────────────────────────────────────────
+const vm = require('vm');
+const ui = read('lib/ui-constants.js');
+test('centeredColumn: width + marginRight 0 + clamp()ed marginLeft that centers on the screen within the insets', () => {
+  const src = ui.match(/const centeredColumn = width => \(\{[\s\S]*?\}\);/);
+  assert(src, 'centeredColumn defined');
+  const cc = vm.runInNewContext(src[0] + '; centeredColumn');
+  const o = cc('min(430px, 100%)');
+  assert.deepStrictEqual(Object.keys(o).sort(), ['marginLeft', 'marginRight', 'width']);
+  assert.strictEqual(o.width, 'min(430px, 100%)'); assert.strictEqual(o.marginRight, 0);
+  assert.strictEqual(o.marginLeft, 'clamp(0px, calc((100vw - min(430px, 100%)) / 2 - var(--safe-l)), calc(100% - min(430px, 100%)))');
+  // model of that CSS (100% = body content box = vw - safe-l - bodyPadR): screen-centred when it fits
+  const left = (vw, l, r, W) => { const box = vw - l - r, w = Math.min(W, box); return l + Math.min(Math.max(0, (vw - w) / 2 - l), box - w); };
+  assert.strictEqual(left(678, 0, 84, 430) + 215, 339, 'folded landscape, inset right: centred');
+  assert.strictEqual(left(678, 84, 0, 430) + 215, 339, 'folded landscape, inset left: centred');
+  assert.strictEqual(left(450, 10, 60, 430), 10, 'too tight: pinned to the left inset');
+  assert(/exposes|window\.UIConstants = \{[^}]*\bcenteredColumn\b/.test(ui), 'exported');
+  assert(/const \{[^}]*\bcenteredColumn\b[^}]*\} = window\.UIConstants;/.test(html), 'destructured in head-shell');
+});
+test('100vw only appears inside centeredColumn (bounded by the clamp max, so it cannot overflow)', () => {
+  const uses = ui.split('\n').filter(l => /100vw/.test(l));
+  assert.strictEqual(uses.length, 1); assert(/marginLeft:`clamp\(0px,.*calc\(100% - \$\{width\}\)\)`/.test(uses[0]), uses[0]);
+});
+
+// useLayout run in a VM with fake React/DOM (the hook body has no JSX)
+const shared = comps['shared.js'];
+const ulSrc = shared.slice(shared.indexOf('function useLayout()'), shared.indexOf('// ─── Screen error boundary'));
+function runLayout({ vw, vh, l = 0, r = 0 }) {
+  const listeners = {}, timers = new Map(); let tid = 0, effect, state, probe = null, created = 0;
+  const ctx = {
+    window: { innerWidth: vw, innerHeight: vh,
+      addEventListener: (t, f) => (listeners[t] = listeners[t] || []).push(f),
+      removeEventListener: (t, f) => { listeners[t] = (listeners[t] || []).filter(x => x !== f); } },
+    document: { getElementById: id => (id === 'pt-inset-probe' ? probe : null),
+      createElement: () => { created++; return { style: {}, setAttribute(k, v) { this[k] = v; } }; },
+      body: { appendChild: el => { probe = el; } } },
+    getComputedStyle: () => ({ paddingLeft: l + 'px', paddingRight: r + 'px' }),
+    setTimeout: (f, ms) => { timers.set(++tid, { f, ms }); return tid; },
+    clearTimeout: id => timers.delete(id),
+    useState: init => { state = typeof init === 'function' ? init() : init; return [state, u => { state = typeof u === 'function' ? u(state) : u; }]; },
+    useEffect: f => { effect = f; },
+  };
+  vm.runInNewContext(ulSrc + '; this.out = useLayout();', ctx);
+  return { ctx, get state() { return state; }, effect: () => effect, listeners, timers, probe: () => probe, created: () => created, first: ctx.out };
+}
+test('useLayout: wide / rail / twoPane matrix incl. real Duo + phone numbers', () => {
+  const cases = [
+    // [name, vw, vh, l, r, wide, rail, twoPane]
+    ['phone 390x844', 390, 844, 0, 0, false, false, false],
+    ['phone landscape 844x390 l=r=47 (844>=600 -> rail)', 844, 390, 47, 47, true, true, true],
+    ['folded Duo portrait 457x678 r=84', 457, 678, 0, 84, false, false, false],
+    ['folded Duo landscape 678x457 r=84', 678, 457, 0, 84, true, true, false],
+    ['folded Duo landscape 678x457 l=84', 678, 457, 84, 0, true, true, false],
+    ['unfolded Duo portrait 669x951', 669, 951, 0, 0, true, false, true],
+    ['unfolded Duo landscape 951x669 r=84', 951, 669, 0, 84, true, true, true],
+    ['599 portrait', 599, 900, 0, 0, false, false, false],
+    ['600 portrait', 600, 900, 0, 0, true, false, false],
+    ['portrait boundary 648 (content 616)', 648, 900, 0, 0, true, false, true],
+    ['portrait boundary 647 (content 615)', 647, 900, 0, 0, true, false, false],
+    ['rail boundary 720x500 (content 616)', 720, 500, 0, 0, true, true, true],
+    ['rail boundary 719x500 (content 615)', 719, 500, 0, 0, true, true, false],
+    ['rail boundary with insets 760x500 r=40', 760, 500, 0, 40, true, true, true],
+    ['rail boundary with insets 759x500 r=40', 759, 500, 0, 40, true, true, false],
+    ['square 700x700 is not landscape', 700, 700, 0, 0, true, false, true],
+  ];
+  const bad = [];
+  for (const [n, vw, vh, l, r, wide, rail, two] of cases) {
+    const o = runLayout({ vw, vh, l, r }).first;
+    if (o.wide !== wide || o.rail !== rail || o.twoPane !== two || o.railWidth !== 72) bad.push(`${n}: ${JSON.stringify(o)}`);
+  }
+  assert.deepStrictEqual(bad, []);
+});
+test('useLayout: probe reads --safe-l/--safe-r, is hidden/inert/aria-hidden, created once', () => {
+  const h = runLayout({ vw: 678, vh: 457, r: 84 });
+  const p = h.probe();
+  assert(p && p.id === 'pt-inset-probe' && p['aria-hidden'] === 'true');
+  for (const re of [/position:fixed/, /visibility:hidden/, /pointer-events:none/, /width:0/, /height:0/, /var\(--safe-r, 0px\)/, /var\(--safe-l, 0px\)/]) assert(re.test(p.style.cssText), re);
+  const cleanup = h.effect()(); // mount effect: runs update() once more
+  h.listeners.resize[0](); h.listeners.resize[0]();
+  assert.strictEqual(h.created(), 1, 'probe reused, not re-created per measure');
+  assert(!/innerHTML|localStorage|sessionStorage|fetch\(|__fb/.test(ulSrc), 'no HTML injection / storage / network');
+});
+test('useLayout: resize/orientationchange re-measure now + 100/350/800ms, bursts keep 3 timers, cleanup removes everything', () => {
+  const h = runLayout({ vw: 669, vh: 951 });
+  const cleanup = h.effect()();
+  assert.deepStrictEqual(Object.keys(h.listeners).sort(), ['orientationchange', 'resize']);
+  const before = h.state;
+  h.ctx.window.innerWidth = 951; h.ctx.window.innerHeight = 669;
+  h.listeners.orientationchange[0]();
+  assert.strictEqual(h.state.rail, true, 'immediate re-measure');
+  assert.deepStrictEqual([...h.timers.values()].map(t => t.ms), [100, 350, 800]);
+  for (let i = 0; i < 10; i++) h.listeners.resize[0]();
+  assert.strictEqual(h.timers.size, 3, 'earlier timers cleared');
+  // a late env() change is picked up by a delayed timer
+  h.ctx.getComputedStyle = () => ({ paddingLeft: '0px', paddingRight: '300px' });
+  [...h.timers.values()][0].f();
+  assert.strictEqual(h.state.twoPane, false, 'delayed measure saw the late inset');
+  // unchanged result keeps the same object (no re-render)
+  const s1 = h.state; [...h.timers.values()][1].f(); assert.strictEqual(h.state, s1);
+  cleanup();
+  assert.strictEqual(h.timers.size, 0, 'timers cleared on unmount');
+  assert.deepStrictEqual([h.listeners.resize.length, h.listeners.orientationchange.length], [0, 0]);
+  assert(before.rail === false);
+});
+test('useLayout is defined once (shared.js) and called once, unconditionally, at the top of App', () => {
+  for (const [f, s] of Object.entries(comps)) {
+    const defs = (s.match(/function useLayout\b/g) || []).length;
+    assert.strictEqual(defs, f === 'shared.js' ? 1 : 0, f);
+    const calls = (stripComments(s).match(/\buseLayout\(\)/g) || []).length;
+    assert.strictEqual(calls, f === 'App.js' ? 1 : f === 'shared.js' ? 1 : 0, f + ' calls');
+  }
+  const app = comps['App.js'];
+  const call = app.indexOf('const layout = useLayout();');
+  assert(call > 0 && call < app.indexOf('if (!teamId || showTeamPicker)') && call < app.indexOf('if (!loaded)'), 'before every early return (hook order)');
+});
+test('--hdr-r: 0px by default, 128px only for standalone + min-width:600px + portrait, used only in the App header', () => {
+  const root = cssNoComments.match(/(^|\n)\s*:root\s*\{([^}]*)\}/);
+  assert(/--hdr-r:\s*0px/.test(root[2]));
+  const rules = [...cssNoComments.matchAll(/@media\s*([^{]*)\{\s*:root\s*\{([^}]*)\}\s*\}/g)].filter(m => /--hdr-r/.test(m[2]));
+  assert.strictEqual(rules.length, 1);
+  assert.strictEqual(rules[0][1].trim(), '(display-mode: standalone) and (min-width: 600px) and (orientation: portrait)');
+  assert(/^\s*--hdr-r:\s*128px;?\s*$/.test(rules[0][2]));
+  assert.strictEqual((cssNoComments.match(/--hdr-r/g) || []).length, 2, 'only :root + that rule in CSS');
+  const uses = Object.entries(comps).flatMap(([f, s]) => (stripComments(s).match(/var\(--hdr-r\)/g) || []).map(() => f));
+  assert.deepStrictEqual(uses, ['App.js']);
+});
+const live = comps['LiveGameScreen.js'];
+test('LiveGameScreen: twoPane prop defaults false; one-column order details, game, available, unavailable, finish', () => {
+  assert(/function LiveGameScreen\(\{[^}]*twoPane=false[^}]*\}\)/.test(live));
+  for (const n of ['detailsCard', 'inGameCard', 'availableCard', 'unavailableCard', 'finishControls'])
+    assert.strictEqual((live.match(new RegExp('const ' + n + ' = \\(<>')) || []).length, 1, n);
+  assert(/<>\{detailsCard\}\{inGameCard\}\{availableCard\}\{unavailableCard\}\{finishControls\}<\/>/.test(live), 'phone order');
+});
+test('LiveGameScreen two-pane grid: left = game + finish, right = available + unavailable + details; every section once per branch', () => {
+  const g = live.match(/twoPane \? \(\s*<div style=\{\{ display:"grid", gridTemplateColumns:"minmax\(360px, 1\.4fr\) minmax\(220px, 1fr\)"[^}]*\}\}>\s*<div style=\{\{ minWidth:0 \}\}>([^<]*)<\/div>\s*<div style=\{\{ minWidth:0 \}\}>([^<]*)<\/div>/);
+  assert(g, 'grid markup');
+  assert.strictEqual(g[1].trim(), '{inGameCard}{finishControls}');
+  assert.strictEqual(g[2].trim(), '{availableCard}{unavailableCard}{detailsCard}');
+  // the Unfinished banner + header stay above both branches
+  const ret = live.slice(live.lastIndexOf('return (\n    <div style={{ padding:"0 16px 110px" }}>'));
+  assert(ret.indexOf('{header}') < ret.indexOf('{isStale') && ret.indexOf('{isStale') < ret.indexOf('{twoPane ?'));
+});
+test('LiveGameScreen: setup and "Game Logged!" states use the centered 430 narrowCol; available rows go full-width with "N left" only in two-pane', () => {
+  assert(/const narrowCol = twoPane \? \{ maxWidth:430, margin:"0 auto" \} : null;/.test(live));
+  assert.strictEqual((live.match(/<div style=\{\{ padding:"0 16px 110px", \.\.\.narrowCol \}\}>/g) || []).length, 2);
+  assert(/flexDirection:twoPane\?"column":"row", flexWrap:twoPane\?"nowrap":"wrap"/.test(live));
+  assert(/\{b\.pitchesLeft\}\{twoPane\?" left":""\}/.test(live));
 });
 
 // ── Collision rule ──────────────────────────────────────────────────────
