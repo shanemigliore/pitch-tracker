@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Prime Pitching"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#080c14"/>
-  <meta name="app-version" content="v3.14"/>
+  <meta name="app-version" content="v3.15"/>
   <title>Prime Pitching</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="assets/logo.png"/>
@@ -22,11 +22,24 @@
             /* Side insets: iPhone Duo's closed screen puts the status pill in the top-right
                corner and reports it as a right inset; landscape notches report left/right.
                Separate left/right values - the insets can be asymmetric. */
-            --safe-l: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-right, 0px); }
+            --safe-l: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-right, 0px);
+            /* Corner mode (narrow screens only, see below): --corner-r is the part of the right
+               inset treated as a top-right-corner obstruction --corner-h tall instead of a
+               full-height strip. 0 everywhere else. */
+            --corner-r: 0px; --corner-h: 164px; }
     @media (display-mode: standalone) { :root { --top-gap: calc(env(safe-area-inset-top, 0px) + 32px); } }
+    /* Wide Home Screen app (unfolded iPhone Duo, iPad): the status icons sit in the corners,
+       clear of the centered column, so skip the top inset (82px on the unfolded Duo in portrait)
+       and keep only the 32px blur buffer. */
+    @media (display-mode: standalone) and (min-width: 600px) { :root { --top-gap: 32px; } }
+    /* Narrow screen with a right inset = the folded Duo's status pill, which only occupies the
+       top-right corner (~164px tall - iOS doesn't report the height, measured from a device
+       screenshot). Cover just that corner and give the content below the full width; the
+       header and each screen's top row add var(--corner-r) themselves. */
+    @media (max-width: 520px) { :root { --corner-r: var(--safe-r); } }
     html, body { margin: 0; padding: 0; background: #080c14; height: 100%; overscroll-behavior: none; font-family: 'Barlow', sans-serif; }
     body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
-           padding-top: var(--top-gap); padding-left: var(--safe-l); padding-right: var(--safe-r); }
+           padding-top: var(--top-gap); padding-left: var(--safe-l); padding-right: calc(var(--safe-r) - var(--corner-r)); }
     input, button, select, textarea { font-family: inherit; }
     * { -webkit-overflow-scrolling: touch; }
     #root { height: 100%; }
@@ -34,6 +47,9 @@
        under it) so iOS 26+'s top-edge blur has nothing translucent to pick up. */
     body::before { content: ""; position: fixed; top: 0; left: 0; right: 0;
                    height: var(--top-gap); background: #080c14; z-index: 1000; }
+    /* Opaque cover over the folded Duo's status-pill corner (zero-size elsewhere) */
+    body::after { content: ""; position: fixed; top: 0; right: 0; width: var(--corner-r);
+                  height: var(--corner-h); background: #080c14; z-index: 1000; pointer-events: none; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
     .spinner { animation: spin 0.9s linear infinite; display: inline-block; }
@@ -84,7 +100,7 @@
 
 
 // ─── App version (bump minor for each PR) ────────────────────────────────────
-const APP_VERSION = "v3.14";
+const APP_VERSION = "v3.15";
 const LOGO_URI = "assets/logo.png";
 
 // ─── Pure logic (rest-day/eligibility/date/device-id math) ───────────────────

@@ -148,7 +148,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
           onClose={()=>setEditingGame(null)}/>
       )}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"16px 0 14px" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"16px 0 14px", marginRight:"var(--corner-r)" }}>
         <div>
           <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>SEASON</h2>
           <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>{filteredGameCount} game{filteredGameCount!==1?"s":""} · {filteredEntries.length} appearance{filteredEntries.length!==1?"s":""}</p>

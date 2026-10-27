@@ -77,7 +77,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
   }
 
   const header = (
-    <div style={{ padding:"16px 0 14px" }}>
+    <div style={{ padding:"16px 0 14px", marginRight:"var(--corner-r)" }}>
       <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>LIVE GAME</h2>
       <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>Running pitch counts — shared with every coach</p>
     </div>
