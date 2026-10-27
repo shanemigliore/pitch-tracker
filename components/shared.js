@@ -1,4 +1,4 @@
-// Shared UI: Chip, RadialArc, ContextPicker, ScreenBoundary.
+// Shared UI: Chip, RadialArc, ContextPicker, useLayout, ScreenBoundary.
 // Babel/JSX component, loaded via <script type="text/babel" src="components/shared.js"></script>.
 
 // ─── Shared UI ───────────────────────────────────────────────────────────────
@@ -111,6 +111,59 @@ function ContextPicker({ context, setContext, tournaments, gameDate }) {
       )}
     </>
   );
+}
+
+// ─── Responsive layout (v3.16) ─────────────────────────────────────────────────
+// Which frame to render, from the space actually usable: viewport minus the
+// safe-area side insets (read through a hidden probe, like Settings' Display
+// card) minus the tab rail when it's shown.
+//   wide    - viewport >= 600px: unfolded iPhone Duo, folded Duo in landscape, iPad
+//   rail    - wide + landscape: tabs move to a left rail, the bottom bar goes away
+//   twoPane - content area >= 616px: Live splits into game | bullpen (the pitcher
+//             cards need ~360px to keep today's sizes, the bullpen ~240px)
+// iOS updates env() a beat after resize/rotate, so it re-measures a few times after.
+function useLayout() {
+  const RAIL_W = 72;
+  function measure() {
+    let probe = document.getElementById("pt-inset-probe");
+    if (!probe) {
+      probe = document.createElement("div");
+      probe.id = "pt-inset-probe";
+      probe.setAttribute("aria-hidden", "true");
+      probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;width:0;height:0;" +
+        "padding:0 var(--safe-r, 0px) 0 var(--safe-l, 0px)";
+      document.body.appendChild(probe);
+    }
+    const cs = getComputedStyle(probe);
+    const insets = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const wide = vw >= 600;
+    const rail = wide && vw > vh;
+    const content = vw - insets - (rail ? RAIL_W : 0) - 32;
+    return { wide, rail, twoPane: wide && content >= 616, railWidth: RAIL_W };
+  }
+  const [layout, setLayout] = useState(measure);
+  useEffect(() => {
+    let timers = [];
+    function update() {
+      const next = measure();
+      setLayout(prev => (prev.wide===next.wide && prev.rail===next.rail && prev.twoPane===next.twoPane) ? prev : next);
+    }
+    function updateSoon() {
+      timers.forEach(clearTimeout);
+      update();
+      timers = [100, 350, 800].map(ms => setTimeout(update, ms));
+    }
+    update();
+    window.addEventListener("resize", updateSoon);
+    window.addEventListener("orientationchange", updateSoon);
+    return () => {
+      timers.forEach(clearTimeout);
+      window.removeEventListener("resize", updateSoon);
+      window.removeEventListener("orientationchange", updateSoon);
+    };
+  }, []);
+  return layout;
 }
 
 // ─── Screen error boundary ─────────────────────────────────────────────────────

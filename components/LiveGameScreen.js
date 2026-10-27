@@ -7,7 +7,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: LIVE GAME
 // ══════════════════════════════════════════════════════════════════════════════
-function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onComplete, onDiscard }) {
+function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onComplete, onDiscard, twoPane=false }) {
   // Setup form (only used before a game exists)
   const [setupDate, setSetupDate] = useState(todayStr());
   const [setupContext, setSetupContext] = useState("regular");
@@ -76,6 +76,10 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
     );
   }
 
+  // Wide frame (App passes twoPane): the setup / just-logged states stay one
+  // centered phone-width column; only the in-progress game splits into panes.
+  const narrowCol = twoPane ? { maxWidth:430, margin:"0 auto" } : null;
+
   const header = (
     <div style={{ padding:"16px 0 14px", marginRight:"var(--corner-r)" }}>
       <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>LIVE GAME</h2>
@@ -86,7 +90,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
   // ── Just logged ───────────────────────────────────────────────────────────
   if (saved && !liveGame) {
     return (
-      <div style={{ padding:"0 16px 110px" }}>
+      <div style={{ padding:"0 16px 110px", ...narrowCol }}>
         {header}
         <div style={{ textAlign:"center", padding:"50px 20px", background:"rgba(74,222,128,0.07)",
           border:"1px solid rgba(74,222,128,0.25)", borderRadius:20, marginBottom:16 }}>
@@ -117,7 +121,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
         .finally(() => setStarting(false));
     }
     return (
-      <div style={{ padding:"0 16px 110px" }}>
+      <div style={{ padding:"0 16px 110px", ...narrowCol }}>
         {header}
         <div style={card}>
           <p style={sectionTitle}>NEW GAME</p>
@@ -265,17 +269,11 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
     );
   }
 
-  return (
-    <div style={{ padding:"0 16px 110px" }}>
-      {header}
-
-      {isStale && (
-        <div role="alert" style={{ ...card, border:"1px solid rgba(251,191,36,0.4)", background:"rgba(251,191,36,0.07)" }}>
-          <div style={{ fontSize:13, fontWeight:700, color:"#fbbf24", marginBottom:4 }}>Unfinished game from {formatDate(liveGame.date)}</div>
-          <div style={{ fontSize:12, color:"rgba(255,255,255,0.55)" }}>Log it (it keeps its original date) or discard it before starting today's game.</div>
-        </div>
-      )}
-
+  // Sections of the in-progress screen. One column on phones (details, game,
+  // bullpen, log); two panes on wide screens: game + log | bullpen + details,
+  // so a pitching change never needs scrolling. Same elements either way.
+  // Game type / date / opponent
+  const detailsCard = (<>
       <div style={card}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
           <span className="live-dot" style={{ width:8, height:8, borderRadius:"50%", background:"#ef4444", flexShrink:0 }}/>
@@ -298,7 +296,9 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
         {opponentErr && <div style={{ fontSize:11, color:"#f87171", marginTop:4 }}>Opponent is required to log the game</div>}
         {opponentChips(opponentValue, name=>{ setOpponentDraft(null); setOpponentErr(false); act({ type:"setField", field:"opponent", value:name }); })}
       </div>
-
+  </>);
+  // Pitchers in the game, with counts
+  const inGameCard = (<>
       <div style={card}>
         <p style={sectionTitle}>IN THE GAME</p>
         {inGameIds.length===0 && (
@@ -402,7 +402,9 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
           </div>
         )}
       </div>
-
+  </>);
+  // Who can come in
+  const availableCard = (<>
       <div style={card}>
         <p style={sectionTitle}>{inGameIds.length===0?"STARTING PITCHER":"AVAILABLE TO PITCH"}</p>
         {activeIds.length>0 && available.length>0 && (
@@ -411,23 +413,26 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
         {available.length===0 ? (
           <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)" }}>{dateOutsideTourney ? "Fix the game date or type above to see who's available." : "No one else is available."}</div>
         ) : (
-          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+          <div style={{ display:"flex", flexDirection:twoPane?"column":"row", flexWrap:twoPane?"nowrap":"wrap", gap:8 }}>
             {available.map(p=>{
               const b = budgets.get(p.id);
               return (
                 <button key={p.id} type="button" onClick={()=>addPitcher(p)} aria-label={`Bring in ${p.name}, ${b.pitchesLeft} pitches ${b.leftLabel}`}
-                  style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 12px", borderRadius:20,
+                  style={{ display:"flex", alignItems:"center", gap:6, padding:twoPane?"10px 14px":"8px 12px", borderRadius:20,
+                    justifyContent:twoPane?"space-between":"flex-start", textAlign:"left",
                     border:"1px solid rgba(74,222,128,0.25)", background:"rgba(74,222,128,0.06)",
                     color:"rgba(255,255,255,0.8)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
                   {p.jersey?`#${p.jersey} `:""}{p.name}
-                  <span style={{ fontSize:11, fontWeight:700, color:leftColor(b.pitchesLeft) }}>{b.pitchesLeft}</span>
+                  <span style={{ fontSize:11, fontWeight:700, color:leftColor(b.pitchesLeft), flexShrink:0 }}>{b.pitchesLeft}{twoPane?" left":""}</span>
                 </button>
               );
             })}
           </div>
         )}
       </div>
-
+  </>);
+  // Who can't, and why
+  const unavailableCard = (<>
       {unavailable.length>0 && (
         <div style={card}>
           <p style={sectionTitle}>NOT AVAILABLE</p>
@@ -439,7 +444,9 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
           ))}
         </div>
       )}
-
+  </>);
+  // Limit warning, Log Complete Game, Discard
+  const finishControls = (<>
       {warnViolations && (()=>{
         const violations = getViolations();
         return (
@@ -480,6 +487,27 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
           fontSize:12, fontWeight:600, cursor:"pointer" }}>
         Discard game
       </button>
+  </>);
+
+  return (
+    <div style={{ padding:"0 16px 110px" }}>
+      {header}
+
+      {isStale && (
+        <div role="alert" style={{ ...card, border:"1px solid rgba(251,191,36,0.4)", background:"rgba(251,191,36,0.07)" }}>
+          <div style={{ fontSize:13, fontWeight:700, color:"#fbbf24", marginBottom:4 }}>Unfinished game from {formatDate(liveGame.date)}</div>
+          <div style={{ fontSize:12, color:"rgba(255,255,255,0.55)" }}>Log it (it keeps its original date) or discard it before starting today's game.</div>
+        </div>
+      )}
+
+      {twoPane ? (
+        <div style={{ display:"grid", gridTemplateColumns:"minmax(360px, 1.4fr) minmax(220px, 1fr)", gap:16, alignItems:"start" }}>
+          <div style={{ minWidth:0 }}>{inGameCard}{finishControls}</div>
+          <div style={{ minWidth:0 }}>{availableCard}{unavailableCard}{detailsCard}</div>
+        </div>
+      ) : (
+        <>{detailsCard}{inGameCard}{availableCard}{unavailableCard}{finishControls}</>
+      )}
     </div>
   );
 }

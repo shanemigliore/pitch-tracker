@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Prime Pitching"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#080c14"/>
-  <meta name="app-version" content="v3.15"/>
+  <meta name="app-version" content="v3.16"/>
   <title>Prime Pitching</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="assets/logo.png"/>
@@ -26,12 +26,19 @@
             /* Corner mode (narrow screens only, see below): --corner-r is the part of the right
                inset treated as a top-right-corner obstruction --corner-h tall instead of a
                full-height strip. 0 everywhere else. */
-            --corner-r: 0px; --corner-h: 164px; }
+            --corner-r: 0px; --corner-h: 164px;
+            /* Header-only reserve for corner status icons that iOS reports as a full-width top
+               inset (which the wide rule below ignores). 0 except wide standalone portrait. */
+            --hdr-r: 0px; }
     @media (display-mode: standalone) { :root { --top-gap: calc(env(safe-area-inset-top, 0px) + 32px); } }
     /* Wide Home Screen app (unfolded iPhone Duo, iPad): the status icons sit in the corners,
        clear of the centered column, so skip the top inset (82px on the unfolded Duo in portrait)
        and keep only the 32px blur buffer. */
     @media (display-mode: standalone) and (min-width: 600px) { :root { --top-gap: 32px; } }
+    /* ...but then the full-width header (v3.16) reaches the top-right corner, where the
+       unfolded Duo's clock/battery sit (~549-642 of 669px wide, y 26-67, from a device
+       screenshot). Keep the header's right end clear of them. */
+    @media (display-mode: standalone) and (min-width: 600px) and (orientation: portrait) { :root { --hdr-r: 128px; } }
     /* Narrow screen with a right inset = the folded Duo's status pill, which only occupies the
        top-right corner (~164px tall - iOS doesn't report the height, measured from a device
        screenshot, in the Home Screen app). Cover just that corner and give the content below
@@ -102,7 +109,7 @@
 
 
 // ─── App version (bump minor for each PR) ────────────────────────────────────
-const APP_VERSION = "v3.15";
+const APP_VERSION = "v3.16";
 const LOGO_URI = "assets/logo.png";
 
 // ─── Pure logic (rest-day/eligibility/date/device-id math) ───────────────────
@@ -135,7 +142,7 @@ function save(key, val) {
 }
 
 // ─── Shared status config, icons, and style tokens — lib/ui-constants.js ─────
-const { STATUS, I, inputStyle, primaryBtn, cancelBtn, card, sectionLabel, sectionTitle } = window.UIConstants;
+const { STATUS, I, inputStyle, primaryBtn, cancelBtn, card, sectionLabel, sectionTitle, centeredColumn } = window.UIConstants;
 
   </script>
 
