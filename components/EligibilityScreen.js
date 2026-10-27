@@ -39,7 +39,7 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
 
   return (
     <div style={{ padding:"0 16px 110px" }}>
-      <div style={{ padding:"16px 0 14px", display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:10 }}>
+      <div style={{ padding:"16px 0 14px", marginRight:"var(--corner-r)", display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:10 }}>
         <div>
           <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>ROSTER</h2>
           <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>Check who can pitch on any date</p>

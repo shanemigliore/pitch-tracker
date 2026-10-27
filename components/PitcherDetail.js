@@ -49,7 +49,7 @@ function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame,
           onClose={()=>setEditingEntry(null)}/>
       )}
 
-      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 16px" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 16px", marginRight:"var(--corner-r)" }}>
         <button onClick={onBack} aria-label="Back to roster" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
           padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
         <div style={{ flex:1 }}>

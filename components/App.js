@@ -322,7 +322,7 @@ function App({ role }) {
 
       {syncStatus==="offline" && (
         <div className="offline-banner" style={{ background:"rgba(244,63,94,0.12)", borderBottom:"1px solid rgba(244,63,94,0.3)",
-          padding:"8px 16px", display:"flex", alignItems:"center", gap:8,
+          padding:"8px calc(16px + var(--corner-r)) 8px 16px", display:"flex", alignItems:"center", gap:8,
           fontSize:12, color:"#f87171", fontWeight:600, position:"sticky", top:"var(--top-gap)", zIndex:30 }}>
           {I.warning} Offline — changes will sync when reconnected
         </div>
@@ -330,7 +330,7 @@ function App({ role }) {
       {syncStatus==="error" && (
         <div className="offline-banner" onClick={()=>alert(`Sync error: ${lastSyncError || "Unknown error"}\n\nYour changes are saved on this device but couldn't be written to the server. This usually means a permissions problem, not a dropped connection - it won't fix itself by waiting.`)}
           style={{ background:"rgba(168,85,247,0.12)", borderBottom:"1px solid rgba(168,85,247,0.3)",
-          padding:"8px 16px", display:"flex", alignItems:"center", gap:8, cursor:"pointer",
+          padding:"8px calc(16px + var(--corner-r)) 8px 16px", display:"flex", alignItems:"center", gap:8, cursor:"pointer",
           fontSize:12, color:"#c084fc", fontWeight:600, position:"sticky", top:"var(--top-gap)", zIndex:30 }}>
           {I.warning} Sync error — tap for details
         </div>
@@ -338,7 +338,7 @@ function App({ role }) {
       {updateAvailable && (
         <div className="offline-banner" onClick={()=>window.__applyPendingAppUpdate && window.__applyPendingAppUpdate()}
           style={{ background:"rgba(56,189,248,0.12)", borderBottom:"1px solid rgba(56,189,248,0.3)",
-          padding:"8px 16px", display:"flex", alignItems:"center", gap:8, cursor:"pointer",
+          padding:"8px calc(16px + var(--corner-r)) 8px 16px", display:"flex", alignItems:"center", gap:8, cursor:"pointer",
           fontSize:12, color:"#38bdf8", fontWeight:600, position:"sticky",
           top:`calc(var(--top-gap) + ${(syncStatus==="offline"||syncStatus==="error")?33:0}px)`, zIndex:29 }}>
           ⬆ Update available — tap to refresh
@@ -350,7 +350,7 @@ function App({ role }) {
           whatever translucent content sits in/near the status-bar area. */}
       <div style={{ background:"#080c14",
         borderBottom:"1px solid rgba(255,255,255,0.06)",
-        padding:"10px 14px",
+        padding:"10px calc(14px + var(--corner-r)) 10px 14px",
         position:"sticky",
         top:`calc(var(--top-gap) + ${(((syncStatus==="offline"||syncStatus==="error")?1:0) + (updateAvailable?1:0)) * 33}px)`,
         zIndex:20 }}>
@@ -417,8 +417,9 @@ function App({ role }) {
 
       {/* ── Bottom nav ── */}
       {/* Fixed, so body's side padding doesn't reach it: pin between the safe-area
-          insets and center within them (left+right+maxWidth+auto margins). */}
-      <div style={{ position:"fixed", bottom:0, left:"var(--safe-l)", right:"var(--safe-r)", margin:"0 auto",
+          insets and center within them (left+right+maxWidth+auto margins). The folded
+          Duo's corner pill is nowhere near the bottom, so corner mode doesn't apply here. */}
+      <div style={{ position:"fixed", bottom:0, left:"var(--safe-l)", right:"calc(var(--safe-r) - var(--corner-r))", margin:"0 auto",
         maxWidth:430, background:"rgba(8,12,20,0.97)", backdropFilter:"blur(20px)",
         borderTop:"1px solid rgba(255,255,255,0.07)", paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
         <div style={{ display:"flex" }}>

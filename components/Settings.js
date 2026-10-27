@@ -176,6 +176,7 @@ function AddPitcherSection({ roster, onAdd, onDelete }) {
 // ══════════════════════════════════════════════════════════════════════════════
 function DisplayInfoSection() {
   const probeRef = useRef(null);
+  const measureRef = useRef(null);
   const [info, setInfo] = useState(null);
 
   useEffect(()=>{
@@ -193,10 +194,23 @@ function DisplayInfoSection() {
         insets: { top:px(cs.paddingTop), right:px(cs.paddingRight), bottom:px(cs.paddingBottom), left:px(cs.paddingLeft) },
       });
     }
+    // iOS updates env(safe-area-inset-*) a beat after the resize/rotate event, so
+    // measuring only on the event reads the previous orientation's insets.
+    let timers = [];
+    function measureSoon() {
+      timers.forEach(clearTimeout);
+      measure();
+      timers = [100, 350, 800].map(ms => setTimeout(measure, ms));
+    }
+    measureRef.current = measureSoon;
     measure();
-    window.addEventListener("resize", measure);
-    window.addEventListener("orientationchange", measure);
-    return ()=>{ window.removeEventListener("resize", measure); window.removeEventListener("orientationchange", measure); };
+    window.addEventListener("resize", measureSoon);
+    window.addEventListener("orientationchange", measureSoon);
+    return ()=>{
+      timers.forEach(clearTimeout);
+      window.removeEventListener("resize", measureSoon);
+      window.removeEventListener("orientationchange", measureSoon);
+    };
   }, []);
 
   const row = (label, value) => (
@@ -208,7 +222,14 @@ function DisplayInfoSection() {
 
   return (
     <div style={{ ...card, marginTop:12, border:"1px solid rgba(255,255,255,0.12)" }}>
-      <p style={sectionTitle}>DISPLAY</p>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+        <p style={sectionTitle}>DISPLAY</p>
+        <button onClick={()=>measureRef.current && measureRef.current()} aria-label="Refresh display info"
+          style={{ background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:8,
+            padding:"4px 10px", color:"rgba(255,255,255,0.5)", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+          ↻ Refresh
+        </button>
+      </div>
       {/* Invisible probe: the browser resolves env() into its padding */}
       <div ref={probeRef} aria-hidden="true" style={{ position:"fixed", visibility:"hidden", pointerEvents:"none", width:0, height:0,
         paddingTop:"env(safe-area-inset-top, 0px)", paddingRight:"env(safe-area-inset-right, 0px)",
@@ -272,11 +293,11 @@ function Settings({ roster, onAddPlayer, onDeletePlayer, tournaments, onAddTourn
 
   return (
     <div>
-      <div style={{ padding:"16px 16px 14px" }}>
+      <div style={{ padding:"16px calc(16px + var(--corner-r)) 14px 16px" }}>
         <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>SETTINGS</h2>
       </div>
 
-      <div style={{ display:"flex", gap:8, margin:"0 16px 14px" }}>
+      <div style={{ display:"flex", gap:8, margin:"0 calc(16px + var(--corner-r)) 14px 16px" }}>
         {sections.map(([id,label])=>(
           <button key={id} onClick={()=>setSection(id)} aria-pressed={section===id}
             style={{ flex:1, padding:"10px", borderRadius:12,
