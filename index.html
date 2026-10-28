@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Prime Pitching"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#080c14"/>
-  <meta name="app-version" content="v3.16"/>
+  <meta name="app-version" content="v3.17"/>
   <title>Prime Pitching</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="assets/logo.png"/>
@@ -50,6 +50,10 @@
     body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
            padding-top: var(--top-gap); padding-left: var(--safe-l); padding-right: calc(var(--safe-r) - var(--corner-r)); }
     input, button, select, textarea { font-family: inherit; }
+    /* No native number-field steppers (desktop browsers show them on focus/hover);
+       counts have their own -5/-1/+1/+5 buttons. */
+    input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; appearance: textfield; }
     * { -webkit-overflow-scrolling: touch; }
     #root { height: 100%; }
     /* Solid cover over the status-bar area (black-translucent lets content scroll
@@ -109,7 +113,7 @@
 
 
 // ─── App version (bump minor for each PR) ────────────────────────────────────
-const APP_VERSION = "v3.16";
+const APP_VERSION = "v3.17";
 const LOGO_URI = "assets/logo.png";
 
 // ─── Pure logic (rest-day/eligibility/date/device-id math) ───────────────────
@@ -142,7 +146,7 @@ function save(key, val) {
 }
 
 // ─── Shared status config, icons, and style tokens — lib/ui-constants.js ─────
-const { STATUS, I, inputStyle, primaryBtn, cancelBtn, card, sectionLabel, sectionTitle, centeredColumn } = window.UIConstants;
+const { STATUS, I, inputStyle, primaryBtn, cancelBtn, card, sectionLabel, sectionTitle, centeredColumn, stickyPane } = window.UIConstants;
 
   </script>
 

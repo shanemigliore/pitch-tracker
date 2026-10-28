@@ -5,7 +5,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: LOG GAME — enter a new game
 // ══════════════════════════════════════════════════════════════════════════════
-function GameLogScreen({ roster, onLogMultiple, tournaments }) {
+function GameLogScreen({ roster, onLogMultiple, tournaments, twoPane=false, rail=false }) {
   const [gameDate, setGameDate] = useState(todayStr());
   const [context, setContext] = useState("regular");
   const [opponent, setOpponent] = useState("");
@@ -88,25 +88,12 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
   const hasEntries = selectedIds.size > 0;
   const totalPitchers = selectedIds.size;
 
-  return (
-    <div style={{ padding:"0 16px 110px" }}>
-      <div style={{ padding:"16px 0 14px", marginRight:"var(--corner-r)" }}>
-        <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>LOG GAME</h2>
-        <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>Record pitch counts for a game</p>
-      </div>
-
-      {saved ? (
-        <div style={{ textAlign:"center", padding:"50px 20px", background:"rgba(74,222,128,0.07)",
-          border:"1px solid rgba(74,222,128,0.25)", borderRadius:20, marginBottom:16 }}>
-          <div style={{ fontSize:48, marginBottom:8 }}>✅</div>
-          <div style={{ color:"#4ade80", fontSize:18, fontWeight:700 }}>Game Saved!</div>
-          <div style={{ color:"rgba(255,255,255,0.4)", fontSize:13, marginTop:4, marginBottom:20 }}>{totalPitchers} pitcher{totalPitchers!==1?"s":""} logged</div>
-          <button onClick={resetForm} style={{ ...primaryBtn, padding:"11px 22px", margin:"0 auto" }}>
-            {I.plus} Log Another Game
-          </button>
-        </div>
-      ) : (
-        <>
+  // Sections. One column on phones (details, then a WHO PITCHED card with the
+  // chips and each picked pitcher's count right below). On wide screens: details
+  // + chips on the left, counts + Save on the right, so you can see who you
+  // picked while typing counts. Same elements either way.
+  // Game type / date / opponent
+  const detailsCard = (<>
           <div style={card}>
             <p style={sectionTitle}>GAME DETAILS</p>
             <ContextPicker context={context} setContext={setContext}
@@ -134,10 +121,9 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
               </div>
             )}
           </div>
-
-          <div style={card}>
-            <p style={sectionTitle}>WHO PITCHED?</p>
-            <p style={{ margin:"0 0 12px", fontSize:12, color:"rgba(255,255,255,0.4)" }}>Tap everyone who threw in this game — a pitch count field appears right below their name.</p>
+  </>);
+  // Not-yet-picked pitchers
+  const pickerChips = (<>
             {roster.length===0 ? (
               <div style={{ textAlign:"center", padding:"20px 0", color:"rgba(255,255,255,0.3)", fontSize:13 }}>No players on roster yet</div>
             ) : (
@@ -153,6 +139,9 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
                 ))}
               </div>
             )}
+  </>);
+  // Picked pitchers: count entry + rest/limit + rule check
+  const countRows = (<>
             {sortedRoster.filter(p=>selectedIds.has(p.id)).map(p=>{
               const count = getCount(p.id);
               // Pitches left after this game: the regular-season max, or in a
@@ -238,8 +227,9 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
             {missingCounts && (
               <div style={{ fontSize:11, color:"#f87171", marginTop:4 }}>Enter a pitch count for everyone selected above (or tap ✕ to remove them).</div>
             )}
-          </div>
-
+  </>);
+  // Limit warning + Save
+  const saveControls = (<>
           {warnViolations && (()=>{
             const toLog = roster.filter(p=>selectedIds.has(p.id));
             const violations = toLog.map(p=>({ p, reason:getViolation(p) })).filter(v=>v.reason);
@@ -284,6 +274,59 @@ function GameLogScreen({ roster, onLogMultiple, tournaments }) {
               </button>
             );
           })()}
+  </>);
+
+  return (
+    <div style={{ padding:"0 16px 110px", ...(twoPane && saved ? { maxWidth:430, margin:"0 auto" } : null) }}>
+      <div style={{ padding:"16px 0 14px", marginRight:"var(--corner-r)" }}>
+        <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>LOG GAME</h2>
+        <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>Record pitch counts for a game</p>
+      </div>
+
+      {saved ? (
+        <div style={{ textAlign:"center", padding:"50px 20px", background:"rgba(74,222,128,0.07)",
+          border:"1px solid rgba(74,222,128,0.25)", borderRadius:20, marginBottom:16 }}>
+          <div style={{ fontSize:48, marginBottom:8 }}>✅</div>
+          <div style={{ color:"#4ade80", fontSize:18, fontWeight:700 }}>Game Saved!</div>
+          <div style={{ color:"rgba(255,255,255,0.4)", fontSize:13, marginTop:4, marginBottom:20 }}>{totalPitchers} pitcher{totalPitchers!==1?"s":""} logged</div>
+          <button onClick={resetForm} style={{ ...primaryBtn, padding:"11px 22px", margin:"0 auto" }}>
+            {I.plus} Log Another Game
+          </button>
+        </div>
+      ) : (
+        <>
+          {twoPane ? (
+            <div style={{ display:"grid", gridTemplateColumns:"minmax(300px, 1fr) minmax(300px, 1fr)", gap:16, alignItems:"start" }}>
+              <div style={{ minWidth:0 }}>
+                {detailsCard}
+                <div style={card}>
+                  <p style={sectionTitle}>WHO PITCHED?</p>
+                  <p style={{ margin:"0 0 12px", fontSize:12, color:"rgba(255,255,255,0.4)" }}>Tap everyone who threw in this game — their pitch count field appears on the right.</p>
+                  {pickerChips}
+                </div>
+              </div>
+              <div style={{ minWidth:0, ...stickyPane(rail) }}>
+                <div style={card}>
+                  <p style={sectionTitle}>PITCH COUNTS</p>
+                  {selectedIds.size===0
+                    ? <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)" }}>Pick who pitched on the left.</div>
+                    : countRows}
+                </div>
+                {saveControls}
+              </div>
+            </div>
+          ) : (
+            <>
+              {detailsCard}
+              <div style={card}>
+                <p style={sectionTitle}>WHO PITCHED?</p>
+            <p style={{ margin:"0 0 12px", fontSize:12, color:"rgba(255,255,255,0.4)" }}>Tap everyone who threw in this game — a pitch count field appears right below their name.</p>
+                {pickerChips}
+                {countRows}
+              </div>
+              {saveControls}
+            </>
+          )}
         </>
       )}
     </div>

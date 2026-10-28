@@ -5,6 +5,8 @@
 // MODAL: EDIT SINGLE GAME ENTRY
 // ══════════════════════════════════════════════════════════════════════════════
 function EditGameModal({ entry, pitcherName, roster, tournaments, onSave, onDelete, onClose }) {
+  // Wide screens: a centered dialog instead of a bottom sheet (v3.17)
+  const { wide } = useLayout();
   const [pitches, setPitches] = useState(entry.pitches);
   const [date, setDate] = useState(entry.date);
   const [opponent, setOpponent] = useState(entry.opponent || "");
@@ -31,12 +33,14 @@ function EditGameModal({ entry, pitcherName, roster, tournaments, onSave, onDele
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:50,
-      display:"flex", alignItems:"flex-end", justifyContent:"center",
-      paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)" }}
+      display:"flex", alignItems:wide?"center":"flex-end", justifyContent:"center",
+      paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)",
+      // Wide dialog: keep a tall one below the status area (unfolded Duo clock) and off the bottom edge
+      ...(wide ? { paddingTop:"max(var(--top-gap), 76px)", paddingBottom:24 } : null) }}
       onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
-      <div style={{ width:"100%", maxWidth:430, background:"#0f1623",
-        border:"1px solid rgba(255,255,255,0.12)", borderRadius:"20px 20px 0 0",
-        padding:"20px 18px 40px", maxHeight:"92vh", overflowY:"auto" }}>
+      <div style={{ width:"100%", maxWidth:wide?520:430, background:"#0f1623",
+        border:"1px solid rgba(255,255,255,0.12)", borderRadius:wide?20:"20px 20px 0 0",
+        padding:"20px 18px 40px", maxHeight:wide?"100%":"92vh", boxSizing:"border-box", overflowY:"auto" }}>
 
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
           <div>

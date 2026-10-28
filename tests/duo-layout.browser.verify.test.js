@@ -4,7 +4,8 @@
  * landscape, Log Game rename, admin-only DisplayInfoSection; v3.15 narrow-screen
  * "corner mode" (Home Screen app only - a browser tab keeps the v3.14 full-height strip), flat 32px --top-gap in a wide Home Screen app, DisplayInfo
  * delayed re-measure + Refresh; v3.16 wide frame: left tab rail in wide landscape,
- * centeredColumn, Live two-pane, --hdr-r). Playwright + headless Chromium; prints SKIP
+ * centeredColumn, Live two-pane, --hdr-r; v3.17 two-pane Roster/Season/Log Game/Settings with
+ * sticky right panes, modal dialogs when wide). Playwright + headless Chromium; prints SKIP
  * and exits 0 if playwright isn't installed.
  *
  * WHAT IS SIMULATED (headless Chromium can't fake either of these):
@@ -33,6 +34,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
 
 const ROOT = path.join(__dirname, '..');
 const TYPES = { '.html':'text/html', '.js':'text/javascript', '.json':'application/json', '.png':'image/png' };
+const CDN_CACHE = new Map(); // url -> Promise<{ body, status, ct }>
 const CORNER_H = 164; // must match --corner-h in index.html (static test pins the var itself)
 
 function stub(role) {
@@ -61,7 +63,7 @@ function stub(role) {
     __fbCreateSeason: rec("createSeason","2026_fall"), __fbGetRoster: ()=>R([]),
     __fbListTeams: ()=>R([meta]),
     __fbCreateTeam: rec("createTeam"), __fbUpdateTeamMeta: rec("updateTeamMeta"), __fbDeleteTeam: rec("deleteTeam"),
-    __fbSubscribe: (onData, onConn, onOffline) => { window.__goOffline = onOffline; setTimeout(()=>{ onData({ roster, tournaments:[] }); onConn(); },0); return ()=>{}; },
+    __fbSubscribe: (onData, onConn, onOffline) => { window.__goOffline = onOffline; window.__pushData = onData; window.__stubRoster = roster; setTimeout(()=>{ onData({ roster, tournaments:[] }); onConn(); },0); return ()=>{}; },
     __fbSet: rec("set"),
     __fbWatchLiveGame: (tid, cb) => { window.__setLive = v => { window.__liveCur = v; cb(v); }; setTimeout(()=>cb(null),0); return ()=>{}; },
     __fbStartLiveGame: rec("startLive",true),
@@ -124,7 +126,17 @@ async function openApp(browser, port, { w, h, t = 0, l = 0, r = 0, b = 0, sa = f
   await page.route('**/firebasejs/**', x => x.fulfill({ contentType: 'text/javascript', body: '' }));
   await page.route('**/lib/firebase-init.js', x => x.fulfill({ contentType: 'text/javascript', body: stub(role) }));
   await page.route('**/fonts.googleapis.com/**', x => x.fulfill({ contentType: 'text/css', body: '' }));
-  await page.goto(`http://localhost:${port}/?sim=${t},${r},${b},${l}${sa ? '&sa=1' : ''}`);
+  // Version-pinned CDN scripts (React/ReactDOM/Babel) are fetched once per run and replayed from memory,
+  // so dozens of fresh contexts don't each depend on the network proxy.
+  await page.route('https://cdnjs.cloudflare.com/**', async x => {
+    const u = x.request().url();
+    if (!CDN_CACHE.has(u)) CDN_CACHE.set(u, (async () => { const resp = await x.fetch({ timeout: 60000 }); return { body: await resp.body(), status: resp.status(), ct: resp.headers()['content-type'] || 'text/javascript' }; })());
+    try { const c = await CDN_CACHE.get(u); if (c.status !== 200) CDN_CACHE.delete(u); await x.fulfill({ status: c.status, contentType: c.ct, body: c.body }); }
+    catch (e) { CDN_CACHE.delete(u); await x.continue(); }
+  });
+  // CDN scripts (React/Babel) go through the network proxy; retry a slow load once instead of failing the run.
+  const url = `http://localhost:${port}/?sim=${t},${r},${b},${l}${sa ? '&sa=1' : ''}`;
+  try { await page.goto(url, { timeout: 60000 }); } catch (e) { await page.goto(url, { timeout: 60000 }); }
   await page.waitForSelector(waitFor, { timeout: 30000 });
   await page.waitForTimeout(500);
   return { ctx, page, errs, external };
@@ -219,7 +231,10 @@ async function sweep(page, zone, { withLive = false } = {}) {
   // drill-in with edit open
   await page.locator('#root div[style*="cursor: pointer"]', { hasText: "Johnny" }).first().click(); await page.waitForTimeout(250); await snap('PitcherDetail');
   await page.locator('button[aria-label="Edit player details"]').click(); await page.waitForTimeout(200); await snap('PitcherDetail+edit');
-  await page.locator('button[aria-label="Back to roster"]').click(); await page.waitForTimeout(200);
+  // v3.17: in two-pane the detail is embedded beside the list (no Back button)
+  const back = page.locator('button[aria-label="Back to roster"]');
+  res.embedded = (await back.count()) === 0;
+  if (!res.embedded) { await back.click(); await page.waitForTimeout(200); }
   await tabBtn(page, 'Live').click(); await page.waitForTimeout(250); await snap('Live (setup)');
   if (withLive) {
     await page.evaluate(() => window.__setLive(window.__demoLive)); await page.waitForTimeout(300); await snap('Live (in progress)');
@@ -306,6 +321,7 @@ async function sweep(page, zone, { withLive = false } = {}) {
       const expRail = v.w >= 600 && v.w > v.h;
       const expTwo = v.w >= 600 && (v.w - l - r - (expRail ? 72 : 0) - 32) >= 616;
       check(`[${v.name}] Live in progress is ${expTwo ? 'two-pane' : 'one column'}`, states.twoPane === expTwo, 'twoPane=' + states.twoPane);
+      check(`[${v.name}] Roster detail is ${expTwo ? 'embedded beside the list (no Back)' : 'a drill-in with Back'}`, states.embedded === expTwo, 'embedded=' + states.embedded);
       check(`[${v.name}] Undo toast shown after bringing a pitcher in; warn-violations card shown`, states.undoShown === 1 && states.warnShown === 1, JSON.stringify({ u: states.undoShown, w: states.warnShown }));
       const bad = states.flatMap(s => s.v.map(x => s.state + ': ' + x));
       check(`[${v.name}] no interactive element in ${v.corner ? 'left strip or top-right corner' : 'side inset strips'} (all tabs + drill-in/edit/live/log states)`,
@@ -364,8 +380,9 @@ async function sweep(page, zone, { withLive = false } = {}) {
           (v.corner ? nav.inner.right - nav.inner.left >= Math.min(430, availR - availL) - 0.5 : true), JSON.stringify({ col, nav }));
       }
       // v3.16 intent: the phone-width content column is centred on the SCREEN, nudged only as far as
-      // needed to clear the insets (and the rail). Measured on the Roster tab (a 430 column on every size).
-      {
+      // needed to clear the insets (and the rail). Measured on the Roster tab, which is a 430 column on
+      // every size except two-pane (v3.17: two-pane screens use the full frame - checked in the v3.17 block).
+      if (!expTwo) {
         await tabBtn(page, 'Roster').click(); await page.waitForTimeout(200); await scrollTop(page);
         const sc = await page.evaluate(() => { const wrap = document.querySelector('#root > div'); let e = document.querySelector('h2');
           while (e && e.parentElement !== wrap) e = e.parentElement; const b = e.getBoundingClientRect(); return { left: b.left, right: b.right }; });
@@ -567,6 +584,10 @@ async function sweep(page, zone, { withLive = false } = {}) {
       await page.setViewportSize({ width: 678, height: 457 }); await page.waitForTimeout(300);
       check('admin: re-measures on resize (678 × 457, landscape)',
         (await rowVal('Viewport (CSS px)')) === '678 × 457' && (await rowVal('Orientation')) === 'landscape', await rowVal('Viewport (CSS px)'));
+      // v3.17: Settings switches to its two-pane layout when useLayout().twoPane flips, which remounts
+      // the section (and DisplayInfo with it). The fake widths below (1111+) would flip 678x457 (rail,
+      // one column) to two-pane mid-test, so start from a size that is already rail + two-pane.
+      await page.setViewportSize({ width: 1000, height: 457 }); await page.waitForTimeout(1000);
       // Delayed re-measure: dispatch a resize, then change what measure() reads AFTER the
       // synchronous measure - only the 100/350/800ms timers can pick that up (iOS updates env() late).
       const delayed = await page.evaluate(async () => {
@@ -851,6 +872,304 @@ async function sweep(page, zone, { withLive = false } = {}) {
       const kb = await k.page.evaluate(() => ({ rail: !!document.querySelector('nav[aria-label="Tabs"]'), two: !![...document.querySelectorAll('div')].find(d => getComputedStyle(d).display === 'grid'), focus: document.activeElement && document.activeElement.getAttribute('aria-label') }));
       console.log('INFO  [keyboard sim 669x951 -> 669x560] ' + JSON.stringify(kb) + ' (layout flips to rail/one column and the focused input is lost IF iOS shrinks innerHeight for the keyboard - not verifiable headless)');
       await k.ctx.close();
+    }
+
+    // ── v3.17: two-pane Roster / Season / Log Game / Settings + modal dialogs ──
+    // Insets + standalone simulated as described in the header. icons = the unfolded Duo's
+    // measured clock/battery region (x 549-642, y 26-67).
+    {
+      const geom = page => page.evaluate(() => {
+        const R = e => { if (!e) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom, w: b.width, h: b.height }; };
+        const hdr = [...document.querySelectorAll('div')].find(d => getComputedStyle(d).position === 'sticky' && d.querySelector('img'));
+        const grid = [...document.querySelectorAll('#root div')].find(d => getComputedStyle(d).display === 'grid' && d.children.length === 2 && d.getBoundingClientRect().width > 500);
+        const nav = [...document.querySelectorAll('#root div')].find(d => getComputedStyle(d).position === 'fixed' && /ROSTER/.test(d.textContent) && /SETTINGS/.test(d.textContent));
+        const pane = grid && grid.children[1];
+        const frame = document.querySelector('#root > div'); const fpl = parseFloat(getComputedStyle(frame).paddingLeft);
+        const fb = frame.getBoundingClientRect();
+        return { vw: document.documentElement.clientWidth, vh: innerHeight, hdr: R(hdr), grid: R(grid), left: grid && R(grid.children[0]), right: R(pane),
+          paneSticky: pane ? getComputedStyle(pane).position : null, paneScroll: pane ? { sh: pane.scrollHeight, ch: pane.clientHeight, oy: getComputedStyle(pane).overflowY } : null,
+          navTop: nav ? nav.firstElementChild.getBoundingClientRect().top : innerHeight, frame: { l: fb.left + fpl, r: fb.right },
+          sw: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+      });
+      const dialogGeom = page => page.evaluate(`(function(){ const bd = (${findBackdrop})(); if (!bd) return null; const s = bd.firstElementChild; const b = s.getBoundingClientRect(); const cs = getComputedStyle(s);
+        const close = [...s.querySelectorAll('button')].find(x => x.getAttribute('aria-label') === 'Close' || /^✕$/.test(x.textContent.trim()));
+        const cb = close && close.getBoundingClientRect(); const bcs = getComputedStyle(bd);
+        const cy = (parseFloat(bcs.paddingTop) + innerHeight - parseFloat(bcs.paddingBottom)) / 2;
+        return { vw: document.documentElement.clientWidth, vh: innerHeight, cy, l: b.left, r: b.right, t: b.top, b: b.bottom, w: b.width, h: b.height, radius: cs.borderBottomLeftRadius,
+          oy: cs.overflowY, sh: s.scrollHeight, ch: s.clientHeight, close: cb && { l: cb.left, r: cb.right, t: cb.top, b: cb.bottom } }; })()`);
+      const views = [
+        { n: 'unfolded portrait 669x951', w: 669, h: 951, t: 82, b: 34, sa: true, two: true, icons: [549, 26, 642, 67] },
+        { n: 'unfolded landscape 951x669 r=84', w: 951, h: 669, r: 84, b: 34, sa: true, two: true },
+        { n: 'folded landscape 678x457 r=84', w: 678, h: 457, r: 84, b: 34, sa: true, two: false, wide: true },
+        { n: 'folded landscape 678x457 l=84', w: 678, h: 457, l: 84, b: 34, sa: true, two: false, wide: true },
+        { n: 'folded portrait 457x678 r=84 (corner)', w: 457, h: 678, r: 84, b: 34, sa: true, two: false, corner: true },
+        { n: 'phone 390x844', w: 390, h: 844, two: false },
+      ];
+      for (const v of views) {
+        const { ctx, page, errs } = await openApp(browser, port, v);
+        const tag = `[v3.17 ${v.n}]`; const l = v.l || 0, r = v.r || 0;
+        const rail = v.w >= 600 && v.w > v.h;
+        // pane checks shared by every two-pane screen
+        const paneOk = async (label) => {
+          await scrollTop(page); await page.waitForTimeout(150);
+          const g0 = await geom(page);
+          const ok0 = g0.grid && g0.right && g0.paneSticky === 'sticky' && g0.right.t >= g0.hdr.b - 0.5 && g0.right.b <= g0.navTop + 0.5 &&
+            g0.left.r <= g0.right.l + 0.5 && g0.grid.l >= l - 0.5 && g0.grid.r <= g0.vw - r + 0.5 && g0.sw <= 0;
+          check(`${tag} ${label}: two panes side by side; right pane sticky, below the header, above the bottom bar, inside insets; no h-scroll`, ok0, JSON.stringify(g0));
+          // page scroll: the right pane stays pinned below the header
+          await page.evaluate(() => window.scrollTo(0, 400)); await page.waitForTimeout(150);
+          const g1 = await geom(page);
+          const scrolled = await page.evaluate(() => scrollY);
+          check(`${tag} ${label}: after scrolling the page (${scrolled}px) the right pane is still fully below the sticky header and within the viewport`,
+            g1.right && g1.right.t >= g1.hdr.b - 0.5 && g1.right.b <= g1.navTop + 0.5, JSON.stringify({ hdr: g1.hdr, right: g1.right, navTop: g1.navTop }));
+          if (v.icons) { const ih = await rectHits(page, v.icons); check(`${tag} ${label}: nothing under the clock/battery after scrolling`, !ih.length, ih.join('; ')); }
+          await scrollTop(page);
+          return g0;
+        };
+        const noGrid = async label => { const g = await geom(page);
+          check(`${tag} ${label}: one column (no two-pane grid)${v.wide ? ', screen-centred <=430' : ''}; no h-scroll`, !g.grid && g.sw <= 0, JSON.stringify(g)); };
+
+        // ── Roster ──
+        await tabBtn(page, 'Roster').click(); await page.waitForTimeout(250);
+        if (v.two) {
+          check(`${tag} Roster: placeholder "Tap a pitcher" shown, no Back button`, (await page.locator('text=Tap a pitcher').count()) === 1 && (await page.locator('button[aria-label="Back to roster"]').count()) === 0);
+          await page.locator('#root div[style*="cursor: pointer"]', { hasText: 'Johnny' }).first().click(); await page.waitForTimeout(250);
+          const sel = await page.evaluate(() => [...document.querySelectorAll('[aria-current="true"]')].map(e => e.textContent.slice(0, 30)));
+          check(`${tag} Roster: tapping Johnny shows his detail on the right (no Back), row highlighted, list still visible`,
+            (await page.locator('h2', { hasText: /JOHNNY/ }).count()) === 1 && (await page.locator('button[aria-label="Back to roster"]').count()) === 0 &&
+            sel.length === 1 && /Johnny/.test(sel[0]) && (await page.locator('text=Tap a pitcher').count()) === 0 && (await page.locator('#root div[style*="cursor: pointer"]', { hasText: 'Carter' }).count()) > 0, JSON.stringify(sel));
+          await paneOk('Roster');
+          await page.locator('#root div[style*="cursor: pointer"]', { hasText: 'Carter' }).first().click(); await page.waitForTimeout(250);
+          const sel2 = await page.evaluate(() => [...document.querySelectorAll('[aria-current="true"]')].map(e => e.textContent.slice(0, 30)));
+          check(`${tag} Roster: tapping Carter switches the detail and the highlight`, (await page.locator('h2', { hasText: /CARTER/ }).count()) === 1 && sel2.length === 1 && /Carter/.test(sel2[0]), JSON.stringify(sel2));
+          // edit player from the embedded detail -> list + detail both update
+          await page.locator('button[aria-label="Edit player details"]').click(); await page.waitForTimeout(150);
+          await page.locator('input[aria-label="Name"]').fill('Carter Q'); await page.locator('button', { hasText: 'Save Changes' }).click(); await page.waitForTimeout(250);
+          check(`${tag} Roster: editing the name in the embedded detail updates the detail heading and the list row`,
+            (await page.locator('h2', { hasText: /CARTER Q/ }).count()) === 1 && (await page.locator('#root div[style*="cursor: pointer"]', { hasText: 'Carter Q' }).count()) > 0);
+          // edit a game from the detail -> centered dialog, save changes pitches
+          await page.locator('h2', { hasText: /CARTER Q/ }).waitFor();
+          await page.evaluate(() => { const b = [...document.querySelectorAll('button')].filter(x => /Edit$/.test(x.textContent.trim()) && !x.getAttribute('aria-label')).pop(); b && b.click(); });
+          await page.waitForTimeout(250);
+          const dg = await dialogGeom(page);
+          check(`${tag} Roster: Edit game opens a centered dialog (<=520 wide, all corners rounded, inside insets, vertically centered)`,
+            dg && dg.w <= 520.5 && dg.radius === '20px' && dg.l >= l - 0.5 && dg.r <= dg.vw - r + 0.5 && Math.abs((dg.t + dg.b) / 2 - dg.cy) < 2, JSON.stringify(dg));
+          await page.locator('[data-test-modal] button[aria-label="Increase pitch count"]').click();
+          await page.locator('[data-test-modal] button', { hasText: /Save/ }).first().click(); await page.waitForTimeout(250);
+          check(`${tag} Roster: saving the edited game closes the dialog and the detail shows the new count (18 -> 19)`,
+            !(await page.evaluate(`(${findBackdrop})()`)) && (await page.evaluate(() => /\b19p\b|\b19\b/.test(document.querySelector('#root').innerText))), '');
+        } else {
+          await noGrid('Roster');
+          await page.locator('#root div[style*="cursor: pointer"]', { hasText: 'Johnny' }).first().click(); await page.waitForTimeout(250);
+          check(`${tag} Roster: tapping a pitcher drills in (Back button, list hidden)`, (await page.locator('button[aria-label="Back to roster"]').count()) === 1 &&
+            (await page.locator('#root div[style*="cursor: pointer"]', { hasText: 'Carter' }).count()) === 0);
+          await page.locator('button[aria-label="Back to roster"]').click(); await page.waitForTimeout(200);
+        }
+        // rules modal: dialog when wide, sheet otherwise
+        await tabBtn(page, 'Roster').click(); await page.waitForTimeout(150); await scrollTop(page);
+        await page.locator('button[aria-label="View availability key and rest requirements"]').click(); await page.waitForTimeout(250);
+        const rg = await dialogGeom(page);
+        const wideV = v.w >= 600;
+        check(`${tag} rules ${wideV ? 'dialog centered, <=520, rounded' : 'bottom sheet flush with the bottom, <=430, top corners only'}; inside insets; scrollable`,
+          rg && rg.l >= l - 0.5 && rg.r <= rg.vw - r + 0.5 && rg.oy === 'auto' && rg.h <= rg.vh + 0.5 &&
+          (wideV ? rg.w <= 520.5 && rg.radius === '20px' && Math.abs((rg.t + rg.b) / 2 - rg.cy) < 2 : rg.w <= 430.5 && rg.radius === '0px' && Math.abs(rg.b - rg.vh) < 1), JSON.stringify(rg));
+        if (v.icons) { const ih = await rectHits(page, v.icons); check(`${tag} rules dialog: nothing under the clock/battery`, !ih.length, ih.join('; ')); }
+        if (v.corner) { const cv = await insetViolations(page, { l, r, cornerR: r, cornerH: CORNER_H }, '[data-test-modal]'); check(`${tag} rules sheet: no control under the corner`, !cv.length, cv.join('; ')); }
+        await clickBackdrop(page); await page.waitForTimeout(150);
+        check(`${tag} rules modal closes on backdrop tap`, !(await page.evaluate(`(${findBackdrop})()`)));
+
+        // ── Season ──
+        await tabBtn(page, 'Season').click(); await page.waitForTimeout(250);
+        if (v.two) {
+          const g = await paneOk('Season');
+          const sides = await page.evaluate(() => { const grid = [...document.querySelectorAll('#root div')].find(d => getComputedStyle(d).display === 'grid' && d.children.length === 2 && d.getBoundingClientRect().width > 500);
+            const [a, b] = grid.children; return { leftEdit: [...a.querySelectorAll('button')].some(x => /Edit$/.test(x.textContent.trim())), rightFilter: /FILTER BY PITCHER/.test(b.textContent), rightLeader: /LEADERBOARD|Leaderboard/i.test(b.textContent), rightTotal: /Total/.test(b.textContent), leftFilter: /FILTER BY PITCHER/.test(a.textContent) }; });
+          check(`${tag} Season: games (with Edit) left; filter + totals + leaderboard right`, sides.leftEdit && sides.rightFilter && sides.rightLeader && sides.rightTotal && !sides.leftFilter, JSON.stringify(sides));
+        } else await noGrid('Season');
+        const countTxt = () => page.evaluate(() => [...document.querySelectorAll('h2')].find(h => h.textContent === 'SEASON').nextElementSibling.textContent);
+        const before = await countTxt();
+        await page.locator('button[aria-pressed]', { hasText: /^#23 Carter/ }).first().click(); await page.waitForTimeout(200);
+        const after = await countTxt();
+        check(`${tag} Season: filtering by a pitcher narrows the list (${before} -> ${after})`, before !== after && /^1 game/.test(after), JSON.stringify({ before, after }));
+        await page.locator('button', { hasText: /^All Pitchers$/ }).click(); await page.waitForTimeout(150);
+        await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /^Edit$/.test(x.textContent.trim())); b && b.click(); }); await page.waitForTimeout(250);
+        const sg = await dialogGeom(page);
+        check(`${tag} Season: Edit opens EditGameGroupModal as a ${wideV ? 'centered dialog' : 'bottom sheet'} inside insets`,
+          sg && sg.l >= l - 0.5 && sg.r <= sg.vw - r + 0.5 && (wideV ? sg.w <= 520.5 && Math.abs((sg.t + sg.b) / 2 - sg.cy) < 2 : Math.abs(sg.b - sg.vh) < 1), JSON.stringify(sg));
+        if (v.icons) { const ih = await rectHits(page, v.icons); check(`${tag} Season edit dialog: nothing under the clock/battery`, !ih.length, ih.join('; ')); }
+        await clickBackdrop(page); await page.waitForTimeout(150);
+
+        // ── Log Game ──
+        await tabBtn(page, 'Log Game').click(); await page.waitForTimeout(250);
+        if (v.two) {
+          check(`${tag} Log Game: right pane says "Pick who pitched on the left." before any pick`, (await page.locator('text=Pick who pitched on the left.').count()) === 1);
+        }
+        await page.locator('input[aria-label="Opponent"]').fill('Cubs');
+        for (const n of ['Mason', 'Eli']) await page.locator(`button[aria-pressed="false"][aria-label="${n}"]`).click();
+        await page.waitForTimeout(200);
+        if (v.two) {
+          await paneOk('Log Game');
+          const side = await page.evaluate(() => { const grid = [...document.querySelectorAll('#root div')].find(d => getComputedStyle(d).display === 'grid' && d.children.length === 2 && d.getBoundingClientRect().width > 500);
+            const [a, b] = grid.children; return { leftChips: /WHO PITCHED/.test(a.textContent), leftDetails: !!a.querySelector('input[aria-label="Opponent"]'), rightCounts: !!b.querySelector('input[aria-label="Mason pitch count"]') && !!b.querySelector('input[aria-label="Eli pitch count"]'), leftCounts: !!a.querySelector('input[aria-label$="pitch count"]') }; });
+          check(`${tag} Log Game: details + WHO PITCHED left, count rows right`, side.leftChips && side.leftDetails && side.rightCounts && !side.leftCounts, JSON.stringify(side));
+        } else await noGrid('Log Game');
+        await page.locator('input[aria-label="Mason pitch count"]').fill('12');
+        await page.locator('input[aria-label="Eli pitch count"]').fill('9');
+        await page.locator('button[aria-label="Add 1 pitch for Eli"]').click();
+        check(`${tag} Log Game: typing + bump work (Eli 9 -> 10)`, (await page.locator('input[aria-label="Eli pitch count"]').inputValue()) === '10');
+        await page.locator('button[aria-label="Remove Eli from this game"]').click(); await page.waitForTimeout(150);
+        check(`${tag} Log Game: ✕ removes Eli (chip back on the picker)`, (await page.locator('input[aria-label="Eli pitch count"]').count()) === 0 && (await page.locator('button[aria-pressed="false"][aria-label="Eli"]').count()) === 1);
+        await page.evaluate(() => { window.__sets.length = 0; });
+        await page.locator('button', { hasText: /Save Game/ }).click(); await page.waitForTimeout(250);
+        check(`${tag} Log Game: Mason (resting) triggers the warn-and-override card`, (await page.locator('text=/would violate a limit/').count()) === 1);
+        if (v.two) { const g = await geom(page); check(`${tag} Log Game: warn card stays inside the right pane / viewport`, g.right && g.right.b <= g.navTop + 0.5 && g.right.t >= g.hdr.b - 0.5, JSON.stringify(g)); }
+        await page.locator('button', { hasText: /^Save Anyway$/ }).click(); await page.waitForTimeout(1500);
+        const savedBox = await page.evaluate(() => { const el = [...document.querySelectorAll('#root div')].filter(d => /Game Saved!/.test(d.textContent) && d.style.padding === '0px 16px 110px').pop(); if (!el) return null; const b = el.getBoundingClientRect(); return { l: b.left, r: b.right }; });
+        const fr = (await geom(page)).frame;
+        const logged = await page.evaluate(() => { const roster = (window.__sets.filter(([k]) => k === 'roster').pop() || [])[1]; const list = roster ? (Array.isArray(roster) ? roster : Object.values(roster)) : [];
+          return list.flatMap(p => (p.history || []).filter(h => h.opponent === 'Cubs').map(h => p.name + ':' + h.pitches)); });
+        check(`${tag} Log Game: Save Anyway logs Mason 12 vs Cubs and shows "Game Saved!" as a centered <=430 column`,
+          JSON.stringify(logged) === '["Mason:12"]' && savedBox && savedBox.r - savedBox.l <= 430.5 && (v.two ? Math.abs((savedBox.l + savedBox.r) / 2 - (fr.l + fr.r) / 2) < 1 : true), JSON.stringify({ logged, savedBox, fr }));
+        await page.locator('button', { hasText: /Log Another Game/ }).click(); await page.waitForTimeout(200);
+        check(`${tag} Log Game: Log Another resets the form`, (await page.locator('input[aria-label$="pitch count"]').count()) === 0 && (await page.locator('text=Game Saved!').count()) === 0);
+        if (v.two) { const g = await geom(page); check(`${tag} Log Game: back to two panes after Log Another`, !!g.grid, JSON.stringify(g)); }
+
+        // ── Settings ──
+        await tabBtn(page, 'Settings').click(); await page.waitForTimeout(200);
+        const sNav = page.locator('nav[aria-label="Settings sections"]');
+        check(`${tag} Settings: ${v.two ? 'section list (nav) beside the content' : 'sub-tab row, no section nav'}`, (await sNav.count()) === (v.two ? 1 : 0));
+        if (v.two) {
+          const order = [];
+          for (const s of ['Tournaments', 'Account', 'Roster']) {
+            await sNav.locator('button', { hasText: new RegExp('^' + s + '$') }).click(); await page.waitForTimeout(150);
+            order.push((await sNav.locator('button[aria-pressed="true"]').textContent()).trim());
+          }
+          const acct = await page.evaluate(() => /Log out|Log Out/i.test(document.querySelector('#root').innerText));
+          check(`${tag} Settings: nav buttons switch the section (one pressed at a time)`, order.join() === 'Tournaments,Account,Roster', JSON.stringify(order));
+          const sg2 = await page.evaluate(() => { const n = document.querySelector('nav[aria-label="Settings sections"]').getBoundingClientRect(); const c = document.querySelector('nav[aria-label="Settings sections"]').nextElementSibling.getBoundingClientRect(); return { nR: n.right, cL: c.left, cR: c.right, vw: document.documentElement.clientWidth, sw: document.documentElement.scrollWidth - document.documentElement.clientWidth }; });
+          check(`${tag} Settings: nav left of the content, content inside the right inset, no h-scroll`, sg2.nR <= sg2.cL + 0.5 && sg2.cR <= sg2.vw - r + 0.5 && sg2.sw <= 0, JSON.stringify(sg2));
+        }
+        if (v.icons) {
+          // nothing under the clock at scroll 0 on any of the new screens (Roster with detail open, Season, Log Game picked, Settings sections)
+          const hits = [];
+          for (const t of ['Roster', 'Season', 'Log Game', 'Settings']) { await tabBtn(page, t).click(); await page.waitForTimeout(200); await scrollTop(page); hits.push(...(await rectHits(page, v.icons)).map(x => t + ': ' + x)); }
+          check(`${tag} nothing under the clock/battery on the v3.17 screens at scroll 0`, !hits.length, hits.join('; '));
+        }
+        check(`${tag} no page errors`, !errs.length, errs.join(' | '));
+        await ctx.close();
+      }
+
+      // phone: one-column order unchanged (Season: filter, totals, leaderboard, games; Log Game: details, chips, counts, save)
+      {
+        const { ctx, page } = await openApp(browser, port, { w: 390, h: 844 });
+        await tabBtn(page, 'Season').click(); await page.waitForTimeout(250);
+        const ys = await page.evaluate(() => { const y = e => e ? e.getBoundingClientRect().top + scrollY : null; const p = re => [...document.querySelectorAll('p, div')].find(x => x.children.length === 0 && re.test(x.textContent));
+          return [y(p(/^FILTER BY PITCHER$/)), y(p(/^Total$/)), y([...document.querySelectorAll('p')].find(x => /LEADERBOARD/i.test(x.textContent))), y([...document.querySelectorAll('button')].find(b => /^Edit$/.test(b.textContent.trim())))]; });
+        check('[v3.17 phone 390x844] Season one-column order: filter, totals, leaderboard, games', ys.every(x => x !== null) && ys.every((v, i) => !i || v > ys[i - 1]), JSON.stringify(ys));
+        await tabBtn(page, 'Log Game').click(); await page.waitForTimeout(250);
+        await page.locator('button[aria-pressed="false"][aria-label="Eli"]').click(); await page.locator('input[aria-label="Eli pitch count"]').fill('5');
+        const ys2 = await page.evaluate(() => { const y = e => e ? e.getBoundingClientRect().top + scrollY : null;
+          return [y(document.querySelector('input[aria-label="Opponent"]')), y([...document.querySelectorAll('p')].find(p => p.textContent === 'WHO PITCHED?')), y(document.querySelector('button[aria-label="Carter"]')),
+            y(document.querySelector('input[aria-label="Eli pitch count"]')), y([...document.querySelectorAll('button')].find(b => /Save Game/.test(b.textContent)))]; });
+        check('[v3.17 phone 390x844] Log Game one-column order: details, WHO PITCHED, chips, counts (same card), save', ys2.every(x => x !== null) && ys2.every((v, i) => !i || v > ys2[i - 1]), JSON.stringify(ys2));
+        check('[v3.17 phone 390x844] Log Game: no "PITCH COUNTS" pane title on phones', (await page.evaluate(() => [...document.querySelectorAll('p')].filter(p => p.textContent.trim() === 'PITCH COUNTS').length)) === 0);
+        await ctx.close();
+      }
+
+      // detail follows roster updates that arrive from Firebase (another device) while embedded
+      {
+        const { ctx, page } = await openApp(browser, port, { w: 951, h: 669, r: 84, sa: true });
+        await tabBtn(page, 'Roster').click(); await page.waitForTimeout(200);
+        await page.locator('#root div[style*="cursor: pointer"]', { hasText: 'Luke' }).first().click(); await page.waitForTimeout(200);
+        await page.evaluate(() => { const r = JSON.parse(JSON.stringify(window.__stubRoster)); const p = r.find(x => x.name === 'Luke'); p.name = 'Luke Remote';
+          window.__pushData({ roster: r, tournaments: [] }); });
+        await page.waitForTimeout(400);
+        const st = await page.evaluate(() => ({ list: [...document.querySelectorAll('#root div[style*="cursor: pointer"]')].some(d => /Luke Remote/.test(d.textContent)),
+          detail: ([...document.querySelectorAll('h2')].find(h => /LUKE/.test(h.textContent)) || {}).textContent }));
+        check('[v3.17 remote update] a rename from another device shows in BOTH the list and the embedded detail', st.list && /LUKE REMOTE/.test(st.detail || ''), JSON.stringify(st));
+        await page.evaluate(() => { const r = JSON.parse(JSON.stringify(window.__stubRoster)).filter(x => x.name !== 'Luke'); window.__pushData({ roster: r, tournaments: [] }); });
+        await page.waitForTimeout(400);
+        const st2 = await page.evaluate(() => ({ list: [...document.querySelectorAll('#root div[style*="cursor: pointer"]')].some(d => /Luke/.test(d.textContent)),
+          detail: !![...document.querySelectorAll('h2')].find(h => /LUKE/.test(h.textContent)), placeholder: /Tap a pitcher/.test(document.body.innerText) }));
+        check('[v3.17 remote update] a pitcher deleted on another device disappears from the embedded detail too (placeholder back)', !st2.list && !st2.detail && st2.placeholder, JSON.stringify(st2));
+        await ctx.close();
+      }
+    }
+
+    // ── v3.17: tall dialog on the unfolded Duo (portrait) vs the measured clock/battery ──
+    // A game with many pitchers makes EditGameGroupModal hit its 92vh cap; vertically centred,
+    // its top (and the close button) then sits ~4vh from the top of the screen.
+    {
+      const { ctx, page, errs } = await openApp(browser, port, { w: 669, h: 951, t: 82, b: 34, sa: true });
+      await page.evaluate(() => { const r = JSON.parse(JSON.stringify(window.__stubRoster)); const day = r[2].history[0].date;
+        r.forEach((p, i) => p.history.push({ gameId: 'big' + i, date: day, pitches: 5 + i, opponent: 'Giants', isTournament: false, tournamentId: null, tournamentName: null, tourneyDay: null, sharedGameId: 'sgBig' }));
+        window.__pushData({ roster: r, tournaments: [] }); });
+      await page.waitForTimeout(300);
+      await tabBtn(page, 'Season').click(); await page.waitForTimeout(250);
+      await page.evaluate(() => { const card = [...document.querySelectorAll('#root div')].filter(d => /vs Giants/.test(d.textContent) && [...d.querySelectorAll('button')].some(b => /^Edit$/.test(b.textContent.trim()))).pop();
+        [...card.querySelectorAll('button')].find(b => /^Edit$/.test(b.textContent.trim())).click(); });
+      await page.waitForTimeout(300);
+      const icons = [549, 26, 642, 67];
+      const hits = await rectHits(page, icons);
+      const dg = await page.evaluate(`(function(){ const bd = (${findBackdrop})(); const s = bd.firstElementChild; const b = s.getBoundingClientRect(); return { t: b.top, b: b.bottom, h: b.height, sh: s.scrollHeight, ch: s.clientHeight }; })()`);
+      check('[v3.17 unfolded portrait, 6-pitcher game] Season edit dialog: close button and contents clear of the clock/battery (x 549-642, y 26-67)', !hits.length, JSON.stringify({ dg, hits }));
+      check('[v3.17 unfolded portrait, 6-pitcher game] tall dialog scrolls inside itself', dg.sh > dg.ch, JSON.stringify(dg));
+      check('[v3.17 unfolded portrait, 6-pitcher game] no page errors', !errs.length, errs.join(' | '));
+      await ctx.close();
+    }
+
+    // ── Native number-field steppers hidden (index.html <style>; Chromium/desktop draws them on hover/focus) ──
+    // Reads the user-agent shadow DOM over CDP: every <input type=number>'s ::-webkit-inner-spin-button must
+    // resolve to -webkit-appearance:none and 0px wide (a default stepper is 'auto', 15px - sanity-checked
+    // on an injected input that opts back in).
+    {
+      const spinInfo = async page => {
+        const s = await page.context().newCDPSession(page); await s.send('DOM.enable'); await s.send('CSS.enable');
+        const { root } = await s.send('DOM.getDocument', { depth: -1, pierce: true });
+        const out = []; const walk = (n, host) => { const at = n.attributes || []; const pi = at.indexOf('pseudo');
+          if (pi >= 0 && /spin-button/.test(at[pi + 1]) && host) out.push({ host, pseudo: at[pi + 1], nodeId: n.nodeId });
+          const isNum = n.nodeName === 'INPUT' && at.some((x, i) => i % 2 === 0 && x === 'type' && at[i + 1] === 'number');
+          const attr = k => { const i = at.indexOf(k); return i >= 0 && i % 2 === 0 ? at[i + 1] : null; };
+          const h = isNum ? (attr('aria-label') || attr('id') || 'input') : host;
+          (n.children || []).forEach(c => walk(c, h)); (n.shadowRoots || []).forEach(c => walk(c, h)); };
+        walk(root, null);
+        for (const o of out) { const { computedStyle } = await s.send('CSS.getComputedStyleForNode', { nodeId: o.nodeId });
+          const g = k => (computedStyle.find(x => x.name === k) || {}).value; o.app = g('-webkit-appearance') || g('appearance'); o.w = g('width'); }
+        await s.detach(); return out.filter(o => o.pseudo === '-webkit-inner-spin-button');
+      };
+      for (const v of [{ n: 'unfolded portrait', w: 669, h: 951, t: 82, b: 34, sa: true }, { n: 'phone', w: 390, h: 844 }]) {
+        const { ctx, page } = await openApp(browser, port, v);
+        const tag = `[steppers ${v.n}]`; const seen = new Set(), bad = [];
+        const all = async state => { for (const o of await spinInfo(page)) { if (o.host === 'spin-sanity') continue; seen.add(state + ':' + o.host); if (o.app !== 'none' || o.w !== '0px') bad.push(`${state}: ${o.host} (${o.app}, ${o.w})`); } };
+        // sanity: an injected number input that opts back in gets a real stepper
+        await page.evaluate(() => { const st = document.createElement('style'); st.textContent = '#spin-sanity::-webkit-inner-spin-button{-webkit-appearance:auto!important}';
+          document.head.appendChild(st); const i = document.createElement('input'); i.type = 'number'; i.id = 'spin-sanity'; document.body.appendChild(i); });
+        const san = (await spinInfo(page)).find(o => o.host === 'spin-sanity');
+        check(`${tag} sanity: the CDP probe sees a real stepper when one is opted back in`, san && san.app !== 'none' && parseFloat(san.w) > 0, JSON.stringify(san));
+        await page.evaluate(() => document.getElementById('spin-sanity').remove());
+        await tabBtn(page, 'Log Game').click(); await page.waitForTimeout(200);
+        for (const nm of ['Eli', 'Carter']) await page.locator(`button[aria-pressed="false"][aria-label="${nm}"]`).click();
+        await page.locator('input[aria-label="Eli pitch count"]').focus();
+        await all('Log Game');
+        await tabBtn(page, 'Live').click(); await page.evaluate(() => window.__setLive(window.__demoLive)); await page.waitForTimeout(300); await all('Live');
+        await tabBtn(page, 'Season').click(); await page.waitForTimeout(200);
+        await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /^Edit$/.test(x.textContent.trim())); b && b.click(); }); await page.waitForTimeout(250);
+        await all('EditGameGroupModal'); await clickBackdrop(page); await page.waitForTimeout(150);
+        await tabBtn(page, 'Roster').click(); await page.waitForTimeout(150);
+        await page.locator('#root div[style*="cursor: pointer"]', { hasText: 'Johnny' }).first().click(); await page.waitForTimeout(200);
+        await page.evaluate(() => { const b = [...document.querySelectorAll('button')].filter(x => /Edit$/.test(x.textContent.trim()) && !x.getAttribute('aria-label')).pop(); b && b.click(); }); await page.waitForTimeout(250);
+        await all('EditGameModal'); await clickBackdrop(page); await page.waitForTimeout(150);
+        await tabBtn(page, 'Settings').click(); await page.locator('button', { hasText: /^Tournaments$/ }).first().click(); await page.waitForTimeout(200);
+        const newOk = await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === 'New'); if (b) b.click(); return !!b; }); await page.waitForTimeout(200);
+        if (!newOk) console.log(`INFO  ${tag} tournament "New" button not found: ` + (await page.evaluate(() => document.querySelector('#root').innerText.slice(0, 300))));
+        await all('Tournament form');
+        await page.locator('button:has-text("TEAM")').first().click(); await page.waitForTimeout(300);
+        await page.locator('button[aria-label^="Manage "]').first().click(); await page.waitForTimeout(250); await all('Team manage sheet');
+        const states = new Set([...seen].map(x => x.split(':')[0]));
+        check(`${tag} every number input's native stepper is hidden (appearance none, 0px) - ${seen.size} inputs in ${[...states].join(', ')}`,
+          seen.size >= 12 && states.size >= 6 && !bad.length, bad.join('; ') + ' | seen=' + [...seen].join(','));
+        await ctx.close();
+      }
     }
 
     // ── Landscape is not blocked; tab label ──

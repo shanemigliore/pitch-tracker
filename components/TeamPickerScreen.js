@@ -5,6 +5,8 @@
 // TEAM PICKER — Select or create a team
 // ══════════════════════════════════════════════════════════════════════════════
 function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose, role }) {
+  // Wide screens: a centered dialog instead of a bottom sheet (v3.17)
+  const { wide } = useLayout();
   const isAdmin = role === "admin";
   const TERM_OPTIONS = ["Winter", "Spring", "Summer", "Fall"];
   const NEW_SEASON = "__NEW__";
@@ -410,13 +412,15 @@ function TeamPickerScreen({ onSelect, showManage, onTeamMetaUpdate, onClose, rol
       {/* Manage modal */}
       {managing && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:60,
-          display:"flex", alignItems:"flex-end", justifyContent:"center",
-          paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)" }}
+          display:"flex", alignItems:wide?"center":"flex-end", justifyContent:"center",
+          paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)",
+      // Wide dialog: keep a tall one below the status area (unfolded Duo clock) and off the bottom edge
+      ...(wide ? { paddingTop:"max(var(--top-gap), 76px)", paddingBottom:24 } : null) }}
           onClick={e=>{ if(e.target===e.currentTarget){ setManaging(null); setDeletePhase("idle"); setDeleteText(""); } }}>
-          <div style={{ width:"100%", maxWidth:430, background:"#0f1623",
-            border:"1px solid rgba(255,255,255,0.12)", borderRadius:"20px 20px 0 0",
+          <div style={{ width:"100%", maxWidth:wide?520:430, background:"#0f1623",
+            border:"1px solid rgba(255,255,255,0.12)", borderRadius:wide?20:"20px 20px 0 0",
             padding:"20px 18px 48px", fontFamily:"'Barlow',sans-serif",
-            maxHeight:"85vh", overflowY:"auto" }}>
+            maxHeight:wide?"100%":"85vh", boxSizing:"border-box", overflowY:"auto" }}>
 
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18 }}>
               <div style={{ fontSize:16, fontWeight:800, color:"#f8fafc" }}>{managing.name}</div>
