@@ -22,6 +22,7 @@ function App({ role }) {
     try { return JSON.parse(localStorage.getItem(TEAM_META_KEY)) || null; } catch { return null; }
   });
   const [showTeamPicker, setShowTeamPicker] = useState(false);
+  const layout = useLayout();
 
   // Keep currentRules in sync on every render (before any child renders read it)
   setCurrentRules(teamMeta?.rules || DEFAULT_RULES);
@@ -315,8 +316,39 @@ function App({ role }) {
   const restingCount   = roster.length - availableCount;
   const countScope     = headerTourney ? `today in ${headerTourney.name}` : "for regular season today";
 
+  // Frame width: one 430px column on phones; the full width (header, Live's two
+  // panes) on wide screens, where the other tabs still sit in a centered 430px
+  // column until they get wide layouts of their own.
+  const colWidth = layout.rail ? "100%" : layout.wide ? "min(1100px, 100%)" : "min(430px, 100%)";
+  const liveTwoPane = layout.twoPane && tab==="live";
+  const screenWrap = (layout.wide && !liveTwoPane)
+    ? centeredColumn("min(430px, 100%)", layout.rail ? `${layout.railWidth}px` : "0px") : null;
+
+  const tabButton = (t, vertical) => {
+    const active = (tab===t.id && !selectedPlayer) || (tab==="roster" && selectedPlayer && t.id==="roster");
+    return (
+      <button key={t.id} onClick={()=>{ setTab(t.id); if(t.id!=="roster") setSelectedPlayer(null); }} aria-pressed={active}
+        style={{ flex: vertical ? "none" : 1, background:"transparent", border:"none", cursor:"pointer",
+          padding: vertical ? "10px 0 8px" : "9px 0 7px", display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
+        <div style={{ position:"relative", color:active?"#38bdf8":"rgba(255,255,255,0.3)", transition:"color 0.2s" }}>
+          {t.icon}
+          {t.id==="live" && liveGame && (
+            <span className="live-dot" aria-label="Game in progress"
+              style={{ position:"absolute", top:-1, right:-3, width:8, height:8, borderRadius:"50%", background:"#ef4444" }}/>
+          )}
+        </div>
+        <span style={{ fontSize: vertical ? 9 : 10, fontWeight:700, letterSpacing:0.5, textAlign:"center",
+          color:active?"#38bdf8":"rgba(255,255,255,0.3)", transition:"color 0.2s" }}>
+          {t.label.toUpperCase()}
+        </span>
+        {active && <div style={{ width:14, height:2, background:"#38bdf8", borderRadius:1 }}/>}
+      </button>
+    );
+  };
+
   return (
-    <div style={{ background:"#080c14", minHeight:"100dvh", maxWidth:430, margin:"0 auto",
+    <div style={{ background:"#080c14", minHeight:"100dvh", ...centeredColumn(colWidth),
+      paddingLeft: layout.rail ? layout.railWidth : 0,
       fontFamily:"'Barlow',sans-serif", color:"#f8fafc", position:"relative", overflowX:"clip",
       backgroundImage:"radial-gradient(ellipse at 20% 0%,rgba(30,58,138,0.25) 0%,transparent 60%),radial-gradient(ellipse at 80% 100%,rgba(22,101,52,0.15) 0%,transparent 60%)" }}>
 
@@ -350,7 +382,7 @@ function App({ role }) {
           whatever translucent content sits in/near the status-bar area. */}
       <div style={{ background:"#080c14",
         borderBottom:"1px solid rgba(255,255,255,0.06)",
-        padding:"10px calc(14px + var(--corner-r)) 10px 14px",
+        padding:"10px calc(14px + var(--corner-r) + var(--hdr-r)) 10px 14px",
         position:"sticky",
         top:`calc(var(--top-gap) + ${(((syncStatus==="offline"||syncStatus==="error")?1:0) + (updateAvailable?1:0)) * 33}px)`,
         zIndex:20 }}>
@@ -385,7 +417,7 @@ function App({ role }) {
       </div>
 
       {/* ── Screens ── */}
-      <div>
+      <div style={screenWrap || undefined}>
         {tab==="roster" && selectedPlayer ? (
           <ScreenBoundary onBack={()=>setSelectedPlayer(null)}>
             <PitcherDetail pitcher={selectedPlayer} onBack={()=>setSelectedPlayer(null)}
@@ -396,7 +428,7 @@ function App({ role }) {
           <EligibilityScreen roster={roster} tournaments={tournaments} onSelect={p=>setSelectedPlayer(p)}/>
         ) : tab==="live" ? (
           <ScreenBoundary>
-            <LiveGameScreen roster={roster} tournaments={tournaments} liveGame={liveGame}
+            <LiveGameScreen roster={roster} tournaments={tournaments} liveGame={liveGame} twoPane={liveTwoPane}
               onStart={startLiveGame} onAction={liveGameAction}
               onComplete={completeLiveGame} onDiscard={discardLiveGame}/>
           </ScreenBoundary>
@@ -415,37 +447,29 @@ function App({ role }) {
         )}
       </div>
 
-      {/* ── Bottom nav ── */}
-      {/* Fixed, so body's side padding doesn't reach it: pin between the safe-area
-          insets and center within them (left+right+maxWidth+auto margins). The folded
-          Duo's corner pill is nowhere near the bottom, so corner mode doesn't apply here. */}
-      <div style={{ position:"fixed", bottom:0, left:"var(--safe-l)", right:"calc(var(--safe-r) - var(--corner-r))", margin:"0 auto",
-        maxWidth:430, background:"rgba(8,12,20,0.97)", backdropFilter:"blur(20px)",
-        borderTop:"1px solid rgba(255,255,255,0.07)", paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
-        <div style={{ display:"flex" }}>
-          {TABS.map(t=>{
-            const active = (tab===t.id && !selectedPlayer) || (tab==="roster" && selectedPlayer && t.id==="roster");
-            return (
-              <button key={t.id} onClick={()=>{ setTab(t.id); if(t.id!=="roster") setSelectedPlayer(null); }} aria-pressed={active}
-                style={{ flex:1, background:"transparent", border:"none", cursor:"pointer",
-                  padding:"9px 0 7px", display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-                <div style={{ position:"relative", color:active?"#38bdf8":"rgba(255,255,255,0.3)", transition:"color 0.2s" }}>
-                  {t.icon}
-                  {t.id==="live" && liveGame && (
-                    <span className="live-dot" aria-label="Game in progress"
-                      style={{ position:"absolute", top:-1, right:-3, width:8, height:8, borderRadius:"50%", background:"#ef4444" }}/>
-                  )}
-                </div>
-                <span style={{ fontSize:10, fontWeight:700, letterSpacing:0.5,
-                  color:active?"#38bdf8":"rgba(255,255,255,0.3)", transition:"color 0.2s" }}>
-                  {t.label.toUpperCase()}
-                </span>
-                {active && <div style={{ width:14, height:2, background:"#38bdf8", borderRadius:1 }}/>}
-              </button>
-            );
-          })}
+      {/* ── Tabs: left rail in wide landscape, bottom bar otherwise ── */}
+      {layout.rail ? (
+        <nav aria-label="Tabs" style={{ position:"fixed", top:0, bottom:0, left:"var(--safe-l)", width:layout.railWidth, zIndex:25,
+          background:"#080c14", borderRight:"1px solid rgba(255,255,255,0.07)", overflowY:"auto",
+          paddingTop:"calc(var(--top-gap) + 8px)", paddingBottom:"env(safe-area-inset-bottom,0px)",
+          display:"flex", flexDirection:"column", gap:4 }}>
+          {TABS.map(t=>tabButton(t, true))}
+        </nav>
+      ) : (
+        /* Fixed, so body's side padding doesn't reach it: span the same box as the
+           padded body, then place the bar exactly like the App column (centeredColumn)
+           so the two always line up. The folded Duo's corner pill is nowhere near the
+           bottom, so corner mode doesn't apply here. */
+        <div style={{ position:"fixed", bottom:0, left:"var(--safe-l)", right:"calc(var(--safe-r) - var(--corner-r))" }}>
+          <div style={{ ...centeredColumn(layout.wide ? "100%" : "min(430px, 100%)"),
+            background:"rgba(8,12,20,0.97)", backdropFilter:"blur(20px)",
+            borderTop:"1px solid rgba(255,255,255,0.07)", paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
+            <div style={{ display:"flex" }}>
+              {TABS.map(t=>tabButton(t, false))}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

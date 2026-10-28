@@ -3,7 +3,8 @@
  * Browser verification of the iPhone Duo layout rules (v3.14 side insets,
  * landscape, Log Game rename, admin-only DisplayInfoSection; v3.15 narrow-screen
  * "corner mode" (Home Screen app only - a browser tab keeps the v3.14 full-height strip), flat 32px --top-gap in a wide Home Screen app, DisplayInfo
- * delayed re-measure + Refresh). Playwright + headless Chromium; prints SKIP
+ * delayed re-measure + Refresh; v3.16 wide frame: left tab rail in wide landscape,
+ * centeredColumn, Live two-pane, --hdr-r). Playwright + headless Chromium; prints SKIP
  * and exits 0 if playwright isn't installed.
  *
  * WHAT IS SIMULATED (headless Chromium can't fake either of these):
@@ -15,7 +16,12 @@
  *    `(display-mode: standalone)` in index.html's <style> to `(min-width: 0px)`
  *    (always matches). matchMedia() in DisplayInfoSection is NOT rewritten.
  *  - Firebase is stubbed (no network): signed-in admin (or coach) + sample roster
- *    with a game from last year (so Season shows its year <select>).
+ *    with a game from last year (so Season shows its year <select>). The live-game
+ *    stub applies __fbMutateLiveGame's mutate() to its copy and echoes it back (like
+ *    the real transaction + local apply); __fbClaimLiveGame returns null unless
+ *    window.__claimWins is set; __fbSet records its payloads in window.__sets.
+ *  - The on-screen keyboard (viewport height shrinking) is simulated with setViewportSize;
+ *    whether iOS standalone actually shrinks innerHeight for the keyboard is NOT verified.
  * Device numbers are the real iPhone Duo measurements from the app's Display card.
  * Run with: node tests/duo-layout.browser.verify.test.js
  */
@@ -57,9 +63,16 @@ function stub(role) {
     __fbCreateTeam: rec("createTeam"), __fbUpdateTeamMeta: rec("updateTeamMeta"), __fbDeleteTeam: rec("deleteTeam"),
     __fbSubscribe: (onData, onConn, onOffline) => { window.__goOffline = onOffline; setTimeout(()=>{ onData({ roster, tournaments:[] }); onConn(); },0); return ()=>{}; },
     __fbSet: rec("set"),
-    __fbWatchLiveGame: (tid, cb) => { window.__setLive = v => cb(v); setTimeout(()=>cb(null),0); return ()=>{}; },
-    __fbStartLiveGame: rec("startLive",true), __fbMutateLiveGame: rec("mutateLive"), __fbClaimLiveGame: rec("claimLive",null),
+    __fbWatchLiveGame: (tid, cb) => { window.__setLive = v => { window.__liveCur = v; cb(v); }; setTimeout(()=>cb(null),0); return ()=>{}; },
+    __fbStartLiveGame: rec("startLive",true),
+    __fbMutateLiveGame: (t, gid, mutate) => { window.__fbCalls.push("mutateLive");
+      const next = mutate(window.__liveCur ? JSON.parse(JSON.stringify(window.__liveCur)) : null);
+      if (next !== undefined) setTimeout(() => window.__setLive(next), 0); return R(); },
+    __fbClaimLiveGame: () => { window.__fbCalls.push("claimLive"); if (!window.__claimWins) return R(null);
+      const c = window.__liveCur; window.__setLive(null); return R(c); },
   });
+  window.__sets = []; const _fbSet = window.__fbSet;
+  window.__fbSet = (k, v, ...a) => { window.__sets.push([k, JSON.parse(JSON.stringify(v ?? null))]); return _fbSet(k, v, ...a); };
   localStorage.setItem("pt_selected_team_id","demo10u");
   localStorage.setItem("pt_selected_team_meta", JSON.stringify(meta));
   if (!window.__noName) localStorage.setItem("pt_coach_name","Tester");
@@ -210,6 +223,18 @@ async function sweep(page, zone, { withLive = false } = {}) {
   await tabBtn(page, 'Live').click(); await page.waitForTimeout(250); await snap('Live (setup)');
   if (withLive) {
     await page.evaluate(() => window.__setLive(window.__demoLive)); await page.waitForTimeout(300); await snap('Live (in progress)');
+    res.twoPane = await page.evaluate(() => !![...document.querySelectorAll('div')].find(d => getComputedStyle(d).display === 'grid'));
+    // v3.16: Undo toast after bringing a pitcher in (stub applies the mutation)
+    await page.locator('button[aria-label^="Bring in "]').first().click(); await page.waitForTimeout(300);
+    res.undoShown = await page.locator('button', { hasText: /^Undo$/ }).count();
+    await snap('Live (undo toast)');
+    // v3.16: warn-violations card (Mason owes rest -> Log Complete Game asks to override)
+    await page.evaluate(() => window.__setLive({ ...window.__demoLive, pitchers: { t_3: { pitches: 10, status: 'active', order: 0, enteredAt: Date.now(), leftAt: null } } }));
+    await page.waitForTimeout(300);
+    await page.locator('button', { hasText: 'Log Complete Game' }).click(); await page.waitForTimeout(250);
+    res.warnShown = await page.locator('text=/would violate a limit/').count();
+    await snap('Live (warn violations)');
+    await page.locator('button', { hasText: /^Go Back$/ }).click(); await page.waitForTimeout(150);
     await page.evaluate(() => window.__setLive({ ...window.__demoLive, date: '2020-01-01' })); await page.waitForTimeout(300); await snap('Live (unfinished banner)');
   }
   await tabBtn(page, 'Log Game').click(); await page.waitForTimeout(250); await snap('Log Game');
@@ -237,6 +262,8 @@ async function sweep(page, zone, { withLive = false } = {}) {
       // browser tab at <=520px: no corner mode, v3.14 full-height strip rule
       { name: 'duo folded portrait 457x678 r=84 browser tab', w: 457, h: 678, r: 84, b: 34 },
       { name: 'duo folded landscape 678x457 r=84 standalone', w: 678, h: 457, r: 84, b: 34, sa: true },
+      // the other way up: the 84px lands on the left
+      { name: 'duo folded landscape 678x457 l=84 standalone', w: 678, h: 457, l: 84, b: 34, sa: true },
       // icons: the measured status-icon cluster (x 548..643, y 28..67) - with the flat 32px top gap
       // nothing may sit there any more
       { name: 'duo unfolded portrait 669x951 t=82 standalone', w: 669, h: 951, t: 82, b: 34, sa: true, icons: [548, 28, 643, 67] },
@@ -274,7 +301,12 @@ async function sweep(page, zone, { withLive = false } = {}) {
       }
 
       // ── Sweep every screen/state at scroll 0 ──
-      const states = await sweep(page, zone, { withLive: !!v.corner || /^phone 390|^duo folded portrait|^narrow|^asymmetric/.test(v.name) });
+      const states = await sweep(page, zone, { withLive: true });
+      // ── v3.16 layout mode ──
+      const expRail = v.w >= 600 && v.w > v.h;
+      const expTwo = v.w >= 600 && (v.w - l - r - (expRail ? 72 : 0) - 32) >= 616;
+      check(`[${v.name}] Live in progress is ${expTwo ? 'two-pane' : 'one column'}`, states.twoPane === expTwo, 'twoPane=' + states.twoPane);
+      check(`[${v.name}] Undo toast shown after bringing a pitcher in; warn-violations card shown`, states.undoShown === 1 && states.warnShown === 1, JSON.stringify({ u: states.undoShown, w: states.warnShown }));
       const bad = states.flatMap(s => s.v.map(x => s.state + ': ' + x));
       check(`[${v.name}] no interactive element in ${v.corner ? 'left strip or top-right corner' : 'side inset strips'} (all tabs + drill-in/edit/live/log states)`,
         !bad.length, bad.slice(0, 8).join('\n      '));
@@ -309,15 +341,39 @@ async function sweep(page, zone, { withLive = false } = {}) {
       const nav = await page.evaluate(() => {
         const btn = [...document.querySelectorAll('button')].filter(b => /^ROSTER$/i.test(b.textContent.trim())).pop();
         let n = btn; while (n && getComputedStyle(n).position !== 'fixed') n = n.parentElement;
-        const b = n.getBoundingClientRect(); return { left: b.left, right: b.right, bottom: b.bottom, vw: document.documentElement.clientWidth, vh: innerHeight };
+        const R = e => { const b = e.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom }; };
+        const wrap = document.querySelector('#root > div');
+        return { tag: n.tagName, outer: R(n), inner: n.tagName === 'NAV' ? null : R(n.firstElementChild), btns: [...n.querySelectorAll('button')].map(R),
+          bottomBars: [...document.querySelectorAll('#root div')].filter(d => getComputedStyle(d).position === 'fixed' && /ROSTER/.test(d.textContent) && /SETTINGS/.test(d.textContent)).length,
+          wrapPadL: parseFloat(getComputedStyle(wrap).paddingLeft), vw: document.documentElement.clientWidth, vh: innerHeight };
       });
-      const availL = l, availR = nav.vw - (v.corner ? 0 : r), center = (availL + availR) / 2;
-      check(`[${v.name}] bottom nav within ${v.corner ? '[safe-l, vw] (full width in corner mode)' : 'insets'}, centered, <=430 wide, at bottom`,
-        nav.left >= availL - 0.5 && nav.right <= availR + 0.5 && Math.abs((nav.left + nav.right) / 2 - center) < 1 &&
-        nav.right - nav.left <= 430.5 && Math.abs(nav.bottom - nav.vh) < 1 &&
-        (v.corner ? nav.right - nav.left >= Math.min(430, availR - availL) - 0.5 : true), JSON.stringify(nav));
+      const availL = l, availR = nav.vw - (v.corner ? 0 : r);
       const col = await page.evaluate(() => { const b = document.querySelector('#root > div').getBoundingClientRect(); return { left: b.left, right: b.right }; });
-      check(`[${v.name}] app column aligned with bottom nav`, Math.abs(col.left - nav.left) < 1 && Math.abs(col.right - nav.right) < 1, JSON.stringify({ col, nav }));
+      if (expRail) {
+        check(`[${v.name}] rail: 72px <nav> at left:safe-l, full height, all 5 tabs inside, no bottom bar`,
+          nav.tag === 'NAV' && Math.abs(nav.outer.left - l) < 0.5 && Math.abs(nav.outer.right - nav.outer.left - 72) < 0.5 && nav.outer.top === 0 && Math.abs(nav.outer.bottom - nav.vh) < 1 &&
+          nav.btns.length === 5 && nav.btns.every(b => b.bottom <= nav.vh + 0.5 && b.left >= l - 0.5) && nav.bottomBars === 0, JSON.stringify(nav));
+        check(`[${v.name}] rail: App wrapper spans the body box with paddingLeft 72`, nav.wrapPadL === 72 && Math.abs(col.left - availL) < 1 && Math.abs(col.right - availR) < 1, JSON.stringify({ col, padL: nav.wrapPadL }));
+      } else {
+        check(`[${v.name}] no rail; bottom bar's outer box spans [safe-l, vw - (safe-r - corner-r)] at the bottom`,
+          nav.tag === 'DIV' && Math.abs(nav.outer.left - availL) < 0.5 && Math.abs(nav.outer.right - availR) < 0.5 && Math.abs(nav.outer.bottom - nav.vh) < 1 &&
+          (await page.locator('nav[aria-label="Tabs"]').count()) === 0, JSON.stringify(nav));
+        check(`[${v.name}] bottom bar within ${v.corner ? '[safe-l, vw]' : 'insets'}, ${v.w >= 600 ? 'full frame width' : '<=430 wide'}, aligned with the App column`,
+          nav.inner.left >= availL - 0.5 && nav.inner.right <= availR + 0.5 && (v.w >= 600 || nav.inner.right - nav.inner.left <= 430.5) &&
+          Math.abs(col.left - nav.inner.left) < 1 && Math.abs(col.right - nav.inner.right) < 1 &&
+          (v.corner ? nav.inner.right - nav.inner.left >= Math.min(430, availR - availL) - 0.5 : true), JSON.stringify({ col, nav }));
+      }
+      // v3.16 intent: the phone-width content column is centred on the SCREEN, nudged only as far as
+      // needed to clear the insets (and the rail). Measured on the Roster tab (a 430 column on every size).
+      {
+        await tabBtn(page, 'Roster').click(); await page.waitForTimeout(200); await scrollTop(page);
+        const sc = await page.evaluate(() => { const wrap = document.querySelector('#root > div'); let e = document.querySelector('h2');
+          while (e && e.parentElement !== wrap) e = e.parentElement; const b = e.getBoundingClientRect(); return { left: b.left, right: b.right }; });
+        const lb = availL + (expRail ? 72 : 0), w = sc.right - sc.left;
+        const expC = Math.min(Math.max(nav.vw / 2, lb + w / 2), availR - w / 2), gotC = (sc.left + sc.right) / 2;
+        check(`[${v.name}] content column centred on the screen (nudged only to clear insets${expRail ? '/rail' : ''})`,
+          w <= 430.5 && Math.abs(gotC - expC) < 1, JSON.stringify({ col: sc, center: gotC, expected: expC, screenCenter: nav.vw / 2 }));
+      }
       if (v.corner) {
         // content below the corner uses the full width: Roster's cards extend past vw - r
         await tabBtn(page, 'Roster').click(); await page.waitForTimeout(200); await scrollTop(page);
@@ -481,11 +537,16 @@ async function sweep(page, zone, { withLive = false } = {}) {
     // ── DisplayInfoSection: admin ──
     {
       const { ctx, page, errs, external } = await openApp(browser, port, { w: 457, h: 678, r: 84 });
-      // Count only the DisplayInfo re-measure timers (delays 100/350/800); patched before mount.
+      // Count only the DisplayInfo re-measure timers (delays 100/350/800, callback = DisplayInfo's
+      // `measure`); v3.16's App-level useLayout arms its own 100/350/800 timers (callback `update`),
+      // tracked separately in __lt. Patched before DisplayInfo mounts.
       await page.evaluate(() => {
-        const st = window.setTimeout, ct = window.clearTimeout; window.__dt = new Map();
-        window.setTimeout = function(fn, ms, ...a) { if (ms === 100 || ms === 350 || ms === 800) { let id; id = st.call(window, (...x) => { window.__dt.delete(id); fn(...x); }, ms, ...a); window.__dt.set(id, ms); return id; } return st.call(window, fn, ms, ...a); };
-        window.clearTimeout = function(id) { window.__dt.delete(id); return ct.call(window, id); };
+        const st = window.setTimeout, ct = window.clearTimeout; window.__dt = new Map(); window.__lt = new Map();
+        window.setTimeout = function(fn, ms, ...a) {
+          const m = (ms === 100 || ms === 350 || ms === 800) && fn && (fn.name === 'measure' ? window.__dt : fn.name === 'update' ? window.__lt : null);
+          if (m) { let id; id = st.call(window, (...x) => { m.delete(id); fn(...x); }, ms, ...a); m.set(id, ms); return id; }
+          return st.call(window, fn, ms, ...a); };
+        window.clearTimeout = function(id) { window.__dt.delete(id); window.__lt.delete(id); return ct.call(window, id); };
       });
       await tabBtn(page, 'Settings').click(); await page.locator('button', { hasText: /^Account$/ }).click(); await page.waitForTimeout(300);
       const before = await page.evaluate(() => ({ fb: window.__fbCalls.length, ls: window.__lsWrites.length }));
@@ -515,6 +576,7 @@ async function sweep(page, zone, { withLive = false } = {}) {
         Object.defineProperty(window, 'innerWidth', { configurable: true, get: () => fakeW });
         window.dispatchEvent(new Event('orientationchange'));
         const pending0 = [...window.__dt.values()].sort((a, b) => a - b);
+        const layout0 = [...window.__lt.values()].sort((a, b) => a - b);
         fakeW = 1111; await sleep(40);
         const rd = () => [...document.querySelectorAll('span')].find(x => x.textContent === 'Viewport (CSS px)').nextElementSibling.textContent;
         const at40 = rd(); await sleep(120); const at160 = rd();
@@ -522,17 +584,18 @@ async function sweep(page, zone, { withLive = false } = {}) {
         fakeW = 3333; await sleep(500); const at960 = rd(); const pendingEnd = window.__dt.size;
         // burst: 10 rapid resizes leave at most 3 pending timers (old ones cleared)
         for (let i = 0; i < 10; i++) window.dispatchEvent(new Event('resize'));
-        const burst = window.__dt.size;
+        const burst = window.__dt.size, layoutBurst = window.__lt.size;
         // Refresh button: immediate re-measure
         fakeW = 4444; [...document.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === 'Refresh display info').click();
         await sleep(30); const afterRefresh = rd();
         if (own) Object.defineProperty(window, 'innerWidth', own); else delete window.innerWidth;
-        return { pending0, at40, at160, at460, at960, pendingEnd, burst, afterRefresh, realH };
+        return { pending0, layout0, at40, at160, at460, at960, pendingEnd, burst, layoutBurst, afterRefresh, realH };
       });
       check('admin: orientationchange arms re-measure timers at 100/350/800ms', JSON.stringify(delayed.pending0) === '[100,350,800]', JSON.stringify(delayed));
       check('admin: delayed re-measures pick up late changes (100ms, 350ms, 800ms)',
         !/^1111/.test(delayed.at40) && /^1111 /.test(delayed.at160) && /^2222 /.test(delayed.at460) && /^3333 /.test(delayed.at960) && delayed.pendingEnd === 0, JSON.stringify(delayed));
       check('admin: a burst of resize events leaves only 3 pending timers (earlier ones cleared)', delayed.burst === 3, 'pending=' + delayed.burst);
+      check('useLayout: orientationchange arms its own 100/350/800ms re-measures; a burst leaves only 3', JSON.stringify(delayed.layout0) === '[100,350,800]' && delayed.layoutBurst === 3, JSON.stringify(delayed));
       check('admin: Refresh button re-measures immediately', /^4444 /.test(delayed.afterRefresh), delayed.afterRefresh);
       const after = await page.evaluate(() => ({ fb: window.__fbCalls.slice(), ls: window.__lsWrites.slice() }));
       check('admin: viewing/resizing/refreshing DisplayInfo writes nothing to Firebase or localStorage',
@@ -581,6 +644,213 @@ async function sweep(page, zone, { withLive = false } = {}) {
       check('coach: team picker clear of the corner', !tv.length, tv.join('; '));
       check('coach: no page errors', !errs.length, errs.join(' | '));
       await ctx.close();
+    }
+
+    // ── v3.16: rail / two-pane boundaries (insets simulated, see header) ──
+    {
+      const isGrid = page => page.evaluate(() => !![...document.querySelectorAll('div')].find(d => getComputedStyle(d).display === 'grid'));
+      const cases = [
+        // [name, view, expRail, expTwoPane]
+        ['phone 390x844', { w: 390, h: 844 }, false, false],
+        ['phone landscape 844x390 l=r=47', { w: 844, h: 390, l: 47, r: 47 }, true, true],
+        ['599x900 portrait', { w: 599, h: 900 }, false, false],
+        ['600x900 portrait (wide, no two-pane)', { w: 600, h: 900 }, false, false],
+        ['648x900 portrait (content 616)', { w: 648, h: 900 }, false, true],
+        ['647x900 portrait (content 615)', { w: 647, h: 900 }, false, false],
+        ['720x500 rail (content 616)', { w: 720, h: 500 }, true, true],
+        ['719x500 rail (content 615)', { w: 719, h: 500 }, true, false],
+        ['760x500 r=40 rail (content 616)', { w: 760, h: 500, r: 40 }, true, true],
+        ['759x500 r=40 rail (content 615)', { w: 759, h: 500, r: 40 }, true, false],
+      ];
+      for (const [name, v, er, et] of cases) {
+        const { ctx, page, errs } = await openApp(browser, port, v);
+        await tabBtn(page, 'Live').click(); await page.evaluate(() => window.__setLive(window.__demoLive)); await page.waitForTimeout(300);
+        const rail = await page.locator('nav[aria-label="Tabs"]').count(), two = await isGrid(page);
+        check(`[bounds ${name}] rail=${er} twoPane=${et}`, (rail === 1) === er && two === et && (await hScroll(page)) <= 0 && !errs.length, JSON.stringify({ rail, two, errs }));
+        await ctx.close();
+      }
+    }
+
+    // ── v3.16: Live two-pane structure + actions (unfolded Duo, standalone simulated) ──
+    for (const v of [{ n: 'unfolded portrait', w: 669, h: 951, t: 82, b: 34, sa: true }, { n: 'unfolded landscape', w: 951, h: 669, r: 84, b: 34, sa: true }]) {
+      const { ctx, page, errs } = await openApp(browser, port, v);
+      const tag = `[two-pane ${v.n}]`;
+      await tabBtn(page, 'Live').click(); await page.waitForTimeout(250);
+      const setupCol = await page.evaluate(() => { const c = [...document.querySelectorAll('p')].find(p => p.textContent === 'NEW GAME').closest('div[style*="110px"]').getBoundingClientRect(); return { l: c.left, r: c.right }; });
+      const frame = await page.evaluate(() => { const b = document.querySelector('#root > div').getBoundingClientRect(); const pl = parseFloat(getComputedStyle(document.querySelector('#root > div')).paddingLeft); return { l: b.left + pl, r: b.right }; });
+      check(`${tag} setup state is a centered <=430 column`, setupCol.r - setupCol.l <= 430.5 && Math.abs((setupCol.l + setupCol.r) / 2 - (frame.l + frame.r) / 2) < 1, JSON.stringify({ setupCol, frame }));
+      await page.evaluate(() => window.__setLive(window.__demoLive)); await page.waitForTimeout(300);
+      const panes = await page.evaluate(() => {
+        const g = [...document.querySelectorAll('div')].find(d => getComputedStyle(d).display === 'grid'); if (!g) return null;
+        const [a, b] = g.children; const R = e => e.getBoundingClientRect();
+        const has = (e, re) => re.test(e.textContent);
+        const avail = [...b.querySelectorAll('button[aria-label^="Bring in "]')];
+        const card = avail[0] && avail[0].parentElement.getBoundingClientRect();
+        return { n: g.children.length, aL: R(a).left, aR: R(a).right, bL: R(b).left, bR: R(b).right,
+          left: { game: has(a, /IN THE GAME/), log: has(a, /Log Complete Game/), discard: has(a, /Discard game/), avail: has(a, /AVAILABLE TO PITCH/), opp: !!a.querySelector('input[aria-label="Opponent"]') },
+          right: { avail: has(b, /AVAILABLE TO PITCH/), unavail: has(b, /NOT AVAILABLE/), opp: !!b.querySelector('input[aria-label="Opponent"]'), game: has(b, /IN THE GAME/), log: has(b, /Log Complete/) },
+          rows: avail.map(x => ({ w: x.getBoundingClientRect().width, t: x.textContent })), cardW: card && card.width };
+      });
+      check(`${tag} grid: 2 panes, left >=360 and right >=220 wide, no overlap`, panes && panes.n === 2 && panes.aR - panes.aL >= 359.5 && panes.bR - panes.bL >= 219.5 && panes.aR <= panes.bL, JSON.stringify(panes));
+      check(`${tag} left = in-game cards + Log/Discard; right = available + not available + game details`,
+        panes && panes.left.game && panes.left.log && panes.left.discard && !panes.left.avail && !panes.left.opp &&
+        panes.right.avail && panes.right.unavail && panes.right.opp && !panes.right.game && !panes.right.log, JSON.stringify(panes && { l: panes.left, r: panes.right }));
+      check(`${tag} available pitchers are full-width rows ending "N left"`, panes && panes.rows.length > 0 && panes.rows.every(x => Math.abs(x.w - panes.cardW) < 1 && /\d+ left$/.test(x.t)), JSON.stringify(panes && panes.rows));
+      // actions
+      await page.locator('button[aria-label="Add 1 pitch for Holden"]').click(); await page.waitForTimeout(250);
+      check(`${tag} +1 updates the active pitcher's count`, (await page.locator('input[aria-label="Holden pitch count"]').inputValue()) === '18');
+      const inName = await page.locator('button[aria-label^="Bring in "]').first().getAttribute('aria-label');
+      const newName = inName.match(/^Bring in (.+?),/)[1];
+      await page.locator('button[aria-label^="Bring in "]').first().click(); await page.waitForTimeout(300);
+      const after = await page.evaluate(() => Object.fromEntries(Object.entries(window.__liveCur.pitchers).map(([k, p]) => [k, p.status])));
+      check(`${tag} bring in ${newName}: new pitcher active, Holden marked left, Undo shown`,
+        Object.values(after).filter(x => x === 'active').length === 1 && after.t_1 === 'left' && (await page.locator('button', { hasText: /^Undo$/ }).count()) === 1 &&
+        (await page.locator(`input[aria-label="${newName} pitch count"]`).count()) === 1, JSON.stringify(after));
+      await page.locator('button', { hasText: /^Undo$/ }).click(); await page.waitForTimeout(300);
+      const undone = await page.evaluate(() => window.__liveCur.pitchers.t_1.status + ':' + Object.keys(window.__liveCur.pitchers).length);
+      check(`${tag} Undo puts Holden back and removes ${newName}`, undone === 'active:2', undone);
+      await page.evaluate(() => { window.__claimWins = true; window.__sets.length = 0; });
+      await page.locator('button', { hasText: 'Log Complete Game' }).click(); await page.waitForTimeout(1500); // save effect is debounced
+      const logged = await page.evaluate(() => {
+        const roster = (window.__sets.filter(([k]) => k === 'roster').pop() || [])[1];
+        const list = roster ? (Array.isArray(roster) ? roster : Object.values(roster)) : [];
+        const day = window.__demoLive.date; // no pre-existing history on the live game's date
+        const e = list.flatMap(p => (p.history || []).filter(h => h.opponent === 'Rockies' && h.date === day).map(h => ({ id: p.id, n: h.pitches, sg: h.sharedGameId })));
+        return { e, shown: /Game Logged!/.test(document.body.innerText) };
+      });
+      const sg = new Set(logged.e.map(x => x.sg));
+      check(`${tag} Log Complete Game logs both pitchers (22 + 18) under one sharedGameId and shows "Game Logged!"`,
+        logged.shown && logged.e.length === 2 && sg.size === 1 && logged.e.some(x => x.id === 't_0' && x.n === 22) && logged.e.some(x => x.id === 't_1' && x.n === 18), JSON.stringify(logged));
+      const savedCol = await page.evaluate(() => { const el = [...document.querySelectorAll('div')].filter(d => /Game Logged!/.test(d.textContent) && d.style.padding === '0px 16px 110px').pop(); if (!el) return null; const b = el.getBoundingClientRect(); return { l: b.left, r: b.right }; });
+      check(`${tag} "Game Logged!" state is a centered <=430 column`, savedCol && savedCol.r - savedCol.l <= 430.5 && Math.abs((savedCol.l + savedCol.r) / 2 - (frame.l + frame.r) / 2) < 1, JSON.stringify({ savedCol, frame }));
+      check(`${tag} no page errors / horizontal scroll`, !errs.length && (await hScroll(page)) <= 0, errs.join(' | '));
+      await ctx.close();
+    }
+
+    // ── v3.16: one column on phones keeps the pre-v3.16 order ──
+    {
+      const { ctx, page } = await openApp(browser, port, { w: 390, h: 844 });
+      await tabBtn(page, 'Live').click(); await page.evaluate(() => window.__setLive(window.__demoLive)); await page.waitForTimeout(300);
+      const ys = await page.evaluate(() => {
+        const y = e => e ? e.getBoundingClientRect().top + scrollY : null;
+        const p = t => [...document.querySelectorAll('p')].find(x => x.textContent === t);
+        return [y(document.querySelector('input[aria-label="Opponent"]')), y(p('IN THE GAME')), y(p('AVAILABLE TO PITCH')), y(p('NOT AVAILABLE')),
+          y([...document.querySelectorAll('button')].find(b => /Log Complete Game/.test(b.textContent))), y([...document.querySelectorAll('button')].find(b => /Discard game/.test(b.textContent)))];
+      });
+      check('[phone 390x844] Live single column order: details, in the game, available, not available, log, discard', ys.every(Boolean) && ys.every((v, i) => !i || v > ys[i - 1]), JSON.stringify(ys));
+      const rows = await page.evaluate(() => [...document.querySelectorAll('button[aria-label^="Bring in "]')].map(b => b.textContent));
+      check('[phone 390x844] available pitchers stay chips (no "left" suffix)', rows.length > 0 && rows.every(t => !/left$/.test(t)), JSON.stringify(rows));
+      await ctx.close();
+    }
+
+    // ── v3.16: --hdr-r (display-mode simulated) + the unfolded Duo clock/battery ──
+    {
+      const cases = [
+        ['standalone unfolded portrait 669x951', { w: 669, h: 951, t: 82, sa: true }, 128],
+        ['browser tab unfolded portrait 669x951', { w: 669, h: 951, t: 82 }, 0],
+        ['standalone unfolded landscape 951x669', { w: 951, h: 669, r: 84, sa: true }, 0],
+        ['standalone 599x900 portrait', { w: 599, h: 900, sa: true }, 0],
+        ['standalone folded portrait 457x678', { w: 457, h: 678, r: 84, sa: true }, 0],
+      ];
+      for (const [name, v, exp] of cases) {
+        const { ctx, page } = await openApp(browser, port, v);
+        const got = await page.evaluate(() => { const d = document.createElement('div'); d.style.width = 'var(--hdr-r)'; document.body.appendChild(d); const w = d.getBoundingClientRect().width; d.remove(); return w; });
+        const hdr = await page.evaluate(() => { const h = [...document.querySelectorAll('div')].find(d => getComputedStyle(d).position === 'sticky' && d.querySelector('img'));
+          return { pr: parseFloat(getComputedStyle(h).paddingRight), pl: parseFloat(getComputedStyle(h).paddingLeft) }; });
+        const cr = parseFloat(await cssVar(page, '--corner-r')) || 0;
+        const banners = await page.evaluate(() => [...document.querySelectorAll('.offline-banner')].map(b => parseFloat(getComputedStyle(b).paddingRight)));
+        check(`[hdr-r ${name}] --hdr-r = ${exp}px; header right padding = 14 + corner-r + hdr-r, left stays 14`, got === exp && hdr.pr === 14 + cr + exp && hdr.pl === 14, JSON.stringify({ got, hdr, cr }));
+        await ctx.close();
+      }
+      // unfolded portrait + offline/update banners: nothing (controls or text) under the measured clock/battery
+      const v = { w: 669, h: 951, t: 82, b: 34, sa: true };
+      const { ctx, page, errs } = await openApp(browser, port, v);
+      await page.waitForTimeout(800);
+      await page.evaluate(() => { window.__goOffline(); window.__pendingAppUpdateVersion = 'v9.99'; window.__applyPendingAppUpdate = () => {}; window.dispatchEvent(new CustomEvent('pt-update-available', { detail: { version: 'v9.99' } })); });
+      await page.waitForTimeout(300);
+      const icons = [549, 26, 642, 67];
+      const states = await sweep(page, { l: 0, r: 0, cornerR: 0, cornerH: CORNER_H, icons }, { withLive: true });
+      const ih = states.flatMap(s => s.icons.map(x => s.state + ': ' + x));
+      check('[unfolded portrait + banners] no control or text under the clock/battery on any tab (incl. Live two-pane states)', !ih.length, ih.slice(0, 6).join('\n      '));
+      const bannerUnder = await page.evaluate(([x1, y1, x2, y2]) => [...document.querySelectorAll('.offline-banner')].filter(b => { const r = b.getBoundingClientRect(); return r.right > x1 && r.left < x2 && r.bottom > y1 && r.top < y2; }).map(b => (b.onclick || getComputedStyle(b).cursor === 'pointer' ? 'tappable ' : '') + b.textContent.trim().slice(0, 20)), icons);
+      console.log('INFO  [unfolded portrait + banners] banner boxes (background/tap area, not text) reaching under the clock: ' + JSON.stringify(bannerUnder));
+      check('[unfolded portrait + banners] no page errors', !errs.length, errs.join(' | '));
+      await ctx.close();
+    }
+
+    // ── v3.16: rail tabs, live dot, modal above the rail ──
+    {
+      const { ctx, page, errs } = await openApp(browser, port, { w: 678, h: 457, r: 84, b: 34, sa: true });
+      const rail = page.locator('nav[aria-label="Tabs"]');
+      const pressed = [];
+      for (const t of ['Live', 'Log Game', 'Season', 'Settings', 'Roster']) {
+        await rail.locator('button', { hasText: new RegExp('^' + t + '$', 'i') }).click(); await page.waitForTimeout(150);
+        pressed.push(await rail.locator('button[aria-pressed="true"]').textContent());
+      }
+      check('[rail] each rail button switches tab and is the only aria-pressed one', pressed.map(x => x.trim()).join() === 'LIVE,LOG GAME,SEASON,SETTINGS,ROSTER', JSON.stringify(pressed));
+      check('[rail] no live dot without a game', await rail.locator('.live-dot').count() === 0);
+      await page.evaluate(() => window.__setLive(window.__demoLive)); await page.waitForTimeout(200);
+      check('[rail] live dot on the rail Live button while a game is live', await rail.locator('button', { hasText: /^LIVE$/ }).locator('.live-dot').count() === 1);
+      await page.locator('button[aria-label="View availability key and rest requirements"]').click(); await page.waitForTimeout(250);
+      const top = await page.evaluate(() => { const e = document.elementFromPoint(36, 200); return e && e.closest('nav') ? 'NAV' : (e && getComputedStyle(e).position); });
+      check('[rail] modal backdrop stacks above the rail', top === 'fixed', String(top));
+      await clickBackdrop(page); await page.waitForTimeout(150);
+      const scrollFit = await page.evaluate(() => { const n = document.querySelector('nav'); return n.scrollHeight <= n.clientHeight; });
+      check('[rail] all 5 rail tabs fit without scrolling at 457px tall', scrollFit);
+      await ctx.close();
+      const p2 = await openApp(browser, port, { w: 844, h: 390, l: 47, r: 47, sa: true });
+      const fit2 = await p2.page.evaluate(() => { const n = document.querySelector('nav'); return n && n.scrollHeight <= n.clientHeight && [...n.querySelectorAll('button')].every(b => b.getBoundingClientRect().bottom <= innerHeight); });
+      check('[rail] 844x390 standalone: rail present and all 5 tabs visible', fit2 === true, String(fit2));
+      await p2.ctx.close();
+      check('[rail] no page errors', !errs.length, errs.join(' | '));
+    }
+
+    // ── v3.16 stability: resize/rotate cycles with a live game; useLayout listeners on App unmount ──
+    {
+      const init = `window.__rl = 0; (function(){ const a = window.addEventListener, r = window.removeEventListener;
+        window.addEventListener = function(t, ...x){ if (t==='resize'||t==='orientationchange') window.__rl++; return a.call(this, t, ...x); };
+        window.removeEventListener = function(t, ...x){ if (t==='resize'||t==='orientationchange') window.__rl--; return r.call(this, t, ...x); }; })();`;
+      const { ctx, page, errs } = await openApp(browser, port, { w: 669, h: 951, sa: true, init });
+      const base = await page.evaluate(() => window.__rl);
+      await tabBtn(page, 'Live').click(); await page.evaluate(() => window.__setLive(window.__demoLive)); await page.waitForTimeout(300);
+      const seq = [[951, 669, true, true], [457, 678, false, false], [678, 457, true, false], [669, 951, false, true], [390, 844, false, false], [844, 390, true, true]];
+      const bad = [];
+      for (let i = 0; i < 2; i++) for (const [w, h, er, et] of seq) {
+        await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(150);
+        const st = await page.evaluate(() => ({ rail: !!document.querySelector('nav[aria-label="Tabs"]'), two: !![...document.querySelectorAll('div')].find(d => getComputedStyle(d).display === 'grid'),
+          holden: (document.querySelector('input[aria-label="Holden pitch count"]') || {}).value, sw: document.documentElement.scrollWidth - document.documentElement.clientWidth }));
+        if (st.rail !== er || st.two !== et || st.holden !== '17' || st.sw > 0) bad.push(`${w}x${h}: ${JSON.stringify(st)}`);
+      }
+      check('[stability] 12 rotate/fold cycles with a live game: right frame each time, live state kept, no h-scroll', !bad.length, bad.join('; '));
+      await page.waitForTimeout(900);
+      const mid = await page.evaluate(() => window.__rl);
+      await page.evaluate(() => window.__authCb(null)); await page.waitForTimeout(300);
+      const end = await page.evaluate(() => window.__rl);
+      check('[stability] useLayout adds its 2 listeners once and removes them when App unmounts (sign-out)', mid - end === 2 && (await page.locator('form').count()) > 0, JSON.stringify({ base, mid, end }));
+      check('[stability] no page errors / React warnings', !errs.length, errs.join(' | '));
+      await ctx.close();
+    }
+
+    // ── v3.16: typed count draft survives a frame change (fold/unfold/rotate while typing) ──
+    {
+      const { ctx, page } = await openApp(browser, port, { w: 669, h: 951, sa: true });
+      await tabBtn(page, 'Live').click(); await page.evaluate(() => window.__setLive(window.__demoLive)); await page.waitForTimeout(300);
+      const inp = page.locator('input[aria-label="Holden pitch count"]');
+      await inp.click(); await page.keyboard.type('30');
+      await page.setViewportSize({ width: 951, height: 669 }); await page.waitForTimeout(1000); // two-pane stays on, rail appears
+      await page.setViewportSize({ width: 457, height: 678 }); await page.waitForTimeout(1000); // two-pane -> one column
+      await page.locator('button[aria-label="Add 1 pitch for Holden"]').click(); await page.waitForTimeout(300);
+      const shown = await inp.inputValue(), real = await page.evaluate(() => window.__liveCur.pitchers.t_1.pitches);
+      check('[draft] after typing then folding (two-pane -> one column), the count input shows the real count after +1', String(real) === shown, JSON.stringify({ shown, real }));
+      await ctx.close();
+      // simulated on-screen keyboard: viewport height shrinks below the width in unfolded portrait
+      const k = await openApp(browser, port, { w: 669, h: 951, sa: true });
+      await tabBtn(k.page, 'Live').click(); await k.page.evaluate(() => window.__setLive(window.__demoLive)); await k.page.waitForTimeout(300);
+      await k.page.locator('input[aria-label="Holden pitch count"]').click();
+      await k.page.setViewportSize({ width: 669, height: 560 }); await k.page.waitForTimeout(1000);
+      const kb = await k.page.evaluate(() => ({ rail: !!document.querySelector('nav[aria-label="Tabs"]'), two: !![...document.querySelectorAll('div')].find(d => getComputedStyle(d).display === 'grid'), focus: document.activeElement && document.activeElement.getAttribute('aria-label') }));
+      console.log('INFO  [keyboard sim 669x951 -> 669x560] ' + JSON.stringify(kb) + ' (layout flips to rail/one column and the focused input is lost IF iOS shrinks innerHeight for the keyboard - not verifiable headless)');
+      await k.ctx.close();
     }
 
     // ── Landscape is not blocked; tab label ──
