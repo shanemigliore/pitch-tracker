@@ -6,7 +6,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: ROSTER (pitcher list + eligibility)
 // ══════════════════════════════════════════════════════════════════════════════
-function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null }) {
+function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, twoPane=false }) {
   // Wide screens: a centered dialog instead of a bottom sheet (v3.17)
   const { wide } = useLayout();
   // Wide screens show the tapped pitcher's detail beside this list; mark their row.
@@ -42,7 +42,7 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null }) {
   const displayLabel = isToday?"Today":isTomorrow?"Tomorrow":formatDate(checkDate);
 
   return (
-    <div style={{ padding:"0 16px 110px" }}>
+    <div style={{ padding: twoPane ? "0 16px" : "0 16px 110px" }}>
       <div style={{ padding:"16px 0 14px", marginRight:"var(--corner-r)", display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:10 }}>
         <div>
           <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>ROSTER</h2>

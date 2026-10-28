@@ -7,6 +7,8 @@
  *         corner cover, top rows add var(--corner-r), full-width bottom nav,
  *         modal sheets keep the full inset), flat 32px --top-gap in a wide
  *         Home Screen app, DisplayInfoSection delayed re-measure + Refresh.
+ * v3.18 - every pane scrolls on its own (paneScreen/paneGrid/paneScroll, replacing stickyPane);
+ *         Roster/Settings keep one element tree across fold/unfold; Live active pitcher on top.
  * v3.17 - two-pane Roster/Season/Log Game/Settings (stickyPane), modal dialogs when wide.
  * v3.16 - wide frame: useLayout() (wide / rail / twoPane), left tab rail in wide
  *         landscape, centeredColumn(), Live two-pane, header-only --hdr-r.
@@ -41,13 +43,13 @@ test('meta app-version and APP_VERSION match', () => {
   assert(meta && js, 'both version markers present');
   assert.strictEqual(meta[1], js[1]);
 });
-test('version is v3.17 (minor bump from v3.16)', () => {
-  assert.strictEqual(html.match(/const APP_VERSION = "([^"]+)";/)[1], 'v3.17');
-  // a /* (v3.16) */ history note in the CSS is fine; no stale version *value* may remain
-  assert.strictEqual((html.match(/["']v3\.16["']/g) || []).length, 0, 'no stale "v3.16" value left in index.html');
+test('version is v3.18 (minor bump from v3.17)', () => {
+  assert.strictEqual(html.match(/const APP_VERSION = "([^"]+)";/)[1], 'v3.18');
+  assert.strictEqual(html.match(/<meta name="app-version" content="([^"]+)"/)[1], 'v3.18');
+  assert.strictEqual((html.match(/["']v3\.17["']/g) || []).length, 0, 'no stale "v3.17" value left in index.html');
 });
 test('CLAUDE.md current version matches', () => {
-  assert(/\*\*Current version:\*\* v3\.17/.test(read('CLAUDE.md')));
+  assert(/\*\*Current version:\*\* v3\.18/.test(read('CLAUDE.md')));
 });
 
 // ── Landscape ───────────────────────────────────────────────────────────
@@ -450,61 +452,78 @@ test('LiveGameScreen: twoPane prop defaults false; one-column order details, gam
     assert.strictEqual((live.match(new RegExp('const ' + n + ' = \\(<>')) || []).length, 1, n);
   assert(/<>\{detailsCard\}\{inGameCard\}\{availableCard\}\{unavailableCard\}\{finishControls\}<\/>/.test(live), 'phone order');
 });
-test('LiveGameScreen two-pane grid: left = game + finish, right = available + unavailable + details; every section once per branch', () => {
-  const g = live.match(/twoPane \? \(\s*<div style=\{\{ display:"grid", gridTemplateColumns:"minmax\(360px, 1\.4fr\) minmax\(220px, 1fr\)"[^}]*\}\}>\s*<div style=\{\{ minWidth:0 \}\}>([^<]*)<\/div>\s*<div style=\{\{ minWidth:0 \}\}>([^<]*)<\/div>/);
+test('LiveGameScreen two-pane grid: left = game + finish, right = available + unavailable + details, each its own scroll pane (v3.18)', () => {
+  const g = live.match(/twoPane \? \(\s*<div style=\{paneGrid\("minmax\(360px, 1\.4fr\) minmax\(220px, 1fr\)"\)\}>\s*<div style=\{paneScroll\(rail\)\}>([^<]*)<\/div>\s*<div style=\{paneScroll\(rail\)\}>([^<]*)<\/div>/);
   assert(g, 'grid markup');
   assert.strictEqual(g[1].trim(), '{inGameCard}{finishControls}');
   assert.strictEqual(g[2].trim(), '{availableCard}{unavailableCard}{detailsCard}');
-  // the Unfinished banner + header stay above both branches
-  const ret = live.slice(live.lastIndexOf('return (\n    <div style={{ padding:"0 16px 110px" }}>'));
-  assert(ret.indexOf('{header}') < ret.indexOf('{isStale') && ret.indexOf('{isStale') < ret.indexOf('{twoPane ?'));
+  // the Unfinished banner + header stay above both branches; root fills the frame when two-pane
+  const ret = live.slice(live.lastIndexOf('return (\n    <div style={twoPane ? { ...paneScreen, padding:"0 16px" } : { padding:"0 16px 110px" }}>'));
+  assert(ret.length < live.length, 'in-game root');
+  assert(ret.indexOf('{header}') < ret.indexOf('{isStale') && ret.indexOf('{isStale') < ret.indexOf('{twoPane ? ('));
+  assert(/function LiveGameScreen\(\{[^}]*twoPane=false, rail=false[^}]*\}\)/.test(live));
 });
-test('LiveGameScreen: setup and "Game Logged!" states use the centered 430 narrowCol; available rows go full-width with "N left" only in two-pane', () => {
-  assert(/const narrowCol = twoPane \? \{ maxWidth:430, margin:"0 auto" \} : null;/.test(live));
-  assert.strictEqual((live.match(/<div style=\{\{ padding:"0 16px 110px", \.\.\.narrowCol \}\}>/g) || []).length, 2);
+test('LiveGameScreen (v3.18): active pitcher on top, then left pitchers newest first; log order untouched', () => {
+  assert(/getLiveGamePitcherIds\(liveGame\)\.filter\(id=>rosterById\.has\(id\)\)\.reverse\(\)\s*\.sort\(\(a,b\)=>\(liveGame\.pitchers\[a\]\.status==="active"\?0:1\) - \(liveGame\.pitchers\[b\]\.status==="active"\?0:1\)\)/.test(live));
+  assert(/ref=\{inGameRef\}/.test(live) && /scrollIntoView\(\{ block:"start"/.test(live), 'brings the in-game card back into view after a pitcher is added');
+});
+test('LiveGameScreen: setup and "Game Logged!" states use the centered 430 narrowRoot (own scroll when two-pane); available rows go full-width with "N left" only in two-pane', () => {
+  assert(/const narrowRoot = twoPane\s*\? \{ \.\.\.paneScreen, display:"block", padding:"0 max\(16px, calc\(\(100% - 398px\) \/ 2\)\) 110px" \}\s*: \{ padding:"0 16px 110px" \};/.test(live));
+  assert.strictEqual((live.match(/<div style=\{narrowRoot\}>/g) || []).length, 2);
   assert(/flexDirection:twoPane\?"column":"row", flexWrap:twoPane\?"nowrap":"wrap"/.test(live));
   assert(/\{b\.pitchesLeft\}\{twoPane\?" left":""\}/.test(live));
 });
 
 // ── v3.17 two-pane screens + modal dialogs ─────────────────────────────
 const uic = read('lib/ui-constants.js');
-test('v3.17 stickyPane(rail): sticky under the header, own scroll, height bounded by dvh minus header/bottom bar/inset; exported + destructured', () => {
-  const m = uic.match(/const stickyPane = rail => \(\{([^]*?)\}\);/);
-  assert(m, 'stickyPane defined');
-  assert(/position:"sticky"/.test(m[1]) && /top:"calc\(var\(--top-gap\) \+ 66px\)"/.test(m[1]) && /overflowY:"auto"/.test(m[1]));
-  // height bounded by the viewport minus the header (exact bottom allowance is checked in the browser test,
-  // which scrolls each pane to the bottom of the page)
-  assert(/maxHeight:[`"]calc\(100dvh - var\(--top-gap\) - 66px - /.test(m[1]), 'maxHeight');
-  assert(/window\.UIConstants = \{[^}]*\bstickyPane\b[^}]*\}/.test(uic));
-  assert(/const \{[^}]*\bstickyPane\b[^}]*\} = window\.UIConstants;/.test(html));
-});
-test('v3.17 Roster two-pane: list | embedded PitcherDetail (keyed by id) or placeholder; phone drill-in unchanged', () => {
+test('v3.18 pane helpers: paneScreen fills the frame, paneGrid one full-height row, paneScroll own scroll + bottom clearance (rail vs bottom bar); exported + destructured', () => {
+  const ctx = {}; vm.runInNewContext(uic.slice(uic.indexOf('const paneScreen'), uic.indexOf('window.UIConstants = {')) + '; this.r = { paneScreen, paneGrid, paneScroll };', ctx);
+  const { paneScreen, paneGrid, paneScroll } = ctx.r;
+  assert.strictEqual(paneScreen.flex, 1); assert.strictEqual(paneScreen.minHeight, 0); assert.strictEqual(paneScreen.overflowY, 'auto');
+  const g = paneGrid('1fr 1fr');
+  assert.strictEqual(g.gridTemplateRows, 'minmax(0, 1fr)'); assert.strictEqual(g.minHeight, 0); assert.strictEqual(g.gap, 16);
+  assert.strictEqual(paneGrid('1fr', 0).gap, 0);
+  assert.strictEqual(paneScroll(true).overflowY, 'auto'); assert.strictEqual(paneScroll(true).minHeight, 0);
+  assert(/safe-area-inset-bottom/.test(paneScroll(true).paddingBottom) && /safe-area-inset-bottom/.test(paneScroll(false).paddingBottom));
+  assert.notStrictEqual(paneScroll(true).paddingBottom, paneScroll(false).paddingBottom, 'bottom bar only reserved without the rail');
+  assert(!/stickyPane/.test(uic + html + Object.values(comps).join('')), 'stickyPane fully removed');
+  assert(/window\.UIConstants = \{[^}]*\bpaneScreen, paneGrid, paneScroll\b[^}]*\}/.test(uic));
+  assert(/const \{[^}]*\bpaneScreen, paneGrid, paneScroll\b[^}]*\} = window\.UIConstants;/.test(html));
+  // App: two-pane frame is exactly one screen tall, screens area flexes into it
   const app = comps['App.js'];
-  const i = app.indexOf('{tab==="roster" && layout.twoPane ? (');
+  assert(/\.\.\.\(layout\.twoPane \? \{ minHeight:0, height:"calc\(100dvh - var\(--top-gap\)\)", display:"flex", flexDirection:"column" \} : null\)/.test(app));
+  assert(/<div style=\{layout\.twoPane \? \{ flex:1, minHeight:0, display:"flex", flexDirection:"column" \} : \(screenWrap \|\| undefined\)\}>/.test(app));
+});
+test('v3.18 Roster: one element tree for every layout (no remount on fold); two-pane list | detail panes; phone hides the list while drilled in', () => {
+  const app = comps['App.js'];
+  const i = app.indexOf('{tab==="roster" ? (');
   assert(i > 0);
-  const sec = app.slice(i, app.indexOf(') : tab==="roster" && selectedPlayer ? ('));
-  assert(/<EligibilityScreen [^]*?selectedId=\{selectedPlayer \? selectedPlayer\.id : null\}/.test(sec));
-  assert(/\.\.\.stickyPane\(layout\.rail\)/.test(sec));
-  assert(/<PitcherDetail key=\{selectedPlayer\.id\} pitcher=\{selectedPlayer\} embedded/.test(sec));
+  const sec = app.slice(i, app.indexOf(') : tab==="live" ? ('));
+  assert(/<div style=\{layout\.twoPane \? paneGrid\("minmax\(300px, 1fr\) minmax\(320px, 1\.15fr\)", 0\) : undefined\}>/.test(sec));
+  assert(/<div style=\{layout\.twoPane \? paneScroll\(layout\.rail\) : \(selectedPlayer \? \{ display:"none" \} : undefined\)\}>\s*<EligibilityScreen /.test(sec), 'list slot');
+  assert(/<div style=\{layout\.twoPane \? paneScroll\(layout\.rail\) : \(selectedPlayer \? undefined : \{ display:"none" \}\)\}>/.test(sec), 'detail slot');
+  assert(/<ScreenBoundary key=\{selectedPlayer\.id\} onBack=\{\(\)=>setSelectedPlayer\(null\)\}>\s*<PitcherDetail pitcher=\{selectedPlayer\} embedded=\{layout\.twoPane\}/.test(sec));
+  assert.strictEqual((sec.match(/<EligibilityScreen /g) || []).length, 1, 'list rendered once');
+  assert.strictEqual((sec.match(/<PitcherDetail /g) || []).length, 1, 'detail rendered once');
+  assert.strictEqual((app.match(/<PitcherDetail /g) || []).length, 1, 'no second (phone-only) detail path');
   assert(/Tap a pitcher/.test(sec), 'placeholder');
-  // phone path keeps the Back-button drill-in
-  assert(/\) : tab==="roster" && selectedPlayer \? \(\s*<ScreenBoundary onBack=\{\(\)=>setSelectedPlayer\(null\)\}>\s*<PitcherDetail pitcher=\{selectedPlayer\} onBack=/.test(app));
   const pd = comps['PitcherDetail.js'];
   assert(/function PitcherDetail\(\{[^}]*embedded=false[^}]*\}\)/.test(pd));
   assert(/\{!embedded && \(\s*<button onClick=\{onBack\} aria-label="Back to roster"/.test(pd));
   const el = comps['EligibilityScreen.js'];
-  assert(/function EligibilityScreen\(\{[^}]*selectedId=null[^}]*\}\)/.test(el));
+  assert(/function EligibilityScreen\(\{[^}]*selectedId=null, twoPane=false[^}]*\}\)/.test(el));
   assert.strictEqual((el.match(/aria-current=\{p\.id===selectedId \|\| undefined\}/g) || []).length, 2, 'both available + resting rows mark the selection');
 });
-test('v3.17 Season: phone order filter, totals, leaderboard, summary, games; two-pane = games | sticky filter+totals+leaderboard+summary', () => {
+test('v3.18 Season: phone order filter, totals, leaderboard, summary, games; two-pane = games | filter+totals+leaderboard+summary, each scrolling on its own', () => {
   const sh = comps['SeasonHistory.js'];
   assert(/function SeasonHistory\(\{[^}]*twoPane=false, rail=false[^}]*\}\)/.test(sh));
   for (const n of ['filterCard', 'totalsRow', 'leaderboardCard', 'pitcherSummary', 'gameList'])
     assert.strictEqual((sh.match(new RegExp('const ' + n + ' = \\(<>')) || []).length, 1, n);
   assert(/<>\{filterCard\}\{totalsRow\}\{leaderboardCard\}\{pitcherSummary\}\{gameList\}<\/>/.test(sh), 'phone order');
-  assert(/<div style=\{\{ minWidth:0 \}\}>\{gameList\}<\/div>\s*<div style=\{\{ minWidth:0, \.\.\.stickyPane\(rail\) \}\}>\{filterCard\}\{totalsRow\}\{leaderboardCard\}\{pitcherSummary\}<\/div>/.test(sh), 'two-pane');
+  assert(/<div style=\{paneGrid\("minmax\(320px, 1\.3fr\) minmax\(260px, 1fr\)"\)\}>\s*<div style=\{paneScroll\(rail\)\}>\{gameList\}<\/div>\s*<div style=\{paneScroll\(rail\)\}>\{filterCard\}\{totalsRow\}\{leaderboardCard\}\{pitcherSummary\}<\/div>/.test(sh), 'two-pane');
+  assert(/<div style=\{twoPane \? \{ \.\.\.paneScreen, padding:"0 16px" \} : \{ padding:"0 16px 110px" \}\}>/.test(sh), 'root');
 });
-test('v3.17 Log Game: phone = details, WHO PITCHED (chips + counts), save; two-pane = details + chips | sticky counts + save; saved state centered 430', () => {
+test('v3.18 Log Game: phone = details, WHO PITCHED (chips + counts), save; two-pane = details + chips | counts + save panes; saved state centered 430', () => {
   const gl = comps['GameLogScreen.js'];
   assert(/function GameLogScreen\(\{[^}]*twoPane=false, rail=false[^}]*\}\)/.test(gl));
   for (const n of ['detailsCard', 'pickerChips', 'countRows', 'saveControls'])
@@ -512,17 +531,22 @@ test('v3.17 Log Game: phone = details, WHO PITCHED (chips + counts), save; two-p
   const ph = gl.slice(gl.lastIndexOf(') : ('));
   assert(ph.indexOf('{detailsCard}') < ph.indexOf('{pickerChips}') && ph.indexOf('{pickerChips}') < ph.indexOf('{countRows}') && ph.indexOf('{countRows}') < ph.indexOf('{saveControls}'), 'phone order');
   const tp = gl.slice(gl.indexOf('{twoPane ? ('), gl.lastIndexOf(') : ('));
-  const right = tp.indexOf('...stickyPane(rail)');
-  assert(right > 0);
-  assert(tp.indexOf('{detailsCard}') < right && tp.indexOf('{pickerChips}') < right && tp.indexOf(': countRows}') > right && tp.indexOf('{saveControls}') > right);
-  assert(/\.\.\.\(twoPane && saved \? \{ maxWidth:430, margin:"0 auto" \} : null\)/.test(gl));
+  assert(/paneGrid\("minmax\(300px, 1fr\) minmax\(300px, 1fr\)"\)/.test(tp));
+  const panes = tp.split('<div style={paneScroll(rail)}>');
+  assert.strictEqual(panes.length, 3, 'two panes');
+  assert(panes[1].includes('{detailsCard}') && panes[1].includes('{pickerChips}'));
+  assert(panes[2].includes(': countRows}') && panes[2].includes('{saveControls}'));
+  assert((gl.match(/twoPane && saved \? \{ width:"100%", maxWidth:398, margin:"0 auto" \}/g) || []).length === 1, 'title centered when saved');
+  assert(/twoPane \? \{ width:"100%", maxWidth:398, margin:"0 auto 16px"/.test(gl), 'saved card centered');
 });
-test('v3.17 Settings: phone sub-tabs keep the corner-r margin; two-pane nav list | content; each section rendered once per branch', () => {
+test('v3.18 Settings: one element tree for both layouts (no remount on fold); phone sub-tabs keep the corner-r margin; two-pane nav list | content pane', () => {
   const st = comps['Settings.js'];
-  assert(/function Settings\(\{[^}]*twoPane=false[^}]*\}\)/.test(st));
-  assert(/<nav aria-label="Settings sections"/.test(st));
+  assert(/function Settings\(\{[^}]*twoPane=false, rail=false[^}]*\}\)/.test(st));
+  assert.strictEqual((st.match(/<nav aria-label="Settings sections"/g) || []).length, 1);
   assert(/margin:"0 calc\(16px \+ var\(--corner-r\)\) 14px 16px"/.test(st));
-  for (const n of ['<AddPitcherSection ', '<TournamentScreen ', '<AccountSection ']) assert.strictEqual(st.split(n).length - 1, 2, n);
+  for (const n of ['<AddPitcherSection ', '<TournamentScreen ', '<AccountSection ']) assert.strictEqual(st.split(n).length - 1, 1, n);
+  assert(/<div style=\{twoPane \? paneGrid\("180px minmax\(0, 1fr\)", 8\) : undefined\}>/.test(st));
+  assert(/<div style=\{twoPane \? paneScroll\(rail\) : undefined\}>/.test(st));
 });
 test('v3.17 modals: centered dialog (maxWidth 520, all corners rounded) when wide, bottom sheet otherwise; still padded by full insets and scrollable', () => {
   for (const f of ['EditGameModal.js', 'EditGameGroupModal.js', 'EligibilityScreen.js', 'TeamPickerScreen.js']) {

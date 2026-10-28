@@ -116,7 +116,9 @@ test('custom rules with maxPitches <= rest1 (40/50/60/70): 40 earlier -> unavail
   const b = getLivePitcherBudget(pitcher([h(D, 40)]), live(), []);
   assert.strictEqual(b.eligible, false);
   assert.ok(/daily max/.test(b.reason), b.reason);
-  assert.strictEqual(regCheck(pitcher([h(D, 40)]), D), null, 'no rest owed -> Log Game rest check passes');
+  // v3.18: no rest owed, but the day total (40 + 10) is over the 40 max -> Log Game warns
+  const c = regCheck(pitcher([h(D, 40)]), D);
+  assert.ok(c && c.level === 'violation' && /over the 40p daily max/.test(c.message), c && c.message);
 });
 
 // ── tournaments ─────────────────────────────────────────────────────────────

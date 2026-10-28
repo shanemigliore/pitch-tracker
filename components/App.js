@@ -354,6 +354,9 @@ function App({ role }) {
   return (
     <div style={{ background:"#080c14", minHeight:"100dvh", ...centeredColumn(colWidth),
       paddingLeft: layout.rail ? layout.railWidth : 0,
+      // Two-pane: exactly one screen tall, so each pane scrolls on its own
+      // (paneScreen/paneScroll) instead of the page.
+      ...(layout.twoPane ? { minHeight:0, height:"calc(100dvh - var(--top-gap))", display:"flex", flexDirection:"column" } : null),
       fontFamily:"'Barlow',sans-serif", color:"#f8fafc", position:"relative", overflowX:"clip",
       backgroundImage:"radial-gradient(ellipse at 20% 0%,rgba(30,58,138,0.25) 0%,transparent 60%),radial-gradient(ellipse at 80% 100%,rgba(22,101,52,0.15) 0%,transparent 60%)" }}>
 
@@ -422,37 +425,36 @@ function App({ role }) {
       </div>
 
       {/* ── Screens ── */}
-      <div style={screenWrap || undefined}>
-        {tab==="roster" && layout.twoPane ? (
-          // Wide: list | the tapped pitcher's detail (pinned, scrolls on its own)
-          <div style={{ display:"grid", gridTemplateColumns:"minmax(300px, 1fr) minmax(320px, 1.15fr)", alignItems:"start" }}>
-            <div style={{ minWidth:0 }}>
+      <div style={layout.twoPane ? { flex:1, minHeight:0, display:"flex", flexDirection:"column" } : (screenWrap || undefined)}>
+        {tab==="roster" ? (
+          // Same element tree in every layout, so folding/unfolding (two-pane <->
+          // one column) doesn't remount the list or the detail and lose their
+          // state (the date picked, an open edit form). Wide: list | the tapped
+          // pitcher's detail, each scrolling on its own. Phone: one or the other -
+          // the list is only hidden while the detail is open, so Back returns to
+          // the same date.
+          <div style={layout.twoPane ? paneGrid("minmax(300px, 1fr) minmax(320px, 1.15fr)", 0) : undefined}>
+            <div style={layout.twoPane ? paneScroll(layout.rail) : (selectedPlayer ? { display:"none" } : undefined)}>
               <EligibilityScreen roster={roster} tournaments={tournaments} onSelect={p=>setSelectedPlayer(p)}
-                selectedId={selectedPlayer ? selectedPlayer.id : null}/>
+                selectedId={layout.twoPane && selectedPlayer ? selectedPlayer.id : null} twoPane={layout.twoPane}/>
             </div>
-            <div style={{ minWidth:0, ...stickyPane(layout.rail) }}>
+            <div style={layout.twoPane ? paneScroll(layout.rail) : (selectedPlayer ? undefined : { display:"none" })}>
               {selectedPlayer ? (
                 <ScreenBoundary key={selectedPlayer.id} onBack={()=>setSelectedPlayer(null)}>
-                  <PitcherDetail key={selectedPlayer.id} pitcher={selectedPlayer} embedded onBack={()=>setSelectedPlayer(null)} {...detailProps}/>
+                  <PitcherDetail pitcher={selectedPlayer} embedded={layout.twoPane} onBack={()=>setSelectedPlayer(null)} {...detailProps}/>
                 </ScreenBoundary>
-              ) : (
+              ) : layout.twoPane ? (
                 <div style={{ ...card, margin:"62px 16px 0", textAlign:"center", padding:"40px 16px", color:"rgba(255,255,255,0.35)" }}>
                   <div style={{ fontSize:32, marginBottom:8 }}>👈</div>
                   <div style={{ fontSize:14, fontWeight:700 }}>Tap a pitcher</div>
                   <div style={{ fontSize:12, marginTop:4 }}>Their stats and season history show here.</div>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
-        ) : tab==="roster" && selectedPlayer ? (
-          <ScreenBoundary onBack={()=>setSelectedPlayer(null)}>
-            <PitcherDetail pitcher={selectedPlayer} onBack={()=>setSelectedPlayer(null)} {...detailProps}/>
-          </ScreenBoundary>
-        ) : tab==="roster" ? (
-          <EligibilityScreen roster={roster} tournaments={tournaments} onSelect={p=>setSelectedPlayer(p)}/>
         ) : tab==="live" ? (
           <ScreenBoundary>
-            <LiveGameScreen roster={roster} tournaments={tournaments} liveGame={liveGame} twoPane={layout.twoPane}
+            <LiveGameScreen roster={roster} tournaments={tournaments} liveGame={liveGame} twoPane={layout.twoPane} rail={layout.rail}
               onStart={startLiveGame} onAction={liveGameAction}
               onComplete={completeLiveGame} onDiscard={discardLiveGame}/>
           </ScreenBoundary>
@@ -466,7 +468,7 @@ function App({ role }) {
           <ScreenBoundary>
             <Settings roster={roster} onAddPlayer={addPlayer} onDeletePlayer={deletePlayer}
               tournaments={tournaments} onAddTourney={addTourney} onDeleteTourney={deleteTourney} onUpdateTourney={updateTourney}
-              role={role} onLogout={logout} twoPane={layout.twoPane}/>
+              role={role} onLogout={logout} twoPane={layout.twoPane} rail={layout.rail}/>
           </ScreenBoundary>
         )}
       </div>

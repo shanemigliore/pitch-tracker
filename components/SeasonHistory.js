@@ -80,15 +80,17 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame, twoPane=
     ...tournamentContainers.map(t=>({ kind:"tournament", ...t })),
   ].sort((a,b)=>b.date.localeCompare(a.date));
 
-  // When a pitcher is filtered, show only their games/days, and only within
-  // a tournament container, only the days they actually appeared in.
+  // When a pitcher is filtered, show only their games/days and only their row
+  // in each (regular games and tournament days alike). `fullGame` keeps the
+  // unfiltered game so Edit always opens the whole game, every pitcher - its
+  // "Delete this game" means the whole game, never just the filtered pitcher.
+  const onlyFiltered = g => {
+    const pitchers = g.pitchers.filter(p=>String(p.pitcherId)===String(filterPitcherId));
+    return pitchers.length>0 ? { ...g, pitchers, fullGame:g } : null;
+  };
   const displayItems = filterPitcherId==="all" ? allDisplayItems : allDisplayItems.map(item=>{
-    if (item.kind==="game") {
-      return item.pitchers.some(p=>String(p.pitcherId)===String(filterPitcherId)) ? item : null;
-    }
-    const days = item.days
-      .map(d=>({ ...d, pitchers: d.pitchers.filter(p=>String(p.pitcherId)===String(filterPitcherId)) }))
-      .filter(d=>d.pitchers.length>0);
+    if (item.kind==="game") return onlyFiltered(item);
+    const days = item.days.map(onlyFiltered).filter(Boolean);
     if (days.length===0) return null;
     const allPitches = days.flatMap(d=>d.pitchers);
     return { ...item, days, totalPitches: allPitches.reduce((s,p)=>s+p.pitches,0), uniquePitchers:1 };
@@ -139,7 +141,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame, twoPane=
 
   // Sections. One column on phones (filter, totals, leaderboard, summary, games);
   // on wide screens the games scroll on the left while filter/totals/leaderboard
-  // stay pinned on the right (stickyPane). Same elements either way.
+  // stay on the right, each side scrolling on its own (paneScroll). Same elements either way.
   // Pitcher filter chips
   const filterCard = (<>
       {/* Pitcher filter */}
@@ -279,7 +281,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame, twoPane=
                     <div style={{ fontSize:12, fontWeight:700, color:"#f59e0b" }}>
                       {d.tourneyDay?`Day ${d.tourneyDay}`:formatDate(d.date)} <span style={{ fontWeight:400, color:"rgba(255,255,255,0.35)" }}>· {formatDate(d.date)}{d.opponent?` · vs ${d.opponent}`:""}</span>
                     </div>
-                    <button onClick={()=>setEditingGame(d)}
+                    <button onClick={()=>setEditingGame(d.fullGame || d)}
                       style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 8px",
                         background:"rgba(56,189,248,0.08)", border:"1px solid rgba(56,189,248,0.2)",
                         borderRadius:7, color:"#38bdf8", fontSize:11, fontWeight:700, cursor:"pointer", flexShrink:0 }}>
@@ -302,7 +304,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame, twoPane=
                     Regular Season
                   </span>
                 </div>
-                <button onClick={()=>setEditingGame(item)}
+                <button onClick={()=>setEditingGame(item.fullGame || item)}
                   style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px",
                     background:"rgba(56,189,248,0.08)", border:"1px solid rgba(56,189,248,0.2)",
                     borderRadius:8, color:"#38bdf8", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0 }}>
@@ -321,7 +323,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame, twoPane=
   </>);
 
   return (
-    <div style={{ padding:"0 16px 110px" }}>
+    <div style={twoPane ? { ...paneScreen, padding:"0 16px" } : { padding:"0 16px 110px" }}>
       {editingGame && (
         <EditGameGroupModal
           game={editingGame}
@@ -331,7 +333,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame, twoPane=
           onClose={()=>setEditingGame(null)}/>
       )}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"16px 0 14px", marginRight:"var(--corner-r)" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"16px 0 14px", marginRight:"var(--corner-r)", flexShrink:0 }}>
         <div>
           <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>SEASON</h2>
           <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>{filteredGameCount} game{filteredGameCount!==1?"s":""} · {filteredEntries.length} appearance{filteredEntries.length!==1?"s":""}</p>
@@ -355,9 +357,9 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame, twoPane=
         </div>
         </>
       ) : twoPane ? (
-        <div style={{ display:"grid", gridTemplateColumns:"minmax(320px, 1.3fr) minmax(260px, 1fr)", gap:16, alignItems:"start" }}>
-          <div style={{ minWidth:0 }}>{gameList}</div>
-          <div style={{ minWidth:0, ...stickyPane(rail) }}>{filterCard}{totalsRow}{leaderboardCard}{pitcherSummary}</div>
+        <div style={paneGrid("minmax(320px, 1.3fr) minmax(260px, 1fr)")}>
+          <div style={paneScroll(rail)}>{gameList}</div>
+          <div style={paneScroll(rail)}>{filterCard}{totalsRow}{leaderboardCard}{pitcherSummary}</div>
         </div>
       ) : (
         <>{filterCard}{totalsRow}{leaderboardCard}{pitcherSummary}{gameList}</>

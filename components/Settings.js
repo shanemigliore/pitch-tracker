@@ -282,7 +282,7 @@ function AccountSection({ role, onLogout }) {
 // SCREEN: SETTINGS
 // ══════════════════════════════════════════════════════════════════════════════
 function Settings({ roster, onAddPlayer, onDeletePlayer, tournaments, onAddTourney, onDeleteTourney, onUpdateTourney,
-  role, onLogout, twoPane=false }) {
+  role, onLogout, twoPane=false, rail=false }) {
   const [section, setSection] = useState("roster");
 
   const sections = [
@@ -291,57 +291,40 @@ function Settings({ roster, onAddPlayer, onDeletePlayer, tournaments, onAddTourn
     ["account", "Account"],
   ];
 
+  // One element tree for both layouts (only styles change), so folding or
+  // unfolding mid-task doesn't remount the section and wipe a half-filled form.
+  // Wide: sections as a list on the left, the selected one on the right,
+  // scrolling on its own. Phone: a row of sub-tabs above the section.
   return (
-    <div>
-      <div style={{ padding:"16px calc(16px + var(--corner-r)) 14px 16px" }}>
+    <div style={twoPane ? paneScreen : undefined}>
+      <div style={{ padding:"16px calc(16px + var(--corner-r)) 14px 16px", flexShrink:0 }}>
         <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>SETTINGS</h2>
       </div>
 
-      {twoPane ? (
-        // Wide: sections as a list on the left, the selected one on the right
-        <div style={{ display:"grid", gridTemplateColumns:"180px minmax(0, 1fr)", gap:8, alignItems:"start" }}>
-          <nav aria-label="Settings sections" style={{ display:"flex", flexDirection:"column", gap:8, padding:"0 0 0 16px" }}>
-            {sections.map(([id,label])=>(
-              <button key={id} onClick={()=>setSection(id)} aria-pressed={section===id}
-                style={{ textAlign:"left", padding:"12px 14px", borderRadius:12,
-                  border:`1px solid ${section===id?"#38bdf8":"rgba(255,255,255,0.1)"}`,
-                  background:section===id?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
-                  color:section===id?"#38bdf8":"rgba(255,255,255,0.5)", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                {label}
-              </button>
-            ))}
-          </nav>
-          <div style={{ minWidth:0 }}>
+      <div style={twoPane ? paneGrid("180px minmax(0, 1fr)", 8) : undefined}>
+        <nav aria-label="Settings sections" style={twoPane
+          ? { display:"flex", flexDirection:"column", gap:8, padding:"0 0 0 16px", minHeight:0, overflowY:"auto" }
+          : { display:"flex", gap:8, margin:"0 calc(16px + var(--corner-r)) 14px 16px" }}>
+          {sections.map(([id,label])=>(
+            <button key={id} onClick={()=>setSection(id)} aria-pressed={section===id}
+              style={{ ...(twoPane ? { textAlign:"left", padding:"12px 14px", fontSize:14 } : { flex:1, padding:"10px", fontSize:13 }),
+                borderRadius:12,
+                border:`1px solid ${section===id?"#38bdf8":"rgba(255,255,255,0.1)"}`,
+                background:section===id?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
+                color:section===id?"#38bdf8":"rgba(255,255,255,0.5)", fontWeight:700, cursor:"pointer" }}>
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div style={twoPane ? paneScroll(rail) : undefined}>
           {section==="roster" && <AddPitcherSection roster={roster} onAdd={onAddPlayer} onDelete={onDeletePlayer}/>}
           {section==="tournaments" && (
             <TournamentScreen roster={roster} tournaments={tournaments}
               onAddTourney={onAddTourney} onDeleteTourney={onDeleteTourney} onUpdateTourney={onUpdateTourney}/>
           )}
           {section==="account" && <AccountSection role={role} onLogout={onLogout}/>}
-          </div>
         </div>
-      ) : (
-        <>
-        <div style={{ display:"flex", gap:8, margin:"0 calc(16px + var(--corner-r)) 14px 16px" }}>
-          {sections.map(([id,label])=>(
-            <button key={id} onClick={()=>setSection(id)} aria-pressed={section===id}
-              style={{ flex:1, padding:"10px", borderRadius:12,
-                border:`1px solid ${section===id?"#38bdf8":"rgba(255,255,255,0.1)"}`,
-                background:section===id?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
-                color:section===id?"#38bdf8":"rgba(255,255,255,0.5)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {section==="roster" && <AddPitcherSection roster={roster} onAdd={onAddPlayer} onDelete={onDeletePlayer}/>}
-        {section==="tournaments" && (
-          <TournamentScreen roster={roster} tournaments={tournaments}
-            onAddTourney={onAddTourney} onDeleteTourney={onDeleteTourney} onUpdateTourney={onUpdateTourney}/>
-        )}
-        {section==="account" && <AccountSection role={role} onLogout={onLogout}/>}
-        </>
-      )}
+      </div>
     </div>
   );
 }

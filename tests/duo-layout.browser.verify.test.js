@@ -697,7 +697,8 @@ async function sweep(page, zone, { withLive = false } = {}) {
       const { ctx, page, errs } = await openApp(browser, port, v);
       const tag = `[two-pane ${v.n}]`;
       await tabBtn(page, 'Live').click(); await page.waitForTimeout(250);
-      const setupCol = await page.evaluate(() => { const c = [...document.querySelectorAll('p')].find(p => p.textContent === 'NEW GAME').closest('div[style*="110px"]').getBoundingClientRect(); return { l: c.left, r: c.right }; });
+      // v3.18: the column's own side padding centers it (it's a full-width scroll area), so measure its content box + 16px gutters
+      const setupCol = await page.evaluate(() => { const c = [...document.querySelectorAll('p')].find(p => p.textContent === 'NEW GAME').closest('div[style*="110px"]'); const cs = getComputedStyle(c), b = c.getBoundingClientRect(); return { l: b.left + parseFloat(cs.paddingLeft) - 16, r: b.right - parseFloat(cs.paddingRight) + 16 }; });
       const frame = await page.evaluate(() => { const b = document.querySelector('#root > div').getBoundingClientRect(); const pl = parseFloat(getComputedStyle(document.querySelector('#root > div')).paddingLeft); return { l: b.left + pl, r: b.right }; });
       check(`${tag} setup state is a centered <=430 column`, setupCol.r - setupCol.l <= 430.5 && Math.abs((setupCol.l + setupCol.r) / 2 - (frame.l + frame.r) / 2) < 1, JSON.stringify({ setupCol, frame }));
       await page.evaluate(() => window.__setLive(window.__demoLive)); await page.waitForTimeout(300);
@@ -742,7 +743,7 @@ async function sweep(page, zone, { withLive = false } = {}) {
       const sg = new Set(logged.e.map(x => x.sg));
       check(`${tag} Log Complete Game logs both pitchers (22 + 18) under one sharedGameId and shows "Game Logged!"`,
         logged.shown && logged.e.length === 2 && sg.size === 1 && logged.e.some(x => x.id === 't_0' && x.n === 22) && logged.e.some(x => x.id === 't_1' && x.n === 18), JSON.stringify(logged));
-      const savedCol = await page.evaluate(() => { const el = [...document.querySelectorAll('div')].filter(d => /Game Logged!/.test(d.textContent) && d.style.padding === '0px 16px 110px').pop(); if (!el) return null; const b = el.getBoundingClientRect(); return { l: b.left, r: b.right }; });
+      const savedCol = await page.evaluate(() => { const c = [...document.querySelectorAll('div')].filter(d => /Game Logged!/.test(d.textContent) && d.style.paddingBottom === '110px').pop(); if (!c) return null; const cs = getComputedStyle(c), b = c.getBoundingClientRect(); return { l: b.left + parseFloat(cs.paddingLeft) - 16, r: b.right - parseFloat(cs.paddingRight) + 16 }; });
       check(`${tag} "Game Logged!" state is a centered <=430 column`, savedCol && savedCol.r - savedCol.l <= 430.5 && Math.abs((savedCol.l + savedCol.r) / 2 - (frame.l + frame.r) / 2) < 1, JSON.stringify({ savedCol, frame }));
       check(`${tag} no page errors / horizontal scroll`, !errs.length && (await hScroll(page)) <= 0, errs.join(' | '));
       await ctx.close();
@@ -910,18 +911,27 @@ async function sweep(page, zone, { withLive = false } = {}) {
         const tag = `[v3.17 ${v.n}]`; const l = v.l || 0, r = v.r || 0;
         const rail = v.w >= 600 && v.w > v.h;
         // pane checks shared by every two-pane screen
+        // v3.18: both panes are their own scroll areas reaching the screen's bottom edge; the page never scrolls
         const paneOk = async (label) => {
           await scrollTop(page); await page.waitForTimeout(150);
           const g0 = await geom(page);
-          const ok0 = g0.grid && g0.right && g0.paneSticky === 'sticky' && g0.right.t >= g0.hdr.b - 0.5 && g0.right.b <= g0.navTop + 0.5 &&
+          const ok0 = g0.grid && g0.right && g0.paneSticky !== 'sticky' && g0.paneScroll.oy === 'auto' && g0.right.t >= g0.hdr.b - 0.5 &&
+            Math.abs(g0.right.b - g0.vh) < 1 && Math.abs(g0.left.b - g0.vh) < 1 &&
             g0.left.r <= g0.right.l + 0.5 && g0.grid.l >= l - 0.5 && g0.grid.r <= g0.vw - r + 0.5 && g0.sw <= 0;
-          check(`${tag} ${label}: two panes side by side; right pane sticky, below the header, above the bottom bar, inside insets; no h-scroll`, ok0, JSON.stringify(g0));
-          // page scroll: the right pane stays pinned below the header
+          check(`${tag} ${label}: two panes side by side, each scrolling on its own from below the header to the screen's bottom edge, inside insets; no h-scroll`, ok0, JSON.stringify(g0));
+          // the page itself doesn't scroll; each pane scrolls without moving the other, and its end clears the bottom bar
           await page.evaluate(() => window.scrollTo(0, 400)); await page.waitForTimeout(150);
-          const g1 = await geom(page);
           const scrolled = await page.evaluate(() => scrollY);
-          check(`${tag} ${label}: after scrolling the page (${scrolled}px) the right pane is still fully below the sticky header and within the viewport`,
-            g1.right && g1.right.t >= g1.hdr.b - 0.5 && g1.right.b <= g1.navTop + 0.5, JSON.stringify({ hdr: g1.hdr, right: g1.right, navTop: g1.navTop }));
+          const ind = await page.evaluate(() => {
+            const grid = [...document.querySelectorAll('#root div')].find(d => getComputedStyle(d).display === 'grid' && d.children.length === 2 && d.getBoundingClientRect().width > 500);
+            const [a, b] = grid.children; const nav = [...document.querySelectorAll('#root div')].find(d => getComputedStyle(d).position === 'fixed' && /ROSTER/.test(d.textContent) && /SETTINGS/.test(d.textContent));
+            const navTop = nav ? nav.firstElementChild.getBoundingClientRect().top : innerHeight;
+            const end = p => { p.scrollTop = p.scrollHeight; return [...p.querySelectorAll('*')].filter(e => e.getBoundingClientRect().height > 0).reduce((m, e) => Math.max(m, e.getBoundingClientRect().bottom), 0); };
+            const bTop0 = b.scrollTop; const aEnd = end(a); const bAfterA = b.scrollTop; const bEnd = end(b);
+            const r = { aScrolled: a.scrollTop, bTop0, bAfterA, aEnd, bEnd, navTop };
+            a.scrollTop = 0; b.scrollTop = 0; return r; });
+          check(`${tag} ${label}: page doesn't scroll (${scrolled}px); scrolling one pane leaves the other put; each pane's end clears the bottom bar / screen edge`,
+            scrolled === 0 && ind.bAfterA === ind.bTop0 && ind.aEnd <= ind.navTop + 0.5 && ind.bEnd <= ind.navTop + 0.5, JSON.stringify(ind));
           if (v.icons) { const ih = await rectHits(page, v.icons); check(`${tag} ${label}: nothing under the clock/battery after scrolling`, !ih.length, ih.join('; ')); }
           await scrollTop(page);
           return g0;
@@ -961,8 +971,9 @@ async function sweep(page, zone, { withLive = false } = {}) {
         } else {
           await noGrid('Roster');
           await page.locator('#root div[style*="cursor: pointer"]', { hasText: 'Johnny' }).first().click(); await page.waitForTimeout(250);
+          // v3.18: the list stays mounted (hidden) so Back keeps its state
           check(`${tag} Roster: tapping a pitcher drills in (Back button, list hidden)`, (await page.locator('button[aria-label="Back to roster"]').count()) === 1 &&
-            (await page.locator('#root div[style*="cursor: pointer"]', { hasText: 'Carter' }).count()) === 0);
+            (await page.locator('#root div[style*="cursor: pointer"]:visible', { hasText: 'Carter' }).count()) === 0);
           await page.locator('button[aria-label="Back to roster"]').click(); await page.waitForTimeout(200);
         }
         // rules modal: dialog when wide, sheet otherwise
@@ -1022,9 +1033,10 @@ async function sweep(page, zone, { withLive = false } = {}) {
         await page.evaluate(() => { window.__sets.length = 0; });
         await page.locator('button', { hasText: /Save Game/ }).click(); await page.waitForTimeout(250);
         check(`${tag} Log Game: Mason (resting) triggers the warn-and-override card`, (await page.locator('text=/would violate a limit/').count()) === 1);
-        if (v.two) { const g = await geom(page); check(`${tag} Log Game: warn card stays inside the right pane / viewport`, g.right && g.right.b <= g.navTop + 0.5 && g.right.t >= g.hdr.b - 0.5, JSON.stringify(g)); }
+        if (v.two) { const g = await geom(page); const wb = await page.evaluate(() => { const w = [...document.querySelectorAll('div')].filter(d => /would violate a limit/.test(d.textContent)).pop(); const pane = w.closest('div[style*="overflow-y: auto"]'); pane.scrollTop = pane.scrollHeight; const r = w.getBoundingClientRect(); return { t: r.top, b: r.bottom }; });
+          check(`${tag} Log Game: warn card stays inside the right pane / viewport`, g.right && wb.b <= g.navTop + 0.5 && g.right.t >= g.hdr.b - 0.5, JSON.stringify({ g, wb })); }
         await page.locator('button', { hasText: /^Save Anyway$/ }).click(); await page.waitForTimeout(1500);
-        const savedBox = await page.evaluate(() => { const el = [...document.querySelectorAll('#root div')].filter(d => /Game Saved!/.test(d.textContent) && d.style.padding === '0px 16px 110px').pop(); if (!el) return null; const b = el.getBoundingClientRect(); return { l: b.left, r: b.right }; });
+        const savedBox = await page.evaluate(() => { const el = [...document.querySelectorAll('#root div')].filter(d => /Game Saved!/.test(d.textContent) && d.style.borderRadius === '20px').pop(); if (!el) return null; const b = el.getBoundingClientRect(); return { l: b.left, r: b.right }; });
         const fr = (await geom(page)).frame;
         const logged = await page.evaluate(() => { const roster = (window.__sets.filter(([k]) => k === 'roster').pop() || [])[1]; const list = roster ? (Array.isArray(roster) ? roster : Object.values(roster)) : [];
           return list.flatMap(p => (p.history || []).filter(h => h.opponent === 'Cubs').map(h => p.name + ':' + h.pitches)); });
@@ -1037,7 +1049,9 @@ async function sweep(page, zone, { withLive = false } = {}) {
         // ── Settings ──
         await tabBtn(page, 'Settings').click(); await page.waitForTimeout(200);
         const sNav = page.locator('nav[aria-label="Settings sections"]');
-        check(`${tag} Settings: ${v.two ? 'section list (nav) beside the content' : 'sub-tab row, no section nav'}`, (await sNav.count()) === (v.two ? 1 : 0));
+        // v3.18: the same <nav> in both layouts (no remount on fold) - a column beside the content, or a row of sub-tabs
+        check(`${tag} Settings: ${v.two ? 'section list (nav) beside the content' : 'sub-tab row above the section'}`, (await sNav.count()) === 1 &&
+          (await sNav.evaluate(n => getComputedStyle(n).flexDirection)) === (v.two ? 'column' : 'row'));
         if (v.two) {
           const order = [];
           for (const s of ['Tournaments', 'Account', 'Roster']) {
