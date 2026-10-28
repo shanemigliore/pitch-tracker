@@ -472,7 +472,9 @@ test('v3.17 stickyPane(rail): sticky under the header, own scroll, height bounde
   const m = uic.match(/const stickyPane = rail => \(\{([^]*?)\}\);/);
   assert(m, 'stickyPane defined');
   assert(/position:"sticky"/.test(m[1]) && /top:"calc\(var\(--top-gap\) \+ 66px\)"/.test(m[1]) && /overflowY:"auto"/.test(m[1]));
-  assert(/maxHeight:`calc\(100dvh - var\(--top-gap\) - 66px - \$\{rail \? "0px" : "64px"\} - env\(safe-area-inset-bottom, 0px\)\)`/.test(m[1]));
+  // height bounded by the viewport minus the header (exact bottom allowance is checked in the browser test,
+  // which scrolls each pane to the bottom of the page)
+  assert(/maxHeight:[`"]calc\(100dvh - var\(--top-gap\) - 66px - /.test(m[1]), 'maxHeight');
   assert(/window\.UIConstants = \{[^}]*\bstickyPane\b[^}]*\}/.test(uic));
   assert(/const \{[^}]*\bstickyPane\b[^}]*\} = window\.UIConstants;/.test(html));
 });
@@ -528,8 +530,18 @@ test('v3.17 modals: centered dialog (maxWidth 520, all corners rounded) when wid
     assert(/alignItems:wide\?"center":"flex-end"/.test(src), f + ' align');
     assert(/maxWidth:wide\?520:430/.test(src), f + ' width');
     assert(/borderRadius:wide\?20:"20px 20px 0 0"/.test(src), f + ' radius');
-    assert(/maxHeight:"(92vh|85dvh|85vh)", overflowY:"auto"|maxHeight:"85vh", overflowY:"auto"/.test(src), f + ' scroll');
+    // v3.17 verification B3: wide dialogs cap at 100% of the padded backdrop, sheets at a vh cap
+    assert(/maxHeight:wide\?"100%":"(92vh|85dvh|85vh)", boxSizing:"border-box"/.test(src) && /overflowY:"auto"/.test(src), f + ' scroll');
+    assert(/\.\.\.\(wide \? \{ paddingTop:"max\(var\(--top-gap\), 76px\)", paddingBottom:24 \} : null\)/.test(src), f + ' dialog clears the status area');
   }
+});
+
+test('native number-field steppers hidden: spin-button pseudos -webkit-appearance:none (+ margin 0), input appearance textfield; no inline override', () => {
+  const css = html.slice(html.indexOf('<style>'), html.indexOf('</style>')).replace(/\/\*[\s\S]*?\*\//g, '');
+  const m = css.match(/input\[type=number\]::-webkit-inner-spin-button,\s*input\[type=number\]::-webkit-outer-spin-button\s*\{([^}]*)\}/);
+  assert(m && /-webkit-appearance:\s*none/.test(m[1]) && /margin:\s*0/.test(m[1]), 'spin-button rule');
+  assert(/input\[type=number\]\s*\{[^}]*-moz-appearance:\s*textfield[^}]*appearance:\s*textfield/.test(css), 'textfield rule');
+  for (const [f, src] of Object.entries(comps)) assert(!/(Webkit|Moz)?[Aa]ppearance:\s*["'](auto|number-input|inner-spin-button)["']/.test(src), f);
 });
 
 // ── Collision rule ──────────────────────────────────────────────────────

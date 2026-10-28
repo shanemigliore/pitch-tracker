@@ -58,7 +58,7 @@ function oldGetCheck(p, { context, tournaments, gameDate, count }) {
     const info = getTourneyAdjustedRestInfo(p, tournaments, { before: addDays(gameDate, 1) });
     const sameDay = !info.isTourney && info.lastPitchDate === gameDate;
     return { level: 'violation', message: sameDay
-      ? `Threw ${info.totalPitches}p earlier today — eligible ${formatDate(eligStr)}`
+      ? `Threw ${info.totalPitches}p ${gameDate === todayStr() ? 'earlier today' : 'on ' + formatDate(gameDate)} — eligible ${formatDate(eligStr)}`
       : `Resting — eligible ${formatDate(eligStr)}` };
   }
   if (!selectedTourney || dateOutsideTourney) return null;
@@ -117,7 +117,7 @@ test('1d. regular: already reached daily max earlier today -> unavailable with r
   const b = getLivePitcherBudget(p, game(), []);
   assert.strictEqual(b.eligible, false);
   // v3.17: 55 earlier today owes rest, which is the more specific reason
-  assert.ok(/earlier today/.test(b.reason), b.reason);
+  assert.ok(/^Threw 55p (earlier today|on )/.test(b.reason), b.reason);
 });
 test('1e. regular: resting from yesterday -> unavailable "Resting"', () => {
   const p = pitcher('a', [h({ date: '2026-10-19', pitches: 45 })]); // 2 rest days -> elig 10-22

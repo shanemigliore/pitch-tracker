@@ -34,6 +34,7 @@ const http = require('http'); const fs = require('fs'); const path = require('pa
 
 const ROOT = path.join(__dirname, '..');
 const TYPES = { '.html':'text/html', '.js':'text/javascript', '.json':'application/json', '.png':'image/png' };
+const CDN_CACHE = new Map(); // url -> Promise<{ body, status, ct }>
 const CORNER_H = 164; // must match --corner-h in index.html (static test pins the var itself)
 
 function stub(role) {
@@ -125,7 +126,17 @@ async function openApp(browser, port, { w, h, t = 0, l = 0, r = 0, b = 0, sa = f
   await page.route('**/firebasejs/**', x => x.fulfill({ contentType: 'text/javascript', body: '' }));
   await page.route('**/lib/firebase-init.js', x => x.fulfill({ contentType: 'text/javascript', body: stub(role) }));
   await page.route('**/fonts.googleapis.com/**', x => x.fulfill({ contentType: 'text/css', body: '' }));
-  await page.goto(`http://localhost:${port}/?sim=${t},${r},${b},${l}${sa ? '&sa=1' : ''}`);
+  // Version-pinned CDN scripts (React/ReactDOM/Babel) are fetched once per run and replayed from memory,
+  // so dozens of fresh contexts don't each depend on the network proxy.
+  await page.route('https://cdnjs.cloudflare.com/**', async x => {
+    const u = x.request().url();
+    if (!CDN_CACHE.has(u)) CDN_CACHE.set(u, (async () => { const resp = await x.fetch({ timeout: 60000 }); return { body: await resp.body(), status: resp.status(), ct: resp.headers()['content-type'] || 'text/javascript' }; })());
+    try { const c = await CDN_CACHE.get(u); if (c.status !== 200) CDN_CACHE.delete(u); await x.fulfill({ status: c.status, contentType: c.ct, body: c.body }); }
+    catch (e) { CDN_CACHE.delete(u); await x.continue(); }
+  });
+  // CDN scripts (React/Babel) go through the network proxy; retry a slow load once instead of failing the run.
+  const url = `http://localhost:${port}/?sim=${t},${r},${b},${l}${sa ? '&sa=1' : ''}`;
+  try { await page.goto(url, { timeout: 60000 }); } catch (e) { await page.goto(url, { timeout: 60000 }); }
   await page.waitForSelector(waitFor, { timeout: 30000 });
   await page.waitForTimeout(500);
   return { ctx, page, errs, external };
@@ -882,8 +893,9 @@ async function sweep(page, zone, { withLive = false } = {}) {
       });
       const dialogGeom = page => page.evaluate(`(function(){ const bd = (${findBackdrop})(); if (!bd) return null; const s = bd.firstElementChild; const b = s.getBoundingClientRect(); const cs = getComputedStyle(s);
         const close = [...s.querySelectorAll('button')].find(x => x.getAttribute('aria-label') === 'Close' || /^✕$/.test(x.textContent.trim()));
-        const cb = close && close.getBoundingClientRect();
-        return { vw: document.documentElement.clientWidth, vh: innerHeight, l: b.left, r: b.right, t: b.top, b: b.bottom, w: b.width, h: b.height, radius: cs.borderBottomLeftRadius,
+        const cb = close && close.getBoundingClientRect(); const bcs = getComputedStyle(bd);
+        const cy = (parseFloat(bcs.paddingTop) + innerHeight - parseFloat(bcs.paddingBottom)) / 2;
+        return { vw: document.documentElement.clientWidth, vh: innerHeight, cy, l: b.left, r: b.right, t: b.top, b: b.bottom, w: b.width, h: b.height, radius: cs.borderBottomLeftRadius,
           oy: cs.overflowY, sh: s.scrollHeight, ch: s.clientHeight, close: cb && { l: cb.left, r: cb.right, t: cb.top, b: cb.bottom } }; })()`);
       const views = [
         { n: 'unfolded portrait 669x951', w: 669, h: 951, t: 82, b: 34, sa: true, two: true, icons: [549, 26, 642, 67] },
@@ -941,7 +953,7 @@ async function sweep(page, zone, { withLive = false } = {}) {
           await page.waitForTimeout(250);
           const dg = await dialogGeom(page);
           check(`${tag} Roster: Edit game opens a centered dialog (<=520 wide, all corners rounded, inside insets, vertically centered)`,
-            dg && dg.w <= 520.5 && dg.radius === '20px' && dg.l >= l - 0.5 && dg.r <= dg.vw - r + 0.5 && Math.abs((dg.t + dg.b) / 2 - dg.vh / 2) < 2, JSON.stringify(dg));
+            dg && dg.w <= 520.5 && dg.radius === '20px' && dg.l >= l - 0.5 && dg.r <= dg.vw - r + 0.5 && Math.abs((dg.t + dg.b) / 2 - dg.cy) < 2, JSON.stringify(dg));
           await page.locator('[data-test-modal] button[aria-label="Increase pitch count"]').click();
           await page.locator('[data-test-modal] button', { hasText: /Save/ }).first().click(); await page.waitForTimeout(250);
           check(`${tag} Roster: saving the edited game closes the dialog and the detail shows the new count (18 -> 19)`,
@@ -960,7 +972,7 @@ async function sweep(page, zone, { withLive = false } = {}) {
         const wideV = v.w >= 600;
         check(`${tag} rules ${wideV ? 'dialog centered, <=520, rounded' : 'bottom sheet flush with the bottom, <=430, top corners only'}; inside insets; scrollable`,
           rg && rg.l >= l - 0.5 && rg.r <= rg.vw - r + 0.5 && rg.oy === 'auto' && rg.h <= rg.vh + 0.5 &&
-          (wideV ? rg.w <= 520.5 && rg.radius === '20px' && Math.abs((rg.t + rg.b) / 2 - rg.vh / 2) < 2 : rg.w <= 430.5 && rg.radius === '0px' && Math.abs(rg.b - rg.vh) < 1), JSON.stringify(rg));
+          (wideV ? rg.w <= 520.5 && rg.radius === '20px' && Math.abs((rg.t + rg.b) / 2 - rg.cy) < 2 : rg.w <= 430.5 && rg.radius === '0px' && Math.abs(rg.b - rg.vh) < 1), JSON.stringify(rg));
         if (v.icons) { const ih = await rectHits(page, v.icons); check(`${tag} rules dialog: nothing under the clock/battery`, !ih.length, ih.join('; ')); }
         if (v.corner) { const cv = await insetViolations(page, { l, r, cornerR: r, cornerH: CORNER_H }, '[data-test-modal]'); check(`${tag} rules sheet: no control under the corner`, !cv.length, cv.join('; ')); }
         await clickBackdrop(page); await page.waitForTimeout(150);
@@ -983,7 +995,7 @@ async function sweep(page, zone, { withLive = false } = {}) {
         await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /^Edit$/.test(x.textContent.trim())); b && b.click(); }); await page.waitForTimeout(250);
         const sg = await dialogGeom(page);
         check(`${tag} Season: Edit opens EditGameGroupModal as a ${wideV ? 'centered dialog' : 'bottom sheet'} inside insets`,
-          sg && sg.l >= l - 0.5 && sg.r <= sg.vw - r + 0.5 && (wideV ? sg.w <= 520.5 && Math.abs((sg.t + sg.b) / 2 - sg.vh / 2) < 2 : Math.abs(sg.b - sg.vh) < 1), JSON.stringify(sg));
+          sg && sg.l >= l - 0.5 && sg.r <= sg.vw - r + 0.5 && (wideV ? sg.w <= 520.5 && Math.abs((sg.t + sg.b) / 2 - sg.cy) < 2 : Math.abs(sg.b - sg.vh) < 1), JSON.stringify(sg));
         if (v.icons) { const ih = await rectHits(page, v.icons); check(`${tag} Season edit dialog: nothing under the clock/battery`, !ih.length, ih.join('; ')); }
         await clickBackdrop(page); await page.waitForTimeout(150);
 
@@ -1060,7 +1072,7 @@ async function sweep(page, zone, { withLive = false } = {}) {
           return [y(document.querySelector('input[aria-label="Opponent"]')), y([...document.querySelectorAll('p')].find(p => p.textContent === 'WHO PITCHED?')), y(document.querySelector('button[aria-label="Carter"]')),
             y(document.querySelector('input[aria-label="Eli pitch count"]')), y([...document.querySelectorAll('button')].find(b => /Save Game/.test(b.textContent)))]; });
         check('[v3.17 phone 390x844] Log Game one-column order: details, WHO PITCHED, chips, counts (same card), save', ys2.every(x => x !== null) && ys2.every((v, i) => !i || v > ys2[i - 1]), JSON.stringify(ys2));
-        check('[v3.17 phone 390x844] Log Game: no "PITCH COUNTS" pane title on phones', (await page.locator('text=PITCH COUNTS').count()) === 0);
+        check('[v3.17 phone 390x844] Log Game: no "PITCH COUNTS" pane title on phones', (await page.evaluate(() => [...document.querySelectorAll('p')].filter(p => p.textContent.trim() === 'PITCH COUNTS').length)) === 0);
         await ctx.close();
       }
 
@@ -1080,6 +1092,82 @@ async function sweep(page, zone, { withLive = false } = {}) {
         const st2 = await page.evaluate(() => ({ list: [...document.querySelectorAll('#root div[style*="cursor: pointer"]')].some(d => /Luke/.test(d.textContent)),
           detail: !![...document.querySelectorAll('h2')].find(h => /LUKE/.test(h.textContent)), placeholder: /Tap a pitcher/.test(document.body.innerText) }));
         check('[v3.17 remote update] a pitcher deleted on another device disappears from the embedded detail too (placeholder back)', !st2.list && !st2.detail && st2.placeholder, JSON.stringify(st2));
+        await ctx.close();
+      }
+    }
+
+    // ── v3.17: tall dialog on the unfolded Duo (portrait) vs the measured clock/battery ──
+    // A game with many pitchers makes EditGameGroupModal hit its 92vh cap; vertically centred,
+    // its top (and the close button) then sits ~4vh from the top of the screen.
+    {
+      const { ctx, page, errs } = await openApp(browser, port, { w: 669, h: 951, t: 82, b: 34, sa: true });
+      await page.evaluate(() => { const r = JSON.parse(JSON.stringify(window.__stubRoster)); const day = r[2].history[0].date;
+        r.forEach((p, i) => p.history.push({ gameId: 'big' + i, date: day, pitches: 5 + i, opponent: 'Giants', isTournament: false, tournamentId: null, tournamentName: null, tourneyDay: null, sharedGameId: 'sgBig' }));
+        window.__pushData({ roster: r, tournaments: [] }); });
+      await page.waitForTimeout(300);
+      await tabBtn(page, 'Season').click(); await page.waitForTimeout(250);
+      await page.evaluate(() => { const card = [...document.querySelectorAll('#root div')].filter(d => /vs Giants/.test(d.textContent) && [...d.querySelectorAll('button')].some(b => /^Edit$/.test(b.textContent.trim()))).pop();
+        [...card.querySelectorAll('button')].find(b => /^Edit$/.test(b.textContent.trim())).click(); });
+      await page.waitForTimeout(300);
+      const icons = [549, 26, 642, 67];
+      const hits = await rectHits(page, icons);
+      const dg = await page.evaluate(`(function(){ const bd = (${findBackdrop})(); const s = bd.firstElementChild; const b = s.getBoundingClientRect(); return { t: b.top, b: b.bottom, h: b.height, sh: s.scrollHeight, ch: s.clientHeight }; })()`);
+      check('[v3.17 unfolded portrait, 6-pitcher game] Season edit dialog: close button and contents clear of the clock/battery (x 549-642, y 26-67)', !hits.length, JSON.stringify({ dg, hits }));
+      check('[v3.17 unfolded portrait, 6-pitcher game] tall dialog scrolls inside itself', dg.sh > dg.ch, JSON.stringify(dg));
+      check('[v3.17 unfolded portrait, 6-pitcher game] no page errors', !errs.length, errs.join(' | '));
+      await ctx.close();
+    }
+
+    // ── Native number-field steppers hidden (index.html <style>; Chromium/desktop draws them on hover/focus) ──
+    // Reads the user-agent shadow DOM over CDP: every <input type=number>'s ::-webkit-inner-spin-button must
+    // resolve to -webkit-appearance:none and 0px wide (a default stepper is 'auto', 15px - sanity-checked
+    // on an injected input that opts back in).
+    {
+      const spinInfo = async page => {
+        const s = await page.context().newCDPSession(page); await s.send('DOM.enable'); await s.send('CSS.enable');
+        const { root } = await s.send('DOM.getDocument', { depth: -1, pierce: true });
+        const out = []; const walk = (n, host) => { const at = n.attributes || []; const pi = at.indexOf('pseudo');
+          if (pi >= 0 && /spin-button/.test(at[pi + 1]) && host) out.push({ host, pseudo: at[pi + 1], nodeId: n.nodeId });
+          const isNum = n.nodeName === 'INPUT' && at.some((x, i) => i % 2 === 0 && x === 'type' && at[i + 1] === 'number');
+          const attr = k => { const i = at.indexOf(k); return i >= 0 && i % 2 === 0 ? at[i + 1] : null; };
+          const h = isNum ? (attr('aria-label') || attr('id') || 'input') : host;
+          (n.children || []).forEach(c => walk(c, h)); (n.shadowRoots || []).forEach(c => walk(c, h)); };
+        walk(root, null);
+        for (const o of out) { const { computedStyle } = await s.send('CSS.getComputedStyleForNode', { nodeId: o.nodeId });
+          const g = k => (computedStyle.find(x => x.name === k) || {}).value; o.app = g('-webkit-appearance') || g('appearance'); o.w = g('width'); }
+        await s.detach(); return out.filter(o => o.pseudo === '-webkit-inner-spin-button');
+      };
+      for (const v of [{ n: 'unfolded portrait', w: 669, h: 951, t: 82, b: 34, sa: true }, { n: 'phone', w: 390, h: 844 }]) {
+        const { ctx, page } = await openApp(browser, port, v);
+        const tag = `[steppers ${v.n}]`; const seen = new Set(), bad = [];
+        const all = async state => { for (const o of await spinInfo(page)) { if (o.host === 'spin-sanity') continue; seen.add(state + ':' + o.host); if (o.app !== 'none' || o.w !== '0px') bad.push(`${state}: ${o.host} (${o.app}, ${o.w})`); } };
+        // sanity: an injected number input that opts back in gets a real stepper
+        await page.evaluate(() => { const st = document.createElement('style'); st.textContent = '#spin-sanity::-webkit-inner-spin-button{-webkit-appearance:auto!important}';
+          document.head.appendChild(st); const i = document.createElement('input'); i.type = 'number'; i.id = 'spin-sanity'; document.body.appendChild(i); });
+        const san = (await spinInfo(page)).find(o => o.host === 'spin-sanity');
+        check(`${tag} sanity: the CDP probe sees a real stepper when one is opted back in`, san && san.app !== 'none' && parseFloat(san.w) > 0, JSON.stringify(san));
+        await page.evaluate(() => document.getElementById('spin-sanity').remove());
+        await tabBtn(page, 'Log Game').click(); await page.waitForTimeout(200);
+        for (const nm of ['Eli', 'Carter']) await page.locator(`button[aria-pressed="false"][aria-label="${nm}"]`).click();
+        await page.locator('input[aria-label="Eli pitch count"]').focus();
+        await all('Log Game');
+        await tabBtn(page, 'Live').click(); await page.evaluate(() => window.__setLive(window.__demoLive)); await page.waitForTimeout(300); await all('Live');
+        await tabBtn(page, 'Season').click(); await page.waitForTimeout(200);
+        await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /^Edit$/.test(x.textContent.trim())); b && b.click(); }); await page.waitForTimeout(250);
+        await all('EditGameGroupModal'); await clickBackdrop(page); await page.waitForTimeout(150);
+        await tabBtn(page, 'Roster').click(); await page.waitForTimeout(150);
+        await page.locator('#root div[style*="cursor: pointer"]', { hasText: 'Johnny' }).first().click(); await page.waitForTimeout(200);
+        await page.evaluate(() => { const b = [...document.querySelectorAll('button')].filter(x => /Edit$/.test(x.textContent.trim()) && !x.getAttribute('aria-label')).pop(); b && b.click(); }); await page.waitForTimeout(250);
+        await all('EditGameModal'); await clickBackdrop(page); await page.waitForTimeout(150);
+        await tabBtn(page, 'Settings').click(); await page.locator('button', { hasText: /^Tournaments$/ }).first().click(); await page.waitForTimeout(200);
+        const newOk = await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === 'New'); if (b) b.click(); return !!b; }); await page.waitForTimeout(200);
+        if (!newOk) console.log(`INFO  ${tag} tournament "New" button not found: ` + (await page.evaluate(() => document.querySelector('#root').innerText.slice(0, 300))));
+        await all('Tournament form');
+        await page.locator('button:has-text("TEAM")').first().click(); await page.waitForTimeout(300);
+        await page.locator('button[aria-label^="Manage "]').first().click(); await page.waitForTimeout(250); await all('Team manage sheet');
+        const states = new Set([...seen].map(x => x.split(':')[0]));
+        check(`${tag} every number input's native stepper is hidden (appearance none, 0px) - ${seen.size} inputs in ${[...states].join(', ')}`,
+          seen.size >= 12 && states.size >= 6 && !bad.length, bad.join('; ') + ' | seen=' + [...seen].join(','));
         await ctx.close();
       }
     }

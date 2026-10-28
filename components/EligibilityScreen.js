@@ -211,11 +211,13 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null }) {
       {showRulesInfo && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:50,
           display:"flex", alignItems:wide?"center":"flex-end", justifyContent:"center",
-          paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)" }}
+          paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)",
+      // Wide dialog: keep a tall one below the status area (unfolded Duo clock) and off the bottom edge
+      ...(wide ? { paddingTop:"max(var(--top-gap), 76px)", paddingBottom:24 } : null) }}
           onClick={e=>{ if(e.target===e.currentTarget) setShowRulesInfo(false); }}>
           <div style={{ width:"100%", maxWidth:wide?520:430, background:"#0f1623",
             border:"1px solid rgba(255,255,255,0.12)", borderRadius:wide?20:"20px 20px 0 0",
-            padding:"20px 18px 40px", maxHeight:"85dvh", overflowY:"auto" }}>
+            padding:"20px 18px 40px", maxHeight:wide?"100%":"85dvh", boxSizing:"border-box", overflowY:"auto" }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
               <div style={{ fontSize:16, fontWeight:800, color:"#f8fafc" }}>Availability Key & Rest Requirements</div>
               <button onClick={()=>setShowRulesInfo(false)} aria-label="Close" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:8,

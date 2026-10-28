@@ -71,7 +71,8 @@ test('boundary sweep 0..80 earlier today: eligible iff <= rest1, pitchesLeft = 5
     assert.strictEqual(!!c, !!want, `logcheck n=${n}`);
     if (want) {
       assert.strictEqual(getRegularSeasonRestBlock(pitcher([h(D, n)]), [], D).eligibleDate, want);
-      assert.ok(c.message.includes(`Threw ${n}p earlier today`), c.message);
+      // wording follows the game date: "earlier today" only when it IS today (verification A1)
+      assert.ok(/^Threw \d+p (earlier today|on [A-Z][a-z]{2} \d{1,2}) — eligible /.test(c.message) && c.message.startsWith(`Threw ${n}p `), c.message);
     }
   }
 });

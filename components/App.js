@@ -62,6 +62,9 @@ function App({ role }) {
   const [tournaments, setTournaments] = useState([]);
   const [tab,         setTab]         = useState("roster");
   const [selectedPlayer, setSelectedPlayer] = useState(null);
+  // Keep the open pitcher in step with the roster - edits/deletes from other
+  // devices arrive via the subscription, and the wide detail pane stays open.
+  useEffect(() => { setSelectedPlayer(prev => prev ? (roster.find(p => p.id === prev.id) || null) : prev); }, [roster]);
   const [loaded,      setLoaded]      = useState(false);
   const [syncStatus,  setSyncStatus]  = useState("connecting");
   const [updateAvailable, setUpdateAvailable] = useState(false);
