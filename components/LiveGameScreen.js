@@ -17,6 +17,9 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
   // the value out from under the coach mid-typing. Committed on blur/Enter.
   const [countDrafts, setCountDrafts] = useState({});
   const [opponentDraft, setOpponentDraft] = useState(null);
+  // Folding/rotating can switch two-pane on or off, which remounts the inputs
+  // without a blur - an open draft would stick, showing a stale typed count.
+  useEffect(() => { setCountDrafts({}); setOpponentDraft(null); }, [twoPane]);
   const [opponentErr, setOpponentErr] = useState(false);
   const [completeErr, setCompleteErr] = useState("");
   const [warnViolations, setWarnViolations] = useState(false);

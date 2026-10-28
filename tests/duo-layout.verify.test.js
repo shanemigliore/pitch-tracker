@@ -212,7 +212,8 @@ test('App wrapper: centeredColumn(colWidth), paddingLeft railWidth only with the
   assert(/const colWidth = layout\.rail \? "100%" : layout\.wide \? "min\(1100px, 100%\)" : "min\(430px, 100%\)";/.test(app));
   assert(/minHeight:"100dvh", \.\.\.centeredColumn\(colWidth\),\s*paddingLeft: layout\.rail \? layout\.railWidth : 0,/.test(app));
   assert(/const liveTwoPane = layout\.twoPane && tab==="live";/.test(app));
-  assert(/const screenWrap = \(layout\.wide && !liveTwoPane\) \? \{ width:"min\(430px, 100%\)", margin:"0 auto" \} : null;/.test(app));
+  // v3.16 verification B1: the 430 column is screen-centred beside the rail too (offset = rail width)
+  assert(/const screenWrap = \(layout\.wide && !liveTwoPane\)\s*\? centeredColumn\("min\(430px, 100%\)", layout\.rail \? `\$\{layout\.railWidth\}px` : "0px"\) : null;/.test(app));
   assert(/<LiveGameScreen [^>]*twoPane=\{liveTwoPane\}/.test(app));
   assert(!/maxWidth:430, margin:"0 auto"/.test(app), 'old fixed 430 wrapper gone');
 });
@@ -302,13 +303,14 @@ test('hooks used by DisplayInfoSection are destructured in the head-shell', () =
 const vm = require('vm');
 const ui = read('lib/ui-constants.js');
 test('centeredColumn: width + marginRight 0 + clamp()ed marginLeft that centers on the screen within the insets', () => {
-  const src = ui.match(/const centeredColumn = width => \(\{[\s\S]*?\}\);/);
+  const src = ui.match(/const centeredColumn = \(width, offset="0px"\) => \(\{[\s\S]*?\}\);/);
   assert(src, 'centeredColumn defined');
   const cc = vm.runInNewContext(src[0] + '; centeredColumn');
   const o = cc('min(430px, 100%)');
   assert.deepStrictEqual(Object.keys(o).sort(), ['marginLeft', 'marginRight', 'width']);
   assert.strictEqual(o.width, 'min(430px, 100%)'); assert.strictEqual(o.marginRight, 0);
-  assert.strictEqual(o.marginLeft, 'clamp(0px, calc((100vw - min(430px, 100%)) / 2 - var(--safe-l)), calc(100% - min(430px, 100%)))');
+  assert.strictEqual(o.marginLeft, 'clamp(0px, calc((100vw - min(430px, 100%)) / 2 - var(--safe-l) - 0px), calc(100% - min(430px, 100%)))');
+  assert.strictEqual(cc('min(430px, 100%)', '72px').marginLeft, 'clamp(0px, calc((100vw - min(430px, 100%)) / 2 - var(--safe-l) - 72px), calc(100% - min(430px, 100%)))', 'rail offset');
   // model of that CSS (100% = body content box = vw - safe-l - bodyPadR): screen-centred when it fits
   const left = (vw, l, r, W) => { const box = vw - l - r, w = Math.min(W, box); return l + Math.min(Math.max(0, (vw - w) / 2 - l), box - w); };
   assert.strictEqual(left(678, 0, 84, 430) + 215, 339, 'folded landscape, inset right: centred');

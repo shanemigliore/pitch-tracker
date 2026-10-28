@@ -144,8 +144,14 @@ function useLayout() {
   }
   const [layout, setLayout] = useState(measure);
   useEffect(() => {
-    let timers = [];
+    let timers = [], lastW = window.innerWidth;
     function update() {
+      // An on-screen keyboard can shrink only the height; re-laying out then
+      // (e.g. portrait reading as landscape) would remount the field being typed in.
+      const el = document.activeElement;
+      const typing = el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT");
+      if (typing && window.innerWidth === lastW) return;
+      lastW = window.innerWidth;
       const next = measure();
       setLayout(prev => (prev.wide===next.wide && prev.rail===next.rail && prev.twoPane===next.twoPane) ? prev : next);
     }

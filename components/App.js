@@ -321,7 +321,8 @@ function App({ role }) {
   // column until they get wide layouts of their own.
   const colWidth = layout.rail ? "100%" : layout.wide ? "min(1100px, 100%)" : "min(430px, 100%)";
   const liveTwoPane = layout.twoPane && tab==="live";
-  const screenWrap = (layout.wide && !liveTwoPane) ? { width:"min(430px, 100%)", margin:"0 auto" } : null;
+  const screenWrap = (layout.wide && !liveTwoPane)
+    ? centeredColumn("min(430px, 100%)", layout.rail ? `${layout.railWidth}px` : "0px") : null;
 
   const tabButton = (t, vertical) => {
     const active = (tab===t.id && !selectedPlayer) || (tab==="roster" && selectedPlayer && t.id==="roster");
