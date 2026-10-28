@@ -15,7 +15,7 @@ const logic = require('../lib/pitch-logic.js');
 const {
   getLivePitcherBudget, getRestThresholdInfo, liveGameToLogEntries, buildGameEntries,
   getGameLogCheck, normalizeLiveGame, sanitizeLiveCount, sanitizeOpponent, getLiveGamePitcherIds,
-  getEligibleDateStr, getTourneyLimitViolation, getTourneyDayNumber, formatDate,
+  getEligibleDateStr, getTourneyLimitViolation, getTourneyDayNumber, formatDate, getTourneyAdjustedRestInfo,
   setCurrentRules, DEFAULT_RULES, LIVE_MAX_COUNT, LIVE_OPPONENT_MAX, todayStr, addDays,
 } = logic;
 
@@ -51,9 +51,15 @@ function oldGetCheck(p, { context, tournaments, gameDate, count }) {
   const tourneyDay = selectedTourney ? getTourneyDayNumber(selectedTourney, gameDate) : null;
   const dateOutsideTourney = context !== 'regular' && !!selectedTourney && !tourneyDay;
   if (context === 'regular') {
-    const eligStr = getEligibleDateStr(p, tournaments, { before: gameDate });
-    return eligStr && eligStr > gameDate
-      ? { level: 'violation', message: `Resting — eligible ${formatDate(eligStr)}` } : null;
+    // v3.17: regular season counts outings already logged ON the game date too
+    // (no doubleheader allowance once rest is owed) - the oracle follows the rule.
+    const eligStr = getEligibleDateStr(p, tournaments, { before: addDays(gameDate, 1) });
+    if (!(eligStr && eligStr > gameDate)) return null;
+    const info = getTourneyAdjustedRestInfo(p, tournaments, { before: addDays(gameDate, 1) });
+    const sameDay = !info.isTourney && info.lastPitchDate === gameDate;
+    return { level: 'violation', message: sameDay
+      ? `Threw ${info.totalPitches}p earlier today — eligible ${formatDate(eligStr)}`
+      : `Resting — eligible ${formatDate(eligStr)}` };
   }
   if (!selectedTourney || dateOutsideTourney) return null;
   return getTourneyLimitViolation(p, selectedTourney, gameDate, count, tournaments);
@@ -110,7 +116,8 @@ test('1d. regular: already reached daily max earlier today -> unavailable with r
   const p = pitcher('a', [h({ date: '2026-10-20', pitches: 55 })]);
   const b = getLivePitcherBudget(p, game(), []);
   assert.strictEqual(b.eligible, false);
-  assert.ok(/daily max/.test(b.reason), b.reason);
+  // v3.17: 55 earlier today owes rest, which is the more specific reason
+  assert.ok(/earlier today/.test(b.reason), b.reason);
 });
 test('1e. regular: resting from yesterday -> unavailable "Resting"', () => {
   const p = pitcher('a', [h({ date: '2026-10-19', pitches: 45 })]); // 2 rest days -> elig 10-22

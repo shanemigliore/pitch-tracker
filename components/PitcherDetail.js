@@ -6,7 +6,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: PITCHER DETAIL
 // ══════════════════════════════════════════════════════════════════════════════
-function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame, onEditPlayer }) {
+function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame, onEditPlayer, embedded=false }) {
   const [editingEntry, setEditingEntry] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState(pitcher.name);
@@ -50,8 +50,10 @@ function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame,
       )}
 
       <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0 16px", marginRight:"var(--corner-r)" }}>
-        <button onClick={onBack} aria-label="Back to roster" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
-          padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
+        {!embedded && (
+          <button onClick={onBack} aria-label="Back to roster" style={{ background:"rgba(255,255,255,0.07)", border:"none", borderRadius:10,
+            padding:10, color:"rgba(255,255,255,0.7)", cursor:"pointer", display:"flex" }}>{I.back}</button>
+        )}
         <div style={{ flex:1 }}>
           <h2 style={{ margin:0, fontSize:22, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:1.5 }}>
             {pitcher.jersey?`#${pitcher.jersey} · `:""}{pitcher.name.toUpperCase()}

@@ -8,7 +8,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: SEASON — grouped by game, tournaments grouped as one container
 // ══════════════════════════════════════════════════════════════════════════════
-function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
+function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame, twoPane=false, rail=false }) {
   const [year, setYear] = useState(new Date().getFullYear().toString());
   const [filterPitcherId, setFilterPitcherId] = useState("all");
   const [editingGame, setEditingGame] = useState(null);
@@ -137,31 +137,11 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
     );
   }
 
-  return (
-    <div style={{ padding:"0 16px 110px" }}>
-      {editingGame && (
-        <EditGameGroupModal
-          game={editingGame}
-          tournaments={tournaments}
-          onEditGame={onEditGame}
-          onDeleteGame={onDeleteGame}
-          onClose={()=>setEditingGame(null)}/>
-      )}
-
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"16px 0 14px", marginRight:"var(--corner-r)" }}>
-        <div>
-          <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>SEASON</h2>
-          <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>{filteredGameCount} game{filteredGameCount!==1?"s":""} · {filteredEntries.length} appearance{filteredEntries.length!==1?"s":""}</p>
-        </div>
-        {years.length>1 && (
-          <select value={displayYear} onChange={e=>setYear(e.target.value)} aria-label="Year"
-            style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)",
-              borderRadius:10, padding:"6px 10px", color:"#f8fafc", fontSize:14 }}>
-            {years.map(y=><option key={y} value={y}>{y}</option>)}
-          </select>
-        )}
-      </div>
-
+  // Sections. One column on phones (filter, totals, leaderboard, summary, games);
+  // on wide screens the games scroll on the left while filter/totals/leaderboard
+  // stay pinned on the right (stickyPane). Same elements either way.
+  // Pitcher filter chips
+  const filterCard = (<>
       {/* Pitcher filter */}
       {pitchersWithGames.length > 1 && (
         <div style={card}>
@@ -191,16 +171,9 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
           </div>
         </div>
       )}
-
-      {displayItems.length===0 ? (
-        <div style={{ textAlign:"center", padding:"60px 0", color:"rgba(255,255,255,0.2)" }}>
-          <div style={{ fontSize:56, marginBottom:12 }}>📊</div>
-          <p style={{ fontSize:15, fontWeight:600 }}>
-            {filterPitcherId==="all" ? `No games logged for ${displayYear}` : `No games for ${activePitcher?.name} in ${displayYear}`}
-          </p>
-        </div>
-      ) : (
-        <>
+  </>);
+  // Total / Games / Tourney tiles
+  const totalsRow = (<>
           {/* Summary stats */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:12 }}>
             {[["Total",totalPitches+"p","#38bdf8"],
@@ -214,7 +187,9 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
               </div>
             ))}
           </div>
-
+  </>);
+  // Leaderboard (also a filter)
+  const leaderboardCard = (<>
           {/* Leaderboard — stays visible even while filtered, with the active
               pitcher's row highlighted, so it's clear the chip row above and
               this list drive the same filter rather than two separate things. */}
@@ -266,7 +241,9 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
               <p style={{ margin:"8px 0 0", fontSize:10, color:"rgba(255,255,255,0.25)" }}>Tap a player to filter their games, tap again to clear</p>
             </div>
           )}
-
+  </>);
+  // The filtered pitcher's summary
+  const pitcherSummary = (<>
           {/* Filtered pitcher summary */}
           {activePitcher && (
             <div style={{ ...card, border:"1px solid rgba(56,189,248,0.2)", background:"rgba(56,189,248,0.04)" }}>
@@ -281,7 +258,9 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
               </div>
             </div>
           )}
-
+  </>);
+  // Games and tournament containers
+  const gameList = (<>
           {/* Games and tournament containers — one card per item, chronological */}
           {displayItems.map((item,ii) => item.kind==="tournament" ? (
             <div key={"t_"+item.tournamentId} style={{ ...card, border:"1px solid rgba(245,158,11,0.2)" }}>
@@ -339,7 +318,49 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame }) {
               )}
             </div>
           ))}
+  </>);
+
+  return (
+    <div style={{ padding:"0 16px 110px" }}>
+      {editingGame && (
+        <EditGameGroupModal
+          game={editingGame}
+          tournaments={tournaments}
+          onEditGame={onEditGame}
+          onDeleteGame={onDeleteGame}
+          onClose={()=>setEditingGame(null)}/>
+      )}
+
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"16px 0 14px", marginRight:"var(--corner-r)" }}>
+        <div>
+          <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>SEASON</h2>
+          <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>{filteredGameCount} game{filteredGameCount!==1?"s":""} · {filteredEntries.length} appearance{filteredEntries.length!==1?"s":""}</p>
+        </div>
+        {years.length>1 && (
+          <select value={displayYear} onChange={e=>setYear(e.target.value)} aria-label="Year"
+            style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)",
+              borderRadius:10, padding:"6px 10px", color:"#f8fafc", fontSize:14 }}>
+            {years.map(y=><option key={y} value={y}>{y}</option>)}
+          </select>
+        )}
+      </div>
+
+      {displayItems.length===0 ? (
+        <>{filterCard}
+        <div style={{ textAlign:"center", padding:"60px 0", color:"rgba(255,255,255,0.2)" }}>
+          <div style={{ fontSize:56, marginBottom:12 }}>📊</div>
+          <p style={{ fontSize:15, fontWeight:600 }}>
+            {filterPitcherId==="all" ? `No games logged for ${displayYear}` : `No games for ${activePitcher?.name} in ${displayYear}`}
+          </p>
+        </div>
         </>
+      ) : twoPane ? (
+        <div style={{ display:"grid", gridTemplateColumns:"minmax(320px, 1.3fr) minmax(260px, 1fr)", gap:16, alignItems:"start" }}>
+          <div style={{ minWidth:0 }}>{gameList}</div>
+          <div style={{ minWidth:0, ...stickyPane(rail) }}>{filterCard}{totalsRow}{leaderboardCard}{pitcherSummary}</div>
+        </div>
+      ) : (
+        <>{filterCard}{totalsRow}{leaderboardCard}{pitcherSummary}{gameList}</>
       )}
     </div>
   );

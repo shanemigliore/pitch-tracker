@@ -320,9 +320,11 @@ function App({ role }) {
   // panes) on wide screens, where the other tabs still sit in a centered 430px
   // column until they get wide layouts of their own.
   const colWidth = layout.rail ? "100%" : layout.wide ? "min(1100px, 100%)" : "min(430px, 100%)";
-  const liveTwoPane = layout.twoPane && tab==="live";
-  const screenWrap = (layout.wide && !liveTwoPane)
+  // Two-pane screens use the full frame; the folded Duo in landscape (wide but
+  // too narrow for two panes) keeps one screen-centered phone-width column.
+  const screenWrap = (layout.wide && !layout.twoPane)
     ? centeredColumn("min(430px, 100%)", layout.rail ? `${layout.railWidth}px` : "0px") : null;
+  const detailProps = { tournaments, onEditGame:editGame, onDeleteGame:deleteGame, onEditPlayer:editPlayer };
 
   const tabButton = (t, vertical) => {
     const active = (tab===t.id && !selectedPlayer) || (tab==="roster" && selectedPlayer && t.id==="roster");
@@ -418,31 +420,50 @@ function App({ role }) {
 
       {/* ── Screens ── */}
       <div style={screenWrap || undefined}>
-        {tab==="roster" && selectedPlayer ? (
+        {tab==="roster" && layout.twoPane ? (
+          // Wide: list | the tapped pitcher's detail (pinned, scrolls on its own)
+          <div style={{ display:"grid", gridTemplateColumns:"minmax(300px, 1fr) minmax(320px, 1.15fr)", alignItems:"start" }}>
+            <div style={{ minWidth:0 }}>
+              <EligibilityScreen roster={roster} tournaments={tournaments} onSelect={p=>setSelectedPlayer(p)}
+                selectedId={selectedPlayer ? selectedPlayer.id : null}/>
+            </div>
+            <div style={{ minWidth:0, ...stickyPane(layout.rail) }}>
+              {selectedPlayer ? (
+                <ScreenBoundary key={selectedPlayer.id} onBack={()=>setSelectedPlayer(null)}>
+                  <PitcherDetail key={selectedPlayer.id} pitcher={selectedPlayer} embedded onBack={()=>setSelectedPlayer(null)} {...detailProps}/>
+                </ScreenBoundary>
+              ) : (
+                <div style={{ ...card, margin:"62px 16px 0", textAlign:"center", padding:"40px 16px", color:"rgba(255,255,255,0.35)" }}>
+                  <div style={{ fontSize:32, marginBottom:8 }}>👈</div>
+                  <div style={{ fontSize:14, fontWeight:700 }}>Tap a pitcher</div>
+                  <div style={{ fontSize:12, marginTop:4 }}>Their stats and season history show here.</div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : tab==="roster" && selectedPlayer ? (
           <ScreenBoundary onBack={()=>setSelectedPlayer(null)}>
-            <PitcherDetail pitcher={selectedPlayer} onBack={()=>setSelectedPlayer(null)}
-              tournaments={tournaments}
-              onEditGame={editGame} onDeleteGame={deleteGame} onEditPlayer={editPlayer}/>
+            <PitcherDetail pitcher={selectedPlayer} onBack={()=>setSelectedPlayer(null)} {...detailProps}/>
           </ScreenBoundary>
         ) : tab==="roster" ? (
           <EligibilityScreen roster={roster} tournaments={tournaments} onSelect={p=>setSelectedPlayer(p)}/>
         ) : tab==="live" ? (
           <ScreenBoundary>
-            <LiveGameScreen roster={roster} tournaments={tournaments} liveGame={liveGame} twoPane={liveTwoPane}
+            <LiveGameScreen roster={roster} tournaments={tournaments} liveGame={liveGame} twoPane={layout.twoPane}
               onStart={startLiveGame} onAction={liveGameAction}
               onComplete={completeLiveGame} onDiscard={discardLiveGame}/>
           </ScreenBoundary>
         ) : tab==="gamelog" ? (
-          <GameLogScreen roster={roster} onLogMultiple={logMultiple} tournaments={tournaments}/>
+          <GameLogScreen roster={roster} onLogMultiple={logMultiple} tournaments={tournaments} twoPane={layout.twoPane} rail={layout.rail}/>
         ) : tab==="season" ? (
           <ScreenBoundary>
-            <SeasonHistory roster={roster} tournaments={tournaments} onEditGame={editGame} onDeleteGame={deleteGame}/>
+            <SeasonHistory roster={roster} tournaments={tournaments} onEditGame={editGame} onDeleteGame={deleteGame} twoPane={layout.twoPane} rail={layout.rail}/>
           </ScreenBoundary>
         ) : (
           <ScreenBoundary>
             <Settings roster={roster} onAddPlayer={addPlayer} onDeletePlayer={deletePlayer}
               tournaments={tournaments} onAddTourney={addTourney} onDeleteTourney={deleteTourney} onUpdateTourney={updateTourney}
-              role={role} onLogout={logout}/>
+              role={role} onLogout={logout} twoPane={layout.twoPane}/>
           </ScreenBoundary>
         )}
       </div>

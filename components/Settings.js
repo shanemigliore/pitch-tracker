@@ -282,7 +282,7 @@ function AccountSection({ role, onLogout }) {
 // SCREEN: SETTINGS
 // ══════════════════════════════════════════════════════════════════════════════
 function Settings({ roster, onAddPlayer, onDeletePlayer, tournaments, onAddTourney, onDeleteTourney, onUpdateTourney,
-  role, onLogout }) {
+  role, onLogout, twoPane=false }) {
   const [section, setSection] = useState("roster");
 
   const sections = [
@@ -297,24 +297,51 @@ function Settings({ roster, onAddPlayer, onDeletePlayer, tournaments, onAddTourn
         <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>SETTINGS</h2>
       </div>
 
-      <div style={{ display:"flex", gap:8, margin:"0 calc(16px + var(--corner-r)) 14px 16px" }}>
-        {sections.map(([id,label])=>(
-          <button key={id} onClick={()=>setSection(id)} aria-pressed={section===id}
-            style={{ flex:1, padding:"10px", borderRadius:12,
-              border:`1px solid ${section===id?"#38bdf8":"rgba(255,255,255,0.1)"}`,
-              background:section===id?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
-              color:section===id?"#38bdf8":"rgba(255,255,255,0.5)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {twoPane ? (
+        // Wide: sections as a list on the left, the selected one on the right
+        <div style={{ display:"grid", gridTemplateColumns:"180px minmax(0, 1fr)", gap:8, alignItems:"start" }}>
+          <nav aria-label="Settings sections" style={{ display:"flex", flexDirection:"column", gap:8, padding:"0 0 0 16px" }}>
+            {sections.map(([id,label])=>(
+              <button key={id} onClick={()=>setSection(id)} aria-pressed={section===id}
+                style={{ textAlign:"left", padding:"12px 14px", borderRadius:12,
+                  border:`1px solid ${section===id?"#38bdf8":"rgba(255,255,255,0.1)"}`,
+                  background:section===id?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
+                  color:section===id?"#38bdf8":"rgba(255,255,255,0.5)", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div style={{ minWidth:0 }}>
+          {section==="roster" && <AddPitcherSection roster={roster} onAdd={onAddPlayer} onDelete={onDeletePlayer}/>}
+          {section==="tournaments" && (
+            <TournamentScreen roster={roster} tournaments={tournaments}
+              onAddTourney={onAddTourney} onDeleteTourney={onDeleteTourney} onUpdateTourney={onUpdateTourney}/>
+          )}
+          {section==="account" && <AccountSection role={role} onLogout={onLogout}/>}
+          </div>
+        </div>
+      ) : (
+        <>
+        <div style={{ display:"flex", gap:8, margin:"0 calc(16px + var(--corner-r)) 14px 16px" }}>
+          {sections.map(([id,label])=>(
+            <button key={id} onClick={()=>setSection(id)} aria-pressed={section===id}
+              style={{ flex:1, padding:"10px", borderRadius:12,
+                border:`1px solid ${section===id?"#38bdf8":"rgba(255,255,255,0.1)"}`,
+                background:section===id?"rgba(56,189,248,0.15)":"rgba(255,255,255,0.04)",
+                color:section===id?"#38bdf8":"rgba(255,255,255,0.5)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+              {label}
+            </button>
+          ))}
+        </div>
 
-      {section==="roster" && <AddPitcherSection roster={roster} onAdd={onAddPlayer} onDelete={onDeletePlayer}/>}
-      {section==="tournaments" && (
-        <TournamentScreen roster={roster} tournaments={tournaments}
-          onAddTourney={onAddTourney} onDeleteTourney={onDeleteTourney} onUpdateTourney={onUpdateTourney}/>
+        {section==="roster" && <AddPitcherSection roster={roster} onAdd={onAddPlayer} onDelete={onDeletePlayer}/>}
+        {section==="tournaments" && (
+          <TournamentScreen roster={roster} tournaments={tournaments}
+            onAddTourney={onAddTourney} onDeleteTourney={onDeleteTourney} onUpdateTourney={onUpdateTourney}/>
+        )}
+        {section==="account" && <AccountSection role={role} onLogout={onLogout}/>}
+        </>
       )}
-      {section==="account" && <AccountSection role={role} onLogout={onLogout}/>}
     </div>
   );
 }

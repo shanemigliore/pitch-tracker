@@ -5,6 +5,8 @@
 // MODAL: Edit an entire game (all pitchers + game details)
 // ══════════════════════════════════════════════════════════════════════════════
 function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournaments }) {
+  // Wide screens: a centered dialog instead of a bottom sheet (v3.17)
+  const { wide } = useLayout();
   const [editDate, setEditDate] = useState(game.date);
   const [editOpponent, setEditOpponent] = useState(game.opponent || "");
   const [editContext, setEditContext] = useState(
@@ -47,11 +49,11 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:50,
-      display:"flex", alignItems:"flex-end", justifyContent:"center",
+      display:"flex", alignItems:wide?"center":"flex-end", justifyContent:"center",
       paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)" }}
       onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
-      <div style={{ width:"100%", maxWidth:430, background:"#0f1623",
-        border:"1px solid rgba(255,255,255,0.12)", borderRadius:"20px 20px 0 0",
+      <div style={{ width:"100%", maxWidth:wide?520:430, background:"#0f1623",
+        border:"1px solid rgba(255,255,255,0.12)", borderRadius:wide?20:"20px 20px 0 0",
         padding:"20px 18px 40px", maxHeight:"92vh", overflowY:"auto" }}>
 
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>

@@ -6,7 +6,11 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: ROSTER (pitcher list + eligibility)
 // ══════════════════════════════════════════════════════════════════════════════
-function EligibilityScreen({ roster, tournaments, onSelect }) {
+function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null }) {
+  // Wide screens: a centered dialog instead of a bottom sheet (v3.17)
+  const { wide } = useLayout();
+  // Wide screens show the tapped pitcher's detail beside this list; mark their row.
+  const selectedRow = { background:"rgba(56,189,248,0.08)", boxShadow:"inset 3px 0 0 #38bdf8", margin:"0 -8px", padding:"9px 8px", borderRadius:8 };
   const [checkDate, setCheckDate] = useState(todayStr());
   const [viewMode, setViewMode] = useState(() => {
     const active = getActiveTourney(tournaments, todayStr());
@@ -139,8 +143,9 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
             {eligibleList.length===0 ? (
               <p style={{ fontSize:13, color:"rgba(255,255,255,0.3)", margin:0 }}>No pitchers available on this date</p>
             ) : eligibleList.map(p=>(
-              <div key={p.id} onClick={()=>onSelect(p)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
-                borderBottom:"1px solid rgba(255,255,255,0.04)", cursor:"pointer" }}>
+              <div key={p.id} onClick={()=>onSelect(p)} aria-current={p.id===selectedId || undefined}
+                style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
+                borderBottom:"1px solid rgba(255,255,255,0.04)", cursor:"pointer", ...(p.id===selectedId ? selectedRow : null) }}>
                 <div style={{ width:36, height:36, borderRadius:9, background:"rgba(74,222,128,0.12)",
                   border:"1px solid rgba(74,222,128,0.3)", display:"flex", alignItems:"center", justifyContent:"center",
                   fontFamily:"'Bebas Neue',cursive", fontSize:14, color:"#4ade80", flexShrink:0 }}>
@@ -173,8 +178,9 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
               const restLeft = left - (p.lastGameDate === checkDate ? 1 : 0);
               const eligStr = getEligibleDateStr(p, tournaments);
               return (
-                <div key={p.id} onClick={()=>onSelect(p)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
-                  borderBottom:"1px solid rgba(255,255,255,0.04)", cursor:"pointer" }}>
+                <div key={p.id} onClick={()=>onSelect(p)} aria-current={p.id===selectedId || undefined}
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
+                  borderBottom:"1px solid rgba(255,255,255,0.04)", cursor:"pointer", ...(p.id===selectedId ? selectedRow : null) }}>
                   <div style={{ width:36, height:36, borderRadius:9, background:"rgba(244,63,94,0.1)",
                     border:"1px solid rgba(244,63,94,0.3)", display:"flex", alignItems:"center", justifyContent:"center",
                     fontFamily:"'Bebas Neue',cursive", fontSize:14, color:"#f43f5e", flexShrink:0 }}>
@@ -204,11 +210,11 @@ function EligibilityScreen({ roster, tournaments, onSelect }) {
 
       {showRulesInfo && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:50,
-          display:"flex", alignItems:"flex-end", justifyContent:"center",
+          display:"flex", alignItems:wide?"center":"flex-end", justifyContent:"center",
           paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)" }}
           onClick={e=>{ if(e.target===e.currentTarget) setShowRulesInfo(false); }}>
-          <div style={{ width:"100%", maxWidth:430, background:"#0f1623",
-            border:"1px solid rgba(255,255,255,0.12)", borderRadius:"20px 20px 0 0",
+          <div style={{ width:"100%", maxWidth:wide?520:430, background:"#0f1623",
+            border:"1px solid rgba(255,255,255,0.12)", borderRadius:wide?20:"20px 20px 0 0",
             padding:"20px 18px 40px", maxHeight:"85dvh", overflowY:"auto" }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
               <div style={{ fontSize:16, fontWeight:800, color:"#f8fafc" }}>Availability Key & Rest Requirements</div>
