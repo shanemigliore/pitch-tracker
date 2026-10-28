@@ -277,15 +277,16 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, twoPane=false, rail
   </>);
 
   return (
-    <div style={{ padding:"0 16px 110px", ...(twoPane && saved ? { maxWidth:430, margin:"0 auto" } : null) }}>
-      <div style={{ padding:"16px 0 14px", marginRight:"var(--corner-r)" }}>
+    <div style={twoPane ? { ...paneScreen, padding:"0 16px" } : { padding:"0 16px 110px" }}>
+      <div style={{ padding:"16px 0 14px", marginRight:"var(--corner-r)", flexShrink:0, ...(twoPane && saved ? { width:"100%", maxWidth:398, margin:"0 auto" } : null) }}>
         <h2 style={{ margin:0, fontSize:24, fontWeight:800, color:"#f8fafc", fontFamily:"'Bebas Neue',cursive", letterSpacing:2 }}>LOG GAME</h2>
         <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>Record pitch counts for a game</p>
       </div>
 
       {saved ? (
         <div style={{ textAlign:"center", padding:"50px 20px", background:"rgba(74,222,128,0.07)",
-          border:"1px solid rgba(74,222,128,0.25)", borderRadius:20, marginBottom:16 }}>
+          border:"1px solid rgba(74,222,128,0.25)", borderRadius:20, marginBottom:16,
+          ...(twoPane ? { width:"100%", maxWidth:398, margin:"0 auto 16px", boxSizing:"border-box", flexShrink:0 } : null) }}>
           <div style={{ fontSize:48, marginBottom:8 }}>✅</div>
           <div style={{ color:"#4ade80", fontSize:18, fontWeight:700 }}>Game Saved!</div>
           <div style={{ color:"rgba(255,255,255,0.4)", fontSize:13, marginTop:4, marginBottom:20 }}>{totalPitchers} pitcher{totalPitchers!==1?"s":""} logged</div>
@@ -296,8 +297,8 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, twoPane=false, rail
       ) : (
         <>
           {twoPane ? (
-            <div style={{ display:"grid", gridTemplateColumns:"minmax(300px, 1fr) minmax(300px, 1fr)", gap:16, alignItems:"start" }}>
-              <div style={{ minWidth:0 }}>
+            <div style={paneGrid("minmax(300px, 1fr) minmax(300px, 1fr)")}>
+              <div style={paneScroll(rail)}>
                 {detailsCard}
                 <div style={card}>
                   <p style={sectionTitle}>WHO PITCHED?</p>
@@ -305,7 +306,7 @@ function GameLogScreen({ roster, onLogMultiple, tournaments, twoPane=false, rail
                   {pickerChips}
                 </div>
               </div>
-              <div style={{ minWidth:0, ...stickyPane(rail) }}>
+              <div style={paneScroll(rail)}>
                 <div style={card}>
                   <p style={sectionTitle}>PITCH COUNTS</p>
                   {selectedIds.size===0

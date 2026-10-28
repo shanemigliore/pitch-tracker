@@ -16,7 +16,7 @@ const {
   getLivePitcherBudget, getRestThresholdInfo, liveGameToLogEntries, buildGameEntries,
   getGameLogCheck, normalizeLiveGame, sanitizeLiveCount, sanitizeOpponent, getLiveGamePitcherIds,
   getEligibleDateStr, getTourneyLimitViolation, getTourneyDayNumber, formatDate, getTourneyAdjustedRestInfo,
-  setCurrentRules, DEFAULT_RULES, LIVE_MAX_COUNT, LIVE_OPPONENT_MAX, todayStr, addDays,
+  setCurrentRules, getCurrentRules, DEFAULT_RULES, LIVE_MAX_COUNT, LIVE_OPPONENT_MAX, todayStr, addDays,
 } = logic;
 
 let passed = 0, failed = 0;
@@ -54,7 +54,17 @@ function oldGetCheck(p, { context, tournaments, gameDate, count }) {
     // v3.17: regular season counts outings already logged ON the game date too
     // (no doubleheader allowance once rest is owed) - the oracle follows the rule.
     const eligStr = getEligibleDateStr(p, tournaments, { before: addDays(gameDate, 1) });
-    if (!(eligStr && eligStr > gameDate)) return null;
+    if (!(eligStr && eligStr > gameDate)) {
+      // v3.18: no rest owed, but the day total (this game + regular games already
+      // logged that date) over maxPitches is a violation too
+      const cap = getCurrentRules().maxPitches;
+      const prior = (p.history || []).filter(h => h.date === gameDate && !h.isTournament).reduce((s, h) => s + h.pitches, 0);
+      const total = prior + count;
+      if (total <= cap) return null;
+      return { level: 'violation', message: prior > 0
+        ? `${prior}p ${gameDate === todayStr() ? 'earlier today' : 'earlier on ' + formatDate(gameDate)} + ${count}p = ${total}p — over the ${cap}p daily max`
+        : `${total}p — over the ${cap}p daily max` };
+    }
     const info = getTourneyAdjustedRestInfo(p, tournaments, { before: addDays(gameDate, 1) });
     const sameDay = !info.isTourney && info.lastPitchDate === gameDate;
     return { level: 'violation', message: sameDay

@@ -37,7 +37,7 @@ function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame,
   });
 
   return (
-    <div style={{ padding:"0 16px 110px" }}>
+    <div style={{ padding: embedded ? "0 16px" : "0 16px 110px" }}>
       {editingEntry && (
         <EditGameModal
           entry={editingEntry}

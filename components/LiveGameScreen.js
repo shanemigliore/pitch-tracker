@@ -7,7 +7,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: LIVE GAME
 // ══════════════════════════════════════════════════════════════════════════════
-function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onComplete, onDiscard, twoPane=false }) {
+function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onComplete, onDiscard, twoPane=false, rail=false }) {
   // Setup form (only used before a game exists)
   const [setupDate, setSetupDate] = useState(todayStr());
   const [setupContext, setSetupContext] = useState("regular");
@@ -28,6 +28,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
   const [slowComplete, setSlowComplete] = useState(false);
   // { gameId, newId, prevIds } - lets the coach reverse an auto "left game" from a mistap
   const [undoSwap, setUndoSwap] = useState(null);
+  const inGameRef = useRef(null);
 
   // A claim only resolves once the server confirms it, so offline it just
   // waits - say so instead of looking frozen.
@@ -81,7 +82,11 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
 
   // Wide frame (App passes twoPane): the setup / just-logged states stay one
   // centered phone-width column; only the in-progress game splits into panes.
-  const narrowCol = twoPane ? { maxWidth:430, margin:"0 auto" } : null;
+  // The two-pane frame is one screen tall, so this column scrolls by itself; its
+  // side padding centers the same 430px column (398 content + 16 each side).
+  const narrowRoot = twoPane
+    ? { ...paneScreen, display:"block", padding:"0 max(16px, calc((100% - 398px) / 2)) 110px" }
+    : { padding:"0 16px 110px" };
 
   const header = (
     <div style={{ padding:"16px 0 14px", marginRight:"var(--corner-r)" }}>
@@ -93,7 +98,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
   // ── Just logged ───────────────────────────────────────────────────────────
   if (saved && !liveGame) {
     return (
-      <div style={{ padding:"0 16px 110px", ...narrowCol }}>
+      <div style={narrowRoot}>
         {header}
         <div style={{ textAlign:"center", padding:"50px 20px", background:"rgba(74,222,128,0.07)",
           border:"1px solid rgba(74,222,128,0.25)", borderRadius:20, marginBottom:16 }}>
@@ -124,7 +129,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
         .finally(() => setStarting(false));
     }
     return (
-      <div style={{ padding:"0 16px 110px", ...narrowCol }}>
+      <div style={narrowRoot}>
         {header}
         <div style={card}>
           <p style={sectionTitle}>NEW GAME</p>
@@ -157,7 +162,10 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
 
   const rosterById = new Map(roster.map(p=>[p.id, p]));
   const budgets = new Map(roster.map(p=>[p.id, getLivePitcherBudget(p, liveGame, tournaments)]));
-  const inGameIds = getLiveGamePitcherIds(liveGame).filter(id=>rosterById.has(id));
+  // Shown active pitcher first, then the ones who've left, most recent first.
+  // Display only - getLiveGamePitcherIds' entry order still sets the log order.
+  const inGameIds = getLiveGamePitcherIds(liveGame).filter(id=>rosterById.has(id)).reverse()
+    .sort((a,b)=>(liveGame.pitchers[a].status==="active"?0:1) - (liveGame.pitchers[b].status==="active"?0:1));
   const activeIds = inGameIds.filter(id=>liveGame.pitchers[id].status==="active");
   const notInGame = roster.filter(p=>!liveGame.pitchers[p.id]);
   const available = notInGame.filter(p=>budgets.get(p.id).eligible)
@@ -185,6 +193,13 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
     act({ type:"add", id:p.id, now:Date.now() });
     setCompleteErr("");
     setUndoSwap(activeIds.length ? { gameId:liveGame.id, newId:p.id, prevIds:activeIds } : null);
+    // The new pitcher shows at the top of IN THE GAME, which is usually scrolled
+    // out of view by the time you've reached the available list - bring it back
+    // (the page on phones, the left pane in two-pane). 150 ≈ status bar + header.
+    requestAnimationFrame(() => {
+      const el = inGameRef.current;
+      if (el && el.getBoundingClientRect().top < 150) el.scrollIntoView({ block:"start", behavior:"smooth" });
+    });
   }
   function undoAdd() {
     if (!undoSwap || undoSwap.gameId !== liveGame.id) return;
@@ -302,7 +317,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
   </>);
   // Pitchers in the game, with counts
   const inGameCard = (<>
-      <div style={card}>
+      <div ref={inGameRef} style={{ ...card, scrollMarginTop:"calc(var(--top-gap) + 72px)" }}>
         <p style={sectionTitle}>IN THE GAME</p>
         {inGameIds.length===0 && (
           <div style={{ fontSize:12, color:"rgba(255,255,255,0.4)" }}>No one yet — pick your starting pitcher below.</div>
@@ -493,20 +508,20 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
   </>);
 
   return (
-    <div style={{ padding:"0 16px 110px" }}>
-      {header}
+    <div style={twoPane ? { ...paneScreen, padding:"0 16px" } : { padding:"0 16px 110px" }}>
+      <div style={{ flexShrink:0 }}>{header}</div>
 
       {isStale && (
-        <div role="alert" style={{ ...card, border:"1px solid rgba(251,191,36,0.4)", background:"rgba(251,191,36,0.07)" }}>
+        <div role="alert" style={{ ...card, border:"1px solid rgba(251,191,36,0.4)", background:"rgba(251,191,36,0.07)", flexShrink:0 }}>
           <div style={{ fontSize:13, fontWeight:700, color:"#fbbf24", marginBottom:4 }}>Unfinished game from {formatDate(liveGame.date)}</div>
           <div style={{ fontSize:12, color:"rgba(255,255,255,0.55)" }}>Log it (it keeps its original date) or discard it before starting today's game.</div>
         </div>
       )}
 
       {twoPane ? (
-        <div style={{ display:"grid", gridTemplateColumns:"minmax(360px, 1.4fr) minmax(220px, 1fr)", gap:16, alignItems:"start" }}>
-          <div style={{ minWidth:0 }}>{inGameCard}{finishControls}</div>
-          <div style={{ minWidth:0 }}>{availableCard}{unavailableCard}{detailsCard}</div>
+        <div style={paneGrid("minmax(360px, 1.4fr) minmax(220px, 1fr)")}>
+          <div style={paneScroll(rail)}>{inGameCard}{finishControls}</div>
+          <div style={paneScroll(rail)}>{availableCard}{unavailableCard}{detailsCard}</div>
         </div>
       ) : (
         <>{detailsCard}{inGameCard}{availableCard}{unavailableCard}{finishControls}</>
