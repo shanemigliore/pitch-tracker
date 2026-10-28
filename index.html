@@ -50,6 +50,10 @@
     body { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
            padding-top: var(--top-gap); padding-left: var(--safe-l); padding-right: calc(var(--safe-r) - var(--corner-r)); }
     input, button, select, textarea { font-family: inherit; }
+    /* No native number-field steppers (desktop browsers show them on focus/hover);
+       counts have their own -5/-1/+1/+5 buttons. */
+    input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; appearance: textfield; }
     * { -webkit-overflow-scrolling: touch; }
     #root { height: 100%; }
     /* Solid cover over the status-bar area (black-translucent lets content scroll
