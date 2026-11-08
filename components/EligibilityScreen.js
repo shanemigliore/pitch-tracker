@@ -194,7 +194,7 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, two
                     ) : rs.heldByTourney ? (
                       <>
                         <div style={{ fontSize:12, fontWeight:700, color:"#f59e0b" }}>🏆 In {rs.tourneyName || "tournament"}</div>
-                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>No rest owed · regular season from {formatDate(eligStr)}</div>
+                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>Tournament ends {formatDate(rs.tourneyEndDate)} · regular season from {formatDate(eligStr)}</div>
                       </>
                     ) : eligStr ? (
                       <>

@@ -56,7 +56,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
   // keeps showing something sensible until it picks up the update.
   function limitFields() {
     const limits = formLimits.map(l=>({ max:parseInt(l.max,10)||DEFAULT_TOURNEY_DAY_LIMIT, isHard:!!l.isHard }));
-    const tiers = restTiers.map(v=>parseInt(v,10)>0 ? parseInt(v,10) : 0);
+    const tiers = restTiers.map(v=>{ const n = Number(v.trim()); return v.trim()!=="" && Number.isInteger(n) && n>0 ? n : 0; });
     return { days:resolvedDays, dayLimits:limits, maxTotal:parseInt(maxTotal,10)||DEFAULT_TOURNEY_TOTAL,
       maxDay1:limits[0].max, day1IsHardLimit:limits[0].isHard,
       restTiers:{ rest1:tiers[0], rest2:tiers[1], rest3:tiers[2] } };
@@ -64,8 +64,8 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
 
   // Tiers must be filled in order (no 2-day tier without a 1-day one) and
   // strictly increase - anything else would be silently ignored on read.
-  const tierNums = restTiers.map(v=>v.trim()==="" ? null : parseInt(v,10));
-  const tierError = tierNums.some(n=>n!==null && !(n>0)) ? "Rest thresholds must be positive numbers"
+  const tierNums = restTiers.map(v=>v.trim()==="" ? null : Number(v.trim()));
+  const tierError = tierNums.some(n=>n!==null && !(Number.isInteger(n) && n>0 && n<=999)) ? "Rest thresholds must be whole numbers from 1 to 999"
     : tierNums.some((n,i)=>n!==null && tierNums.slice(0,i).some(m=>m===null)) ? "Fill the 1-day threshold first (then 2-day, then 3-day)"
     : tierNums.some((n,i)=>n!==null && i>0 && tierNums[i-1]!==null && n<=tierNums[i-1]) ? "Each threshold must be higher than the one before"
     : null;

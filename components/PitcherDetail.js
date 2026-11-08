@@ -110,7 +110,7 @@ function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame,
         <div style={{ flex:1 }}>
           <div style={{ fontSize:15, fontWeight:700, color:s.color, marginBottom:3 }}>
             {status==="available" ? "✅ Available to pitch"
-              : restSummary.heldByTourney ? `🏆 In ${restSummary.tourneyName || "tournament"} — no rest owed`
+              : restSummary.heldByTourney ? `🏆 In ${restSummary.tourneyName || "tournament"}`
               : `⏳ ${restRemaining} day${restRemaining!==1?"s":""} rest remaining`}
           </div>
           {eligible && <div style={{ fontSize:13, color:"rgba(255,255,255,0.5)" }}>
