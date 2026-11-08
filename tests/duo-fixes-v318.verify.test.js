@@ -151,7 +151,8 @@ test('S1. version bumped to v3.18 in both places (and they match)', () => {
   const html = read('index.html');
   const meta = (html.match(/<meta name="app-version" content="([^"]+)"/) || [])[1];
   const cst = (html.match(/const APP_VERSION = "([^"]+)"/) || [])[1];
-  assert.strictEqual(meta, 'v3.18'); assert.strictEqual(cst, 'v3.18');
+  // At least v3.18 (later versions bump it); meta and constant must match.
+  assert.strictEqual(meta, cst); assert.ok(/^v3\.(1[89]|[2-9]\d)$/.test(cst), cst);
 });
 test('S2. stickyPane fully removed (no stale references), pane helpers exported + destructured', () => {
   for (const f of fs.readdirSync(path.join(ROOT, 'components'))) assert.ok(!/stickyPane/.test(read('components/' + f)), f);
@@ -207,7 +208,7 @@ test('S8. Live log path uses getLiveGamePitcherIds order (completeLiveGame -> li
   assert.ok(!/inGameIds/.test(app));
 });
 test('S9. CLAUDE.md current version updated to v3.18', () => {
-  assert.ok(/\*\*Current version:\*\* v3\.18/.test(read('CLAUDE.md')));
+  assert.ok(/\*\*Current version:\*\* v3\.(1[89]|[2-9]\d)\b/.test(read('CLAUDE.md')));
 });
 
 console.log(`\n${passed} passed, ${failed} failed (${passed + failed} total)`);

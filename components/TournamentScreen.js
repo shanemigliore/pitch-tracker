@@ -17,6 +17,9 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
   // shrinking then re-growing the tournament doesn't lose what was typed.
   const [dayLimits, setDayLimits] = useState([]);
   const [maxTotal, setMaxTotal] = useState(String(DEFAULT_TOURNEY_TOTAL));
+  // Rest between tournament days (v3.19): more than restTiers[i] pitches in
+  // one day = i+1 rest days. "" = off. See getTourneyRestTiers.
+  const [restTiers, setRestTiers] = useState(["","",""]);
   const [confirmDeleteTourney, setConfirmDeleteTourney] = useState(false);
 
   const resolvedDays = Math.min(14, Math.max(1, days==="custom" ? (parseInt(customDays)||1) : (parseInt(days)||2)));
@@ -31,7 +34,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
 
   function resetForm() {
     setName(""); setStartDate(todayStr()); setDays("2"); setCustomDays("");
-    setDayLimits([]); setMaxTotal(String(DEFAULT_TOURNEY_TOTAL));
+    setDayLimits([]); setMaxTotal(String(DEFAULT_TOURNEY_TOTAL)); setRestTiers(["","",""]);
   }
 
   function openEdit(t) {
@@ -43,6 +46,8 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
     else { setDays("custom"); setCustomDays(String(d)); }
     setDayLimits(getTourneyDayLimits(t).map(l=>({ max:String(l.max), isHard:l.isHard })));
     setMaxTotal(String(getTourneyMaxTotal(t)));
+    const tiers = getTourneyRestTiers(t);
+    setRestTiers([0,1,2].map(i=>tiers[i] ? String(tiers[i]) : ""));
     setView("edit");
   }
 
@@ -51,11 +56,21 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
   // keeps showing something sensible until it picks up the update.
   function limitFields() {
     const limits = formLimits.map(l=>({ max:parseInt(l.max,10)||DEFAULT_TOURNEY_DAY_LIMIT, isHard:!!l.isHard }));
+    const tiers = restTiers.map(v=>{ const n = Number(v.trim()); return v.trim()!=="" && Number.isInteger(n) && n>0 ? n : 0; });
     return { days:resolvedDays, dayLimits:limits, maxTotal:parseInt(maxTotal,10)||DEFAULT_TOURNEY_TOTAL,
-      maxDay1:limits[0].max, day1IsHardLimit:limits[0].isHard };
+      maxDay1:limits[0].max, day1IsHardLimit:limits[0].isHard,
+      restTiers:{ rest1:tiers[0], rest2:tiers[1], rest3:tiers[2] } };
   }
 
-  const canSave = !!name.trim() && isIsoDate(startDate);
+  // Tiers must be filled in order (no 2-day tier without a 1-day one) and
+  // strictly increase - anything else would be silently ignored on read.
+  const tierNums = restTiers.map(v=>v.trim()==="" ? null : Number(v.trim()));
+  const tierError = tierNums.some(n=>n!==null && !(Number.isInteger(n) && n>0 && n<=999)) ? "Rest thresholds must be whole numbers from 1 to 999"
+    : tierNums.some((n,i)=>n!==null && tierNums.slice(0,i).some(m=>m===null)) ? "Fill the 1-day threshold first (then 2-day, then 3-day)"
+    : tierNums.some((n,i)=>n!==null && i>0 && tierNums[i-1]!==null && n<=tierNums[i-1]) ? "Each threshold must be higher than the one before"
+    : null;
+
+  const canSave = !!name.trim() && isIsoDate(startDate) && !tierError;
 
   function handleCreate() {
     if (!canSave) return;
@@ -151,6 +166,26 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
             Always enforced. Daily limits can add up to more than this, since pitchers won't throw every day.
             After the tournament, rest days are based on this total and start the day after the pitcher's last tournament outing.
           </p>
+
+          <label style={{ ...sectionLabel, display:"block", margin:"16px 0 6px" }}>REST BETWEEN DAYS</label>
+          {[0,1,2].map(i=>(
+            <div key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+              <div style={{ flex:1, fontSize:12, fontWeight:700, color:"rgba(255,255,255,0.6)" }}>
+                {i+1} rest day{i?"s":""} if more than
+              </div>
+              <input type="number" min="1" placeholder="—" value={restTiers[i]} aria-label={`${i+1} rest day${i?"s":""} if more than`}
+                onChange={e=>{ const next=[...restTiers]; next[i]=e.target.value; setRestTiers(next); }}
+                style={{ ...numStyle, width:72, flexShrink:0, padding:"6px 4px",
+                  border:tierError && restTiers[i].trim()!=="" ? "1px solid rgba(244,63,94,0.6)" : numStyle.border }}/>
+              <div style={{ width:44, flexShrink:0, fontSize:12, color:"rgba(255,255,255,0.4)" }}>pitches</div>
+            </div>
+          ))}
+          {tierError && <div style={{ fontSize:11, color:"#f87171", marginBottom:6 }}>{tierError}</div>}
+          <p style={{ margin:"2px 0 0", fontSize:11, color:"rgba(255,255,255,0.4)", lineHeight:1.5 }}>
+            Optional. Counts all of a pitcher's pitches on one tournament day; going over a threshold sits them for the next
+            tournament day(s) — e.g. more than 30 on Day 1 = 1 rest day, out for Day 2. Exactly the threshold is fine.
+            Leave blank for no rest between days. Doesn't change rest after the tournament.
+          </p>
         </div>
       </>
     );
@@ -243,6 +278,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
         const today = todayStr();
         const endDate = getTourneyEndDate(t);
         const limitSummary = getTourneyDayLimits(t).map(l=>`${l.max}${l.isHard?"H":"G"}`).join(" / ");
+        const tierSummary = getTourneyRestTiers(t).map((n,i)=>`>${n}=${i+1}d`).join(", ");
         const tStatus = !t.startDate ? null
           : today < t.startDate ? "upcoming"
           : endDate && today <= endDate ? "active"
@@ -270,6 +306,7 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
               <div style={{ fontSize:12, color:"rgba(255,255,255,0.35)", marginTop:1 }}>
                 {getTourneyDays(t)} day{getTourneyDays(t)!==1?"s":""} · Daily {limitSummary} · {getTourneyMaxTotal(t)}p total
               </div>
+              {tierSummary && <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)", marginTop:1 }}>Rest between days: {tierSummary}</div>}
               {entries.length>0 && <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)", marginTop:1 }}>{entries.length} appearances · {players} pitcher{players!==1?"s":""}</div>}
             </div>
             <div style={{ color:"rgba(255,255,255,0.2)", flexShrink:0 }}>{I.chevron}</div>

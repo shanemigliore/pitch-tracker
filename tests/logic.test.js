@@ -626,7 +626,7 @@ const st = (n, p = fresh()) => liveBudget(p, n).status;
 
 test('12a. regular: always a rest value + next milestone, even far away', () => {
   assert.deepStrictEqual(st(0), { restDays: 0, restAfterTourney: false, justCrossed: false,
-    next: '21 pitches → 1 rest day (at 21p)', alert: null, level: 'neutral' });
+    next: '21 pitches → 1 rest day (at 21p)', alert: null, level: 'neutral', dayOut: null });
   assert.strictEqual(st(24).next, '17 pitches → 2 rest days (at 41p)');
   assert.strictEqual(st(24).restDays, 1);
 });

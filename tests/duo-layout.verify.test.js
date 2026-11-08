@@ -44,12 +44,14 @@ test('meta app-version and APP_VERSION match', () => {
   assert.strictEqual(meta[1], js[1]);
 });
 test('version is v3.18 (minor bump from v3.17)', () => {
-  assert.strictEqual(html.match(/const APP_VERSION = "([^"]+)";/)[1], 'v3.18');
-  assert.strictEqual(html.match(/<meta name="app-version" content="([^"]+)"/)[1], 'v3.18');
+  // At least v3.18 (later versions bump it); meta and constant must match.
+  const cst = html.match(/const APP_VERSION = "([^"]+)";/)[1];
+  assert.strictEqual(html.match(/<meta name="app-version" content="([^"]+)"/)[1], cst);
+  assert.ok(/^v3\.(1[89]|[2-9]\d)$/.test(cst), cst);
   assert.strictEqual((html.match(/["']v3\.17["']/g) || []).length, 0, 'no stale "v3.17" value left in index.html');
 });
 test('CLAUDE.md current version matches', () => {
-  assert(/\*\*Current version:\*\* v3\.18/.test(read('CLAUDE.md')));
+  assert(/\*\*Current version:\*\* v3\.(1[89]|[2-9]\d)\b/.test(read('CLAUDE.md')));
 });
 
 // ── Landscape ───────────────────────────────────────────────────────────
