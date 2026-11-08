@@ -47,7 +47,9 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
     onClose();
   }
 
-  return (
+  // Portaled to <body>: inside a scrolling pane (two-pane layouts) iOS clips
+  // even a position:fixed overlay to the pane (v3.21).
+  return ReactDOM.createPortal(
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:50,
       display:"flex", alignItems:wide?"center":"flex-end", justifyContent:"center",
       paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)",
@@ -167,5 +169,5 @@ function EditGameGroupModal({ game, onEditGame, onDeleteGame, onClose, tournamen
         )}
       </div>
     </div>
-  );
+  , document.body);
 }

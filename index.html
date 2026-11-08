@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Prime Pitching"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="theme-color" content="#080c14"/>
-  <meta name="app-version" content="v3.20"/>
+  <meta name="app-version" content="v3.21"/>
   <title>Prime Pitching</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="assets/logo.png"/>
@@ -113,7 +113,7 @@
 
 
 // ─── App version (bump minor for each PR) ────────────────────────────────────
-const APP_VERSION = "v3.20";
+const APP_VERSION = "v3.21";
 const LOGO_URI = "assets/logo.png";
 
 // ─── Pure logic (rest-day/eligibility/date/device-id math) ───────────────────
@@ -122,7 +122,8 @@ const LOGO_URI = "assets/logo.png";
 const {
   DEFAULT_RULES, setCurrentRules, getCurrentRules,
   getRegRestDays, getEligibleDate, isTourneyOver, getTourneyAdjustedRestInfo,
-  getAvailabilityStatus, daysUntilEligible, getEligibleDateStr, getRegularRestSummary,
+  getAvailabilityStatus, getAvailabilityChip, restChipForDaysLeft, daysBetween,
+  daysUntilEligible, getEligibleDateStr, getRegularRestSummary,
   DEFAULT_TOURNEY_DAY_LIMIT, DEFAULT_TOURNEY_TOTAL,
   getTourneyDays, getTourneyEndDate, getTourneyDayLimits, getTourneyMaxTotal, getTourneyDayNumber,
   getTourneyRestTiers,

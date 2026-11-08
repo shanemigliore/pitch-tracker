@@ -19,7 +19,8 @@ function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame,
     return "";
   }
 
-  const status = getAvailabilityStatus(pitcher, null, tournaments);
+  const chip = getAvailabilityChip(pitcher, null, tournaments);
+  const status = chip.status;
   const s = STATUS[status];
   const restInfo = getTourneyAdjustedRestInfo(pitcher, tournaments);
   const eligible = restInfo.eligibleDate;
@@ -65,7 +66,7 @@ function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame,
             border:`1px solid ${editOpen?"rgba(56,189,248,0.4)":"rgba(255,255,255,0.1)"}`,
             borderRadius:10, padding:10, color:editOpen?"#38bdf8":"rgba(255,255,255,0.5)",
             cursor:"pointer", display:"flex" }}>{I.edit}</button>
-        <Chip status={status} size="lg"/>
+        <Chip status={status} label={chip.label} size="lg"/>
       </div>
 
       {/* Edit player details */}

@@ -101,7 +101,7 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - Firebase Realtime Database (email/password auth via two shared accounts — see Auth below)
 - No build step, no bundler, no npm
 
-**Current version:** v3.20
+**Current version:** v3.21
 
 ---
 
@@ -466,7 +466,8 @@ selectedPlayer    // Pitcher | null — active drill-in on Roster tab
 | `applyLiveGameAction(raw, gameId, action)` | Pure reducer for Live-tab edits (`setField`/`bump`/`setCount`/`add`/`undoAdd`/`markLeft`/`putBack`/`remove`) on the raw server value; returns the new value or `undefined` (abort) when the game id doesn't match or the target pitcher isn't in the game. `add` auto-marks active pitchers left; `undoAdd` refuses once the new pitcher has thrown; counts clamp to 0..999 |
 | `liveGameToLogEntries(liveGame, tournaments, sharedGameId)` | `{ entries, dropped }` — 0-count pitchers dropped, entry order preserved |
 | `normalizeLiveGame(raw)` / `sanitizeLiveCount(v)` / `sanitizeOpponent(s)` | Untrusted-input guards for the live game (counts 0..`LIVE_MAX_COUNT`, opponent ≤ `LIVE_OPPONENT_MAX`) |
-| `getAvailabilityStatus(pitcher, onDate, tournaments)` | Returns STATUS key for a pitcher on a given date |
+| `getAvailabilityStatus(pitcher, onDate, tournaments)` | Returns STATUS key for a pitcher on a given date. Since v3.21 bucketed by **calendar days left** until eligible (`tomorrow` = 1, `resting2` = 2, `resting` = 3+), not by rest owed; the old `soon` ("1 Day") status is gone |
+| `getAvailabilityChip(pitcher, onDate, tournaments)` / `restChipForDaysLeft(n)` | v3.21 eligibility pill `{status, label}`: Ready / Tomorrow / "2 Days Left" / "N Days Left". Every eligibility `Chip` (Roster list, `PitcherDetail` header, Season pitcher summary, tournament view's pre-tournament rest) uses it. Past-game rows keep showing the rest **that game required** ("2d rest") — that's history, not eligibility |
 | `daysUntilEligible(pitcher, onDate, tournaments)` | Returns number of days until pitcher can throw (`Math.round` of the ms gap — `ceil` was off by one across a DST change's 25-hour day; same in `getAvailabilityStatus`) |
 | `getEligibleDateStr(pitcher, tournaments, opts?)` | Eligible date as `"YYYY-MM-DD"` (or `null`); `opts.before` as above |
 | `recomputeLast(history)` | Returns `{ lastPitches, lastGameDate }` from history array |
@@ -482,6 +483,8 @@ selectedPlayer    // Pitcher | null — active drill-in on Roster tab
 ---
 
 ## Key Patterns & Constraints
+
+**Modals are portaled (v3.21):** the rules sheet (`EligibilityScreen`), `EditGameModal` and `EditGameGroupModal` render through `ReactDOM.createPortal(..., document.body)`. In two-pane layouts they're opened from inside a `paneScroll` pane, and iOS clipped the `position:fixed` overlay to that pane (dialog cut off at the pane's edge on the unfolded Duo). Any new modal opened from inside a pane must do the same.
 
 **ScreenBoundary:** Every tab-level screen is wrapped in `<ScreenBoundary>` to prevent render crashes from cascading to a blank page. `ScreenBoundary` on the Roster drill-in also receives `onBack` to render a "← Back to Roster" button.
 

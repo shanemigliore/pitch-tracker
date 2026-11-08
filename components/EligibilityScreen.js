@@ -25,12 +25,14 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, two
     .sort((a, b) => totalPitches(b) - totalPitches(a))
     .map(p => {
       if (viewMode==="regular") {
-        const status = getAvailabilityStatus(p, checkDate, tournaments);
-        return { ...p, eligible: status==="available", status };
+        const chip = getAvailabilityChip(p, checkDate, tournaments);
+        return { ...p, eligible: chip.status==="available", status: chip.status, chipLabel: chip.label };
       } else {
         const te = getTourneyEligibility(p, selectedTourney, checkDate, tournaments);
-        return { ...p, eligible:te.eligible, status:te.eligible?"available":"resting", tourneyReason:te.reason,
-          tourneyChip:te.code==="day" ? "Done Today" : te.code==="total" ? "Limit Reached" : te.code==="tourneyRest" ? (te.restBlock && te.restBlock.sameDay ? "Done Today" : "Rest Day") : te.code==="ended" ? "N/A" : null,
+        // Rest still owed from before the tournament: days left, like the regular pill.
+        const pre = te.code==="resting" && te.restingUntil ? restChipForDaysLeft(daysBetween(checkDate, te.restingUntil)) : null;
+        return { ...p, eligible:te.eligible, status:te.eligible?"available":pre?pre.status:"resting", tourneyReason:te.reason,
+          tourneyChip: pre ? pre.label :te.code==="day" ? "Done Today" : te.code==="total" ? "Limit Reached" : te.code==="tourneyRest" ? (te.restBlock && te.restBlock.sameDay ? "Done Today" : "Rest Day") : te.code==="ended" ? "N/A" : null,
           tourneyLeft:te.eligible ? te.pitchesLeft : null };
       }
     });
@@ -205,7 +207,7 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, two
                       <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>Resting</div>
                     )}
                   </div>
-                  <Chip status={p.status} label={viewMode!=="regular" ? p.tourneyChip : null}/>
+                  <Chip status={p.status} label={viewMode!=="regular" ? p.tourneyChip : p.chipLabel}/>
                   <div style={{ color:"rgba(255,255,255,0.2)" }}>{I.chevron}</div>
                 </div>
               );
@@ -214,7 +216,9 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, two
         </>
       )}
 
-      {showRulesInfo && (
+      {/* Portaled to <body>: in two-pane this screen sits in a scrolling pane,
+          and iOS clips even a position:fixed overlay to it (v3.21). */}
+      {showRulesInfo && ReactDOM.createPortal(
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:50,
           display:"flex", alignItems:wide?"center":"flex-end", justifyContent:"center",
           paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)",
@@ -270,7 +274,8 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, two
               regular-season game before the day after the tournament ends ("In Tourney").
             </p>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
