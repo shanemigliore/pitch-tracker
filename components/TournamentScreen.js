@@ -182,8 +182,8 @@ function TournamentScreen({ roster, tournaments, onAddTourney, onDeleteTourney, 
           ))}
           {tierError && <div style={{ fontSize:11, color:"#f87171", marginBottom:6 }}>{tierError}</div>}
           <p style={{ margin:"2px 0 0", fontSize:11, color:"rgba(255,255,255,0.4)", lineHeight:1.5 }}>
-            Optional. Counts all of a pitcher's pitches on one tournament day; going over a threshold sits them for the next
-            tournament day(s) — e.g. more than 30 on Day 1 = 1 rest day, out for Day 2. Exactly the threshold is fine.
+            Optional. Counts all of a pitcher's pitches on one tournament day; going over a threshold ends their day and sits them
+            for the next tournament day(s) — e.g. more than 30 on Day 1 = 1 rest day, out for Day 2. Exactly the threshold is fine.
             Leave blank for no rest between days. Doesn't change rest after the tournament.
           </p>
         </div>

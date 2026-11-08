@@ -148,9 +148,10 @@ test('B8 multiple games the same day are summed (20+15 on Day1 -> out Day2)', ()
   const e = getTourneyEligibility(P([tg('2026-11-07', 20), tg('2026-11-07', 15)]), TXR(), '2026-11-08', [TXR()]);
   assert.strictEqual(e.eligible, false);
 });
-test('B9 Day1 itself unaffected by its own pitches (still eligible on Day1 under total)', () => {
+test('B9 (v3.20) Day 1 pitches over the tier make the pitcher ineligible for the rest of Day 1 too', () => {
   const e = getTourneyEligibility(P([tg('2026-11-07', 40)]), TXR(), '2026-11-07', [TXR()]);
-  assert.strictEqual(e.eligible, true);
+  assert.strictEqual(e.eligible, false);
+  assert.strictEqual(e.code, 'tourneyRest');
 });
 test('B10 applies from any day (4-day: >20 on Day 2 -> out Day 3, back Day 4)', () => {
   const t = T4({ rest1: 20, rest2: 40, rest3: 60 });
@@ -327,10 +328,11 @@ test('S4 restTiers pitches-level junk on history (string pitches) still summed',
 });
 
 // ─────────────────────────── version / wiring ───────────────────────────
-test('V1 version v3.19 in both places in index.html', () => {
+test('V1 version v3.19+ in both places in index.html (and they match)', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  assert.ok(/<meta name="app-version" content="v3\.19"\/>/.test(html));
-  assert.ok(/const APP_VERSION = "v3\.19";/.test(html));
+  const meta = (html.match(/<meta name="app-version" content="([^"]+)"\/>/) || [])[1];
+  const cst = (html.match(/const APP_VERSION = "([^"]+)";/) || [])[1];
+  assert.strictEqual(meta, cst); assert.ok(/^v3\.(19|[2-9]\d)$/.test(cst), cst);
 });
 test('V2 every new global used by components is destructured in index.html', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');

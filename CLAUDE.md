@@ -101,7 +101,7 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - Firebase Realtime Database (email/password auth via two shared accounts — see Auth below)
 - No build step, no bundler, no npm
 
-**Current version:** v3.19
+**Current version:** v3.20
 
 ---
 
@@ -276,7 +276,11 @@ as a `{"0":..,"1":..}` object - `getTourneyDayLimits` handles both.
   (d) an earlier tournament day's pitches (all games that day, strict `>`)
   crossed a rest tier and that rest covers this day (`getTourneyRestBlock`,
   code `"tourneyRest"`, Roster chip "Rest Day"; any day → following days, e.g.
-  >30 on Day 1 = out Day 2). A day's own pitches never block that same day.
+  >30 on Day 1 = out Day 2). Since v3.20 pitches already **logged** on a day
+  count too: crossing a tier also ends that day (no second game that day, even
+  on the last day) — same idea as the regular-season same-day rule. A live,
+  unlogged count never blocks, so a pitcher who crosses mid-game may keep
+  pitching that game (Live card shows "SITS · DAY N").
   Logging on a rest day is a warn-and-override violation; a game that pushes
   the day over a tier gets a non-blocking note ("Day 1: 35p — 1 rest day, out
   Day 2"), only when tournament days remain. Tiers don't change regular-season

@@ -30,7 +30,7 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, two
       } else {
         const te = getTourneyEligibility(p, selectedTourney, checkDate, tournaments);
         return { ...p, eligible:te.eligible, status:te.eligible?"available":"resting", tourneyReason:te.reason,
-          tourneyChip:te.code==="day" ? "Done Today" : te.code==="total" ? "Limit Reached" : te.code==="tourneyRest" ? "Rest Day" : te.code==="ended" ? "N/A" : null,
+          tourneyChip:te.code==="day" ? "Done Today" : te.code==="total" ? "Limit Reached" : te.code==="tourneyRest" ? (te.restBlock && te.restBlock.sameDay ? "Done Today" : "Rest Day") : te.code==="ended" ? "N/A" : null,
           tourneyLeft:te.eligible ? te.pitchesLeft : null };
       }
     });
@@ -263,7 +263,7 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, two
             <p style={{ ...sectionTitle, marginTop:18 }}>TOURNAMENTS</p>
             <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.55)", lineHeight:1.6 }}>
               During a tournament only its own rules apply: daily and total limits, plus optional rest between
-              days if the tournament sets thresholds (e.g. more than 30 in one day = out the next tournament day).
+              days if the tournament sets thresholds (e.g. more than 30 in one day = done for that day and out the next tournament day).
               Rest still owed from before the tournament carries in. A pitcher who reaches a limit may finish
               the current batter; every pitch counts. Afterwards, the tournament's total pitches set the rest days
               above, starting the day after the pitcher's last tournament outing, and they can't pitch a
