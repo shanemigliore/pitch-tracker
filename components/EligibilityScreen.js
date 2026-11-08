@@ -30,7 +30,7 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, two
       } else {
         const te = getTourneyEligibility(p, selectedTourney, checkDate, tournaments);
         return { ...p, eligible:te.eligible, status:te.eligible?"available":"resting", tourneyReason:te.reason,
-          tourneyChip:te.code==="day" ? "Done Today" : te.code==="total" ? "Limit Reached" : te.code==="tourneyRest" ? "Rest Day" : te.code==="ended" ? "N/A" : null,
+          tourneyChip:te.code==="day" ? "Done Today" : te.code==="total" ? "Limit Reached" : te.code==="tourneyRest" ? (te.restBlock && te.restBlock.sameDay ? "Done Today" : "Rest Day") : te.code==="ended" ? "N/A" : null,
           tourneyLeft:te.eligible ? te.pitchesLeft : null };
       }
     });
