@@ -30,7 +30,7 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, two
       } else {
         const te = getTourneyEligibility(p, selectedTourney, checkDate, tournaments);
         return { ...p, eligible:te.eligible, status:te.eligible?"available":"resting", tourneyReason:te.reason,
-          tourneyChip:te.code==="day" ? "Done Today" : te.code==="total" ? "Limit Reached" : te.code==="ended" ? "N/A" : null,
+          tourneyChip:te.code==="day" ? "Done Today" : te.code==="total" ? "Limit Reached" : te.code==="tourneyRest" ? "Rest Day" : te.code==="ended" ? "N/A" : null,
           tourneyLeft:te.eligible ? te.pitchesLeft : null };
       }
     });
@@ -174,9 +174,10 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, two
             {ineligibleList.length===0 ? (
               <p style={{ fontSize:13, color:"rgba(255,255,255,0.3)", margin:0 }}>All pitchers eligible!</p>
             ) : ineligibleList.map(p=>{
-              const left = daysUntilEligible(p, checkDate, tournaments);
-              const restLeft = left - (p.lastGameDate === checkDate ? 1 : 0);
-              const eligStr = getEligibleDateStr(p, tournaments);
+              // v3.19: a tournament hold (no rest owed, tournament not over) says so
+              // instead of counting calendar days as "rest remaining".
+              const rs = getRegularRestSummary(p, tournaments, checkDate);
+              const eligStr = rs.eligibleDate;
               return (
                 <div key={p.id} onClick={()=>onSelect(p)} aria-current={p.id===selectedId || undefined}
                   style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0",
@@ -190,10 +191,15 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, two
                     <div style={{ fontSize:14, fontWeight:700, color:"#f8fafc" }}>{p.name}</div>
                     {viewMode!=="regular" && p.tourneyReason ? (
                       <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>{p.tourneyReason}</div>
+                    ) : rs.heldByTourney ? (
+                      <>
+                        <div style={{ fontSize:12, fontWeight:700, color:"#f59e0b" }}>🏆 In {rs.tourneyName || "tournament"}</div>
+                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>No rest owed · regular season from {formatDate(eligStr)}</div>
+                      </>
                     ) : eligStr ? (
                       <>
                         <div style={{ fontSize:12, fontWeight:700, color:"#fbbf24" }}>Eligible {formatDate(eligStr)}</div>
-                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>{restLeft}d rest remaining</div>
+                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.35)" }}>{rs.restLeft}d rest remaining</div>
                       </>
                     ) : (
                       <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)" }}>Resting</div>
@@ -256,11 +262,12 @@ function EligibilityScreen({ roster, tournaments, onSelect, selectedId=null, two
 
             <p style={{ ...sectionTitle, marginTop:18 }}>TOURNAMENTS</p>
             <p style={{ margin:0, fontSize:12, color:"rgba(255,255,255,0.55)", lineHeight:1.6 }}>
-              During a tournament only its daily and total limits apply — no rest days between tournament days
-              (rest still owed from before the tournament carries in). A pitcher who reaches a limit may finish
+              During a tournament only its own rules apply: daily and total limits, plus optional rest between
+              days if the tournament sets thresholds (e.g. more than 30 in one day = out the next tournament day).
+              Rest still owed from before the tournament carries in. A pitcher who reaches a limit may finish
               the current batter; every pitch counts. Afterwards, the tournament's total pitches set the rest days
               above, starting the day after the pitcher's last tournament outing, and they can't pitch a
-              regular-season game before the day after the tournament ends.
+              regular-season game before the day after the tournament ends ("In Tourney").
             </p>
           </div>
         </div>

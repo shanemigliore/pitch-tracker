@@ -56,7 +56,7 @@ test('tournament pitches earlier today -> not eligible for a regular game today'
   const p = pitcher([h(D, 10, { isTournament: true, tournamentId: 'tA', tournamentName: 'Fall Classic', tourneyDay: 2 })]);
   const b = getLivePitcherBudget(p, live(), [T]);
   assert.strictEqual(b.eligible, false);
-  assert.ok(/^Resting/.test(b.reason), b.reason);
+  assert.ok(/^In Fall Classic through /.test(b.reason), b.reason); // v3.19: tournament hold, not rest
 });
 test('unfinished game from yesterday ignores outings logged after its date', () => {
   const y = '2026-10-26';

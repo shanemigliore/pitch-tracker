@@ -101,7 +101,7 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - Firebase Realtime Database (email/password auth via two shared accounts — see Auth below)
 - No build step, no bundler, no npm
 
-**Current version:** v3.18
+**Current version:** v3.19
 
 ---
 
@@ -252,6 +252,9 @@ provider produced the auth.
   days: number,
   dayLimits: { max: number, isHard: boolean }[], // one per day, index 0 = Day 1
   maxTotal: number,         // pitch cap for the whole tournament - always enforced
+  restTiers: { rest1, rest2, rest3 } | absent, // v3.19, optional rest between tournament days:
+                            // more than restN pitches in one tournament day = out the next N
+                            // tournament days. 0/blank = off; read via getTourneyRestTiers
   // legacy, still written (mirrors dayLimits[0]) for pre-v3.7 cached clients;
   // never read directly - always go through getTourneyDayLimits(t):
   maxDay1: number,
@@ -265,11 +268,19 @@ copies `maxDay1` as a *guideline* onto Days 2..N. RTDB may return `dayLimits`
 as a `{"0":..,"1":..}` object - `getTourneyDayLimits` handles both.
 
 **Tournament eligibility rules (CPYL — `lib/pitch-logic.js`):**
-- *During* a tournament: no rest days between tournament days. A pitcher is
-  ineligible on a given day only if (a) rest from before the tournament is
-  still owed, (b) that day's **hard** limit has been reached (out for the rest
-  of that day), or (c) the tournament total has been reached (out for the rest
-  of the tournament). Guidelines never affect eligibility. "Reached" is `>=`:
+- *During* a tournament: no rest days between tournament days **unless the
+  tournament sets `restTiers`** (v3.19). A pitcher is ineligible on a given day
+  only if (a) rest from before the tournament is still owed, (b) that day's
+  **hard** limit has been reached (out for the rest of that day), (c) the
+  tournament total has been reached (out for the rest of the tournament), or
+  (d) an earlier tournament day's pitches (all games that day, strict `>`)
+  crossed a rest tier and that rest covers this day (`getTourneyRestBlock`,
+  code `"tourneyRest"`, Roster chip "Rest Day"; any day → following days, e.g.
+  >30 on Day 1 = out Day 2). A day's own pitches never block that same day.
+  Logging on a rest day is a warn-and-override violation; a game that pushes
+  the day over a tier gets a non-blocking note ("Day 1: 35p — 1 rest day, out
+  Day 2"), only when tournament days remain. Tiers don't change regular-season
+  rest after the tournament (still total-based, below). Guidelines never affect eligibility. "Reached" is `>=`:
   hitting exactly the cap is allowed; going over is only legal when finishing
   a batter, which the app can't detect, so it's a warn-and-override at save
   time (`getTourneyLimitViolation`). All pitches count toward the total and rest.
@@ -278,7 +289,14 @@ as a `{"0":..,"1":..}` object - `getTourneyDayLimits` handles both.
   uses that day's pitches. A tournament uses its **total** pitches, rest starts
   the day after the pitcher's last tournament outing, and the eligible date is
   never earlier than the day after the tournament ends (CPYL: 33 on Fri of a
-  Fri–Sun tournament → eligible Monday). This applies while a tournament is in
+  Fri–Sun tournament → eligible Monday). When that floor is the **only** thing
+  holding a pitcher (no rest date reaches it — `heldByTourney` on
+  `getTourneyAdjustedRestInfo`), it's a tournament hold, not rest (v3.19):
+  status `"tourney"` (🏆 "In Tourney" chip), Roster/PitcherDetail say "In
+  <tournament> · regular season from <date>", and regular-season Live/Log Game
+  reasons read "In <tournament> through <end> — eligible <date>". Before v3.19
+  this was bucketed by calendar days left and showed e.g. "2 Days" for a
+  15-pitch Day 1 outing. This applies while a tournament is in
   progress too (provisional, using the total so far). Thresholds are the team's
   `rest1/2/3`, same as regular season.
 - The header's ✓/😴 counts (`App.js`) use `getTourneyEligibility` for today
@@ -428,13 +446,15 @@ selectedPlayer    // Pitcher | null — active drill-in on Roster tab
 | `getRegRestDays(pitches)` | Returns 0/1/2/3 rest days based on pitch count vs. `currentRules` |
 | `getTourneyAdjustedRestInfo(pitcher, tournaments, opts?)` | Regular-season rest across all outings (regular game days + whole tournaments); returns the binding one `{ isTourney, tournamentId, totalPitches, lastPitchDate, eligibleDate, restDays }`. `opts.before` = only outings strictly before that date |
 | `getTourneyDayLimits(t)` / `getTourneyMaxTotal(t)` / `getTourneyDays(t)` / `getTourneyEndDate(t)` | Read tournament config (new or legacy shape) |
+| `getTourneyRestTiers(t)` / `getTourneyDayRestDays(t, pitches)` / `getTourneyRestBlock(pitcher, t, dateStr)` / `describeTourneyOutDays(t, dayNum, restDays)` / `getTourneyDayRestSteps(t, dayNum)` | v3.19 tournament rest tiers: parsed ascending thresholds; rest days for one day's pitches; the in-tournament rest block on a date (`{fromDay, pitches, restDays, lastOutDay, eligibleDay, eligibleDate}` or null); "Day 2"/"Days 2–3" label; Live steps (`{at, days, out}`) for days that still have tournament days after them |
+| `getRegularRestSummary(pitcher, tournaments, onDate?)` | v3.19 display summary for regular season: `{ available, eligibleDate, heldByTourney, tourneyName, tourneyEndDate, restLeft }` — `restLeft` = real rest days still to serve (0 for a tournament hold), used by the Roster list and PitcherDetail instead of "days until eligible" |
 | `getTourneyDayNumber(t, dateStr)` | 1-based tournament day for a date, `null` outside the tournament |
 | `getPitcherTourneyStats(pitcher, t)` | `{ total, byDay[], games, lastPitchDate }` for one tournament |
 | `getTourneyEligibility(pitcher, t, dateStr, tournaments)` | In-tournament eligibility on a date (dates before start = Day 1): `{ eligible, reason, dayNum, dayPitches, dayLimit, pitchesLeft, ... }` |
 | `getTourneyLimitViolation(pitcher, t, dateStr, count, tournaments)` | Save-time check for a tournament game: `null`, `{level:"note"}` (guideline, non-blocking) or `{level:"violation"}` |
 | `getGameLogCheck(pitcher, {context, tourney, date, count, tournaments})` | Save-time rule check shared by Log Game and Live: regular-season rest owed, then (v3.18) the day total — this game + regular-season games already logged that date — over `maxPitches` (exactly the max is fine; "20p earlier today + 50p = 70p — over the 55p daily max"), or `getTourneyLimitViolation`. New games only — the edit modals don't run rule checks |
 | `buildGameEntries({pitchers, date, opponent, context, tourney, sharedGameId})` | HistoryEntry payloads (`{playerId, data}`) for one game — shared by Log Game and Live |
-| `getLivePitcherBudget(pitcher, liveGame, tournaments)` | Live tab per-pitcher view: `{ inGame, hasLeft, count, eligible, reason, priorToday, pitchesLeft, leftLabel, arcValue, arcMax, note, rest }`. Eligibility is from logged history only (so it doesn't flip mid-game); pitches left includes the live count. Regular: `maxPitches` per day minus already-logged same-day pitches + live count. Tournament: tighter of the day's hard limit and the total. Also `rings` (`[{key,label,value,max,ticks,guideline}]` — one TODAY ring for regular, DAY N + TOURNEY for a tournament), `milestones` (from `getLiveMilestones`) and `status` (from `getLiveStatus`) |
+| `getLivePitcherBudget(pitcher, liveGame, tournaments)` | Live tab per-pitcher view: `{ inGame, hasLeft, count, eligible, reason, priorToday, pitchesLeft, leftLabel, arcValue, arcMax, note, rest }`. Eligibility is from logged history only (so it doesn't flip mid-game); pitches left includes the live count. Regular: `maxPitches` per day minus already-logged same-day pitches + live count. Tournament: tighter of the day's hard limit and the total. Also `rings` (`[{key,label,value,max,ticks,guideline}]` — one TODAY ring for regular, DAY N + TOURNEY for a tournament), `milestones` (from `getLiveMilestones`) and `status` (from `getLiveStatus`). In a tournament with rest tiers the DAY N ring also gets tier ticks and `dayRest` milestones ("Next pitch = out Day 2", "Now out Day 2"); `status.dayOut` ("Day 2") then replaces the status box's left column (label "SITS") |
 | `getLiveStatus({restUsed, limits, restAfterTourney, eligible, reason})` | The Live card's status box: `{ restDays, restAfterTourney, justCrossed, next, alert, level }`. `next` is always the nearest rest step or unreached limit, however far (ties → limit). `alert` priority: over a hard limit (`level:"over"`) > at one > not eligible > at/over a guideline (soft). Otherwise `level` uses `getLiveMilestones`' 5-pitch window (`urgent`/`warn`/`soft`), `info` for 3 pitches after crossing a step, else `neutral` |
 | `getLiveMilestones({restUsed, limits, restAfterTourney})` | Live-tab warnings, most urgent first: each rest step from 5 pitches out (`Next pitch = N rest days` at exactly the step, since rest is strict `>`), a 3-pitch `Now N rest days` after crossing, and each limit from 5 left (`At … — finish batter only` when reached; guideline limits only warn, level `soft`). Steps above the daily max still warn. Count-based, so every device shows the same |
 | `getRestTicks(max)` | Team rest steps that fit inside a ring of size `max` (tick marks) |

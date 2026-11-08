@@ -264,7 +264,10 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
   function statusBox(b, isActive) {
     const st = b.status;
     const st2 = STATUS_STYLE[isActive ? st.level : "neutral"] || STATUS_STYLE.neutral;
-    const restVal = st.restDays===0 ? "NONE" : `${st.restDays} DAY${st.restDays===1?"":"S"}`;
+    // Tournament rest tier crossed (v3.19): which tournament days they'll sit
+    // matters more right now than rest after the tournament.
+    const restLabel = st.dayOut ? "SITS" : st.restAfterTourney ? "TOURNEY REST" : "REST";
+    const restVal = st.dayOut ? st.dayOut.toUpperCase() : st.restDays===0 ? "NONE" : `${st.restDays} DAY${st.restDays===1?"":"S"}`;
     const icon = st.level==="soft" ? "ⓘ " : "⚠ ";
     const one = { overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" };
     return (
@@ -272,7 +275,7 @@ function LiveGameScreen({ roster, tournaments, liveGame, onStart, onAction, onCo
         borderRadius:8, marginBottom:8, overflow:"hidden" }}>
         <div style={{ width:80, flexShrink:0, padding:"5px 8px", display:"flex", flexDirection:"column", justifyContent:"center",
           borderRight:"1px solid rgba(255,255,255,0.1)" }}>
-          <div style={{ fontSize:8, fontWeight:800, letterSpacing:0.2, opacity:0.75, ...one }}>{st.restAfterTourney?"TOURNEY REST":"REST"}</div>
+          <div style={{ fontSize:8, fontWeight:800, letterSpacing:0.2, opacity:0.75, ...one }}>{restLabel}</div>
           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
             <span style={{ fontFamily:"'Bebas Neue',cursive", fontSize:19, lineHeight:1.1, color:"#f8fafc", whiteSpace:"nowrap" }}>{restVal}</span>
           </div>

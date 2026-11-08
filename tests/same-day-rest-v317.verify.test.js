@@ -127,7 +127,7 @@ test('tournament outing earlier the same day blocks a regular game until the day
   const p = pitcher([th(D, 10, 'tA', 2)]);
   const blk = getRegularSeasonRestBlock(p, [t], D);
   assert.strictEqual(blk.eligibleDate, '2026-10-29');
-  assert.ok(/^Resting/.test(blk.reason));
+  assert.ok(/^In .* through .* — eligible /.test(blk.reason), blk.reason); // v3.19 wording
   assert.ok(regCheck(p, D, 5, [t]));
 });
 test('tournament on its last day + regular game same evening: 45 total -> rest from last outing (2 days)', () => {

@@ -23,10 +23,10 @@ function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame,
   const s = STATUS[status];
   const restInfo = getTourneyAdjustedRestInfo(pitcher, tournaments);
   const eligible = restInfo.eligibleDate;
-  const daysLeft = daysUntilEligible(pitcher, null, tournaments);
-  const restRemaining = restInfo.isTourney
-    ? daysLeft
-    : daysLeft - (pitcher.lastGameDate === todayStr() ? 1 : 0);
+  // v3.19: real rest days left (not calendar days until eligible); a pitcher
+  // held only because their tournament isn't over owes none.
+  const restSummary = getRegularRestSummary(pitcher, tournaments);
+  const restRemaining = restSummary.restLeft;
   const seasons = [...new Set((pitcher.history||[]).map(h=>(h.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
 
   const seasonStats = seasons.map(yr => {
@@ -109,10 +109,12 @@ function PitcherDetail({ pitcher, onBack, tournaments, onEditGame, onDeleteGame,
         </div>
         <div style={{ flex:1 }}>
           <div style={{ fontSize:15, fontWeight:700, color:s.color, marginBottom:3 }}>
-            {status==="available" ? "✅ Available to pitch" : `⏳ ${restRemaining} day${restRemaining!==1?"s":""} rest remaining`}
+            {status==="available" ? "✅ Available to pitch"
+              : restSummary.heldByTourney ? `🏆 In ${restSummary.tourneyName || "tournament"} — no rest owed`
+              : `⏳ ${restRemaining} day${restRemaining!==1?"s":""} rest remaining`}
           </div>
           {eligible && <div style={{ fontSize:13, color:"rgba(255,255,255,0.5)" }}>
-            Eligible: <strong style={{ color:"rgba(255,255,255,0.85)" }}>{formatDate(getEligibleDateStr(pitcher, tournaments))}</strong>
+            {restSummary.heldByTourney ? "Regular season from" : "Eligible"}: <strong style={{ color:"rgba(255,255,255,0.85)" }}>{formatDate(getEligibleDateStr(pitcher, tournaments))}</strong>
           </div>}
           {pitcher.lastGameDate && <div style={{ fontSize:12, color:"rgba(255,255,255,0.35)", marginTop:2 }}>
             Last: {formatDate(pitcher.lastGameDate)} · {pitcher.lastPitches}p
