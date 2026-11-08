@@ -113,10 +113,12 @@ test('B5. multiple games on one day are summed for the tier', () => {
   const p = pitcher([th('2026-11-07', 20), th('2026-11-07', 11)]);
   assert.strictEqual(getTourneyEligibility(p, T30(), '2026-11-08', [T30()]).eligible, false);
 });
-test('B6. same day is never blocked by that day\'s own pitches', () => {
+test('B6. (v3.20) logged pitches over a tier block the rest of that same day; at the tier they do not', () => {
   const p = pitcher([th('2026-11-07', 35)]);
   const e = getTourneyEligibility(p, T30(), '2026-11-07', [T30()]);
-  assert.notStrictEqual(e.code, 'tourneyRest');
+  assert.strictEqual(e.code, 'tourneyRest');
+  assert.strictEqual(e.eligible, false);
+  assert.strictEqual(getTourneyEligibility(pitcher([th('2026-11-07', 30)]), T30(), '2026-11-07', [T30()]).eligible, true);
 });
 test('B7. any day -> next days; 2-day tier in a 4-day tournament', () => {
   const t = TX({ days: 4, dayLimits: [], maxTotal: 200, restTiers: { rest1: 30, rest2: 50 } });
@@ -212,6 +214,44 @@ test('B18. junk inputs never throw', () => {
   });
   getLiveStatus({ restUsed: 5, limits: [], restAfterTourney: true, dayRest: { used: 'x', steps: null } });
   getLiveMilestones({ restUsed: 5, limits: [], restAfterTourney: true, dayRest: {} });
+});
+
+// ── v3.20: same-day tier block (Jackson: 33p on Day 1 with a 30 tier) ─────────
+test('C1. Jackson 33p on Day 1: not eligible for the rest of Day 1 or Day 2', () => {
+  const t = TX({ dayLimits: [{ max: 50, isHard: false }, { max: 50, isHard: false }], restTiers: { rest1: 30 } });
+  const p = pitcher([th('2026-11-07', 11), th('2026-11-07', 22)]);
+  const d1 = getTourneyEligibility(p, t, '2026-11-07', [t]);
+  assert.strictEqual(d1.eligible, false);
+  assert.ok(/^Threw 33p (today|earlier that day) \(Day 1\) — 1 rest day, out rest of tournament$/.test(d1.reason), d1.reason);
+  assert.strictEqual(getTourneyEligibility(p, t, '2026-11-08', [t]).eligible, false);
+});
+test('C2. second game the same day after crossing: save-time violation', () => {
+  const p = pitcher([th('2026-11-07', 33)]);
+  const v = getTourneyLimitViolation(p, T30(), '2026-11-07', 5, [T30()]);
+  assert.strictEqual(v.level, 'violation');
+});
+test('C3. game that itself crosses the tier: still only a note (option a)', () => {
+  const v = getTourneyLimitViolation(pitcher([th('2026-11-07', 20)]), T30(), '2026-11-07', 13, [T30()]);
+  assert.strictEqual(v.level, 'note');
+});
+test('C4. Live: crossing mid-game keeps the pitcher eligible in that game (live count is not logged)', () => {
+  const b = getLivePitcherBudget(pitcher([]), live('2026-11-07', 'tx', { p: { pitches: 33, status: 'active', order: 1, enteredAt: 1 } }), [T30()]);
+  assert.strictEqual(b.eligible, true);
+  assert.strictEqual(b.status.dayOut, 'Day 2');
+});
+test('C5. Live: a pitcher who crossed in an earlier logged game today cannot be brought in', () => {
+  const b = getLivePitcherBudget(pitcher([th('2026-11-07', 33)]), live('2026-11-07'), [T30()]);
+  assert.strictEqual(b.eligible, false);
+});
+test('C6. last day: crossing ends the day even with no tournament day after', () => {
+  const p = pitcher([th('2026-11-08', 31)]);
+  const e = getTourneyEligibility(p, T30(), '2026-11-08', [T30()]);
+  assert.strictEqual(e.eligible, false);
+});
+test('C7. viewing an earlier day does not use later days\' pitches', () => {
+  const t = TX({ days: 3, dayLimits: [], maxTotal: 200, restTiers: { rest1: 30 } });
+  const p = pitcher([th('2026-11-08', 40)]); // Day 2
+  assert.strictEqual(getTourneyEligibility(p, t, '2026-11-07', [t]).eligible, true);
 });
 
 console.log(`\n${passed} passed, ${failed} failed (${passed + failed} total)`);
