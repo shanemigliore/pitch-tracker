@@ -256,7 +256,7 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame, twoPane=
                     {filteredGameCount} game{filteredGameCount!==1?"s":""} · {totalPitches}p total · avg {filteredGameCount?Math.round(totalPitches/filteredGameCount):0}p/game
                   </div>
                 </div>
-                <Chip status={getAvailabilityStatus(activePitcher, null, tournaments)} size="lg"/>
+                {(()=>{ const c = getAvailabilityChip(activePitcher, null, tournaments); return <Chip status={c.status} label={c.label} size="lg"/>; })()}
               </div>
             </div>
           )}

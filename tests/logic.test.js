@@ -682,6 +682,36 @@ test('12f. getLiveStatus never throws or prints NaN on junk input', () => {
   }
 });
 
+// ── 13. Eligibility pill: days left until eligible (v3.21) ───────────────
+
+test('13a. restChipForDaysLeft: Ready / Tomorrow / 2 Days Left / N Days Left', () => {
+  assert.deepStrictEqual(logic.restChipForDaysLeft(0), { status: 'available', label: null });
+  assert.deepStrictEqual(logic.restChipForDaysLeft(1), { status: 'tomorrow', label: null });
+  assert.deepStrictEqual(logic.restChipForDaysLeft(2), { status: 'resting2', label: '2 Days Left' });
+  assert.deepStrictEqual(logic.restChipForDaysLeft(3), { status: 'resting', label: '3 Days Left' });
+  assert.deepStrictEqual(logic.restChipForDaysLeft(5), { status: 'resting', label: '5 Days Left' });
+  assert.strictEqual(logic.restChipForDaysLeft(-2).status, 'available');
+  assert.strictEqual(logic.restChipForDaysLeft(undefined).status, 'available');
+});
+
+test('13b. getAvailabilityChip counts calendar days left, not rest owed', () => {
+  logic.setCurrentRules(logic.DEFAULT_RULES);
+  // 61+ pitches = 3 rest days: pitched Jul 20 -> eligible Jul 24.
+  const p = { id: 'p', name: 'P', history: [makeEntry({ date: '2026-07-20', pitches: 65 })] };
+  const chip = d => logic.getAvailabilityChip(p, d, []);
+  assert.deepStrictEqual(chip('2026-07-20'), { status: 'resting', label: '4 Days Left' });
+  assert.deepStrictEqual(chip('2026-07-21'), { status: 'resting', label: '3 Days Left' });
+  assert.deepStrictEqual(chip('2026-07-22'), { status: 'resting2', label: '2 Days Left' });
+  assert.deepStrictEqual(chip('2026-07-23'), { status: 'tomorrow', label: null });
+  assert.deepStrictEqual(chip('2026-07-24'), { status: 'available', label: null });
+  // getAvailabilityStatus buckets the same way
+  assert.strictEqual(logic.getAvailabilityStatus(p, '2026-07-22', []), 'resting2');
+  // 21-40 pitches = 1 rest day: the day after the game is "Tomorrow"
+  const q = { id: 'q', name: 'Q', history: [makeEntry({ date: '2026-07-20', pitches: 30 })] };
+  assert.deepStrictEqual(logic.getAvailabilityChip(q, '2026-07-21', []), { status: 'tomorrow', label: null });
+  assert.deepStrictEqual(logic.getAvailabilityChip(q, '2026-07-20', []), { status: 'resting2', label: '2 Days Left' });
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────
 
 console.log('');

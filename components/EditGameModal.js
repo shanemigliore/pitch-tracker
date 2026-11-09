@@ -31,7 +31,9 @@ function EditGameModal({ entry, pitcherName, roster, tournaments, onSave, onDele
     });
   }
 
-  return (
+  // Portaled to <body>: inside a scrolling pane (two-pane layouts) iOS clips
+  // even a position:fixed overlay to the pane (v3.21).
+  return ReactDOM.createPortal(
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:50,
       display:"flex", alignItems:wide?"center":"flex-end", justifyContent:"center",
       paddingLeft:"var(--safe-l)", paddingRight:"var(--safe-r)",
@@ -159,5 +161,5 @@ function EditGameModal({ entry, pitcherName, roster, tournaments, onSave, onDele
         )}
       </div>
     </div>
-  );
+  , document.body);
 }
