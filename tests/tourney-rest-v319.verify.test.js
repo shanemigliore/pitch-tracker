@@ -86,7 +86,8 @@ test('A8 plain regular-season rest: restLeft counts rest days, not off-by-one on
   assert.strictEqual(getRegularRestSummary(p, [], '2026-11-01').restLeft, 2);
   assert.strictEqual(getRegularRestSummary(p, [], '2026-11-02').restLeft, 2);
   assert.strictEqual(getRegularRestSummary(p, [], '2026-11-03').restLeft, 1);
-  assert.strictEqual(getAvailabilityStatus(p, '2026-11-01', []), 'resting2');
+  // v3.21: status buckets by calendar days left (Nov 1 -> Nov 4 = 3)
+  assert.strictEqual(getAvailabilityStatus(p, '2026-11-01', []), 'resting');
 });
 test('A9 tournament missing from list (deleted) -> no crash, no tourney name', () => {
   const p = P([tg('2026-11-07', 15, 'gone')]);

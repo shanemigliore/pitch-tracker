@@ -282,12 +282,15 @@ test('X8 reason text is plain text (tournament name/opponent never injected into
 });
 
 // ─────────────────────────────── Versioning ────────────────────────────────
-test('V1 version v3.20 in meta tag, APP_VERSION and CLAUDE.md', () => {
+test('V1 version matches in meta tag, APP_VERSION and CLAUDE.md (v3.20 or later)', () => {
   const root = path.join(__dirname, '..');
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  assert.ok(/<meta name="app-version" content="v3\.20"\/>/.test(html));
-  assert.ok(/const APP_VERSION = "v3\.20";/.test(html));
-  assert.ok(/\*\*Current version:\*\* v3\.20/.test(fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf8')));
+  const meta = (html.match(/<meta name="app-version" content="(v\d+\.\d+)"\/>/) || [])[1];
+  const app = (html.match(/const APP_VERSION = "(v\d+\.\d+)";/) || [])[1];
+  const doc = (fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf8').match(/\*\*Current version:\*\* (v\d+\.\d+)/) || [])[1];
+  assert.ok(meta && meta === app && app === doc, `${meta} / ${app} / ${doc}`);
+  const [maj, min] = meta.slice(1).split('.').map(Number);
+  assert.ok(maj > 3 || (maj === 3 && min >= 20));
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -52,7 +52,8 @@ test('A4. real rest past the floor is still rest (45 total -> 2 days, Nov 11)', 
   const info = getTourneyAdjustedRestInfo(p, [TX()]);
   assert.strictEqual(info.heldByTourney, false);
   assert.strictEqual(L.toLocalDateStr(info.eligibleDate), '2026-11-11');
-  assert.strictEqual(getAvailabilityStatus(p, '2026-11-08', [TX()]), 'resting2');
+  // v3.21: status buckets by calendar days left (Nov 8 -> Nov 11 = 3)
+  assert.strictEqual(getAvailabilityStatus(p, '2026-11-08', [TX()]), 'resting');
   assert.strictEqual(getRegularRestSummary(p, [TX()], '2026-11-08').restLeft, 2);
   assert.strictEqual(getRegularRestSummary(p, [TX()], '2026-11-09').restLeft, 2);
   assert.strictEqual(getRegularRestSummary(p, [TX()], '2026-11-10').restLeft, 1);
