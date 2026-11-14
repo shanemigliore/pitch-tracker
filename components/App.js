@@ -462,7 +462,7 @@ function App({ role }) {
           <GameLogScreen roster={roster} onLogMultiple={logMultiple} tournaments={tournaments} twoPane={layout.twoPane} rail={layout.rail}/>
         ) : tab==="season" ? (
           <ScreenBoundary>
-            <SeasonHistory roster={roster} tournaments={tournaments} onEditGame={editGame} onDeleteGame={deleteGame} twoPane={layout.twoPane} rail={layout.rail}/>
+            <SeasonHistory roster={roster} tournaments={tournaments} onEditGame={editGame} onDeleteGame={deleteGame} onAddGame={logMultiple} twoPane={layout.twoPane} rail={layout.rail}/>
           </ScreenBoundary>
         ) : (
           <ScreenBoundary>

@@ -8,7 +8,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // SCREEN: SEASON — grouped by game, tournaments grouped as one container
 // ══════════════════════════════════════════════════════════════════════════════
-function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame, twoPane=false, rail=false }) {
+function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame, onAddGame, twoPane=false, rail=false }) {
   const [year, setYear] = useState(new Date().getFullYear().toString());
   const [filterPitcherId, setFilterPitcherId] = useState("all");
   const [editingGame, setEditingGame] = useState(null);
@@ -328,6 +328,8 @@ function SeasonHistory({ roster, tournaments, onEditGame, onDeleteGame, twoPane=
         <EditGameGroupModal
           game={editingGame}
           tournaments={tournaments}
+          roster={roster}
+          onAddGame={onAddGame}
           onEditGame={onEditGame}
           onDeleteGame={onDeleteGame}
           onClose={()=>setEditingGame(null)}/>

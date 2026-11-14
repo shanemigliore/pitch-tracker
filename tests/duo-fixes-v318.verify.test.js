@@ -197,9 +197,14 @@ test('S6. Firebase write paths untouched by v3.18 (lib/firebase-init.js unchange
     '__fbStartLiveGame', '__fbMutateLiveGame', '__fbClaimLiveGame', '__fbGetRoster', '__fbSignIn', '__fbOnAuthChange', '__fbRoleForUser', '__fbSignOut'];
   for (const u of used) assert.ok(known.includes(u), 'unknown firebase call ' + u);
 });
-test('S7. edit modals do not call the new daily-max check (getGameLogCheck)', () => {
-  for (const f of ['EditGameModal', 'EditGameGroupModal', 'PitcherDetail', 'SeasonHistory'])
+test('S7. edit modals do not call the new daily-max check (getGameLogCheck) on existing entries', () => {
+  for (const f of ['EditGameModal', 'PitcherDetail', 'SeasonHistory'])
     assert.ok(!/getGameLogCheck/.test(read(`components/${f}.js`)), f);
+  // v3.22: EditGameGroupModal checks only pitchers newly added to a past game
+  const group = read('components/EditGameGroupModal.js');
+  const calls = group.match(/getGameLogCheck\(/g) || [];
+  assert.strictEqual(calls.length, 1, 'one call site');
+  assert.ok(/function getAddedViolation[\s\S]{0,300}getGameLogCheck\(/.test(group), 'only inside getAddedViolation');
   assert.ok(/getGameLogCheck/.test(read('components/GameLogScreen.js')) && /getGameLogCheck/.test(read('components/LiveGameScreen.js')));
 });
 test('S8. Live log path uses getLiveGamePitcherIds order (completeLiveGame -> liveGameToLogEntries), not display order', () => {
