@@ -101,7 +101,7 @@ cached `components/TournamentScreen.js` keeps serving old logic.
 - Firebase Realtime Database (email/password auth via two shared accounts — see Auth below)
 - No build step, no bundler, no npm
 
-**Current version:** v3.21
+**Current version:** v3.22
 
 ---
 
@@ -389,7 +389,7 @@ specific principle.
 | Component | File | Purpose |
 |-----------|------|---------|
 | `EditGameModal` | `components/EditGameModal.js` | Edit or delete a single HistoryEntry |
-| `EditGameGroupModal` | `components/EditGameGroupModal.js` | Edit/delete a multi-pitcher (`sharedGameId`) game log entry — also used for a single day within a Season-tab tournament container |
+| `EditGameGroupModal` | `components/EditGameGroupModal.js` | Edit/delete a multi-pitcher (`sharedGameId`) game log entry — also used for a single day within a Season-tab tournament container. **Add pitcher (v3.22):** chips for roster pitchers not already in the game (judged against `fullGame`, so a Season filter can't hide existing pitchers); each added pitcher (count ≥1, 0 is skipped, ✕ removes before save) is saved via `onAddGame` = App's `logMultiple` with the modal's date/opponent/context, joining the game's `sharedGameId` (`gameId = sharedGameId + "_" + pitcherId`, like `buildGameEntries`) or, for a legacy game without one, `sharedGameId: null` + `newId()` so it groups by date/opponent/context. Added pitchers — and only they — go through `getGameLogCheck` with the same warn-and-override ("Save Anyway") as Log Game; edits to existing entries stay unchecked |
 | `AddPitcherSection` | `components/Settings.js` | New-pitcher form (duplicate jersey blocked, duplicate name soft-warned) — Settings' Roster sub-section |
 | `AccountSection` | `components/Settings.js` | Shows signed-in name + role (Admin/Coach) and a confirm-then-log-out button — Settings' Account sub-section |
 | `DisplayInfoSection` | `components/Settings.js` | **Admin only**, inside `AccountSection`: read-only viewport/screen size, pixel ratio, orientation, Home Screen app vs browser, and the four `env(safe-area-inset-*)` values (measured via a hidden probe element), re-measured on resize/rotate. Added in v3.14 to collect real iPhone Duo numbers for the folded/unfolded layouts |
@@ -456,7 +456,7 @@ selectedPlayer    // Pitcher | null — active drill-in on Roster tab
 | `getPitcherTourneyStats(pitcher, t)` | `{ total, byDay[], games, lastPitchDate }` for one tournament |
 | `getTourneyEligibility(pitcher, t, dateStr, tournaments)` | In-tournament eligibility on a date (dates before start = Day 1): `{ eligible, reason, dayNum, dayPitches, dayLimit, pitchesLeft, ... }` |
 | `getTourneyLimitViolation(pitcher, t, dateStr, count, tournaments)` | Save-time check for a tournament game: `null`, `{level:"note"}` (guideline, non-blocking) or `{level:"violation"}` |
-| `getGameLogCheck(pitcher, {context, tourney, date, count, tournaments})` | Save-time rule check shared by Log Game and Live: regular-season rest owed, then (v3.18) the day total — this game + regular-season games already logged that date — over `maxPitches` (exactly the max is fine; "20p earlier today + 50p = 70p — over the 55p daily max"), or `getTourneyLimitViolation`. New games only — the edit modals don't run rule checks |
+| `getGameLogCheck(pitcher, {context, tourney, date, count, tournaments})` | Save-time rule check shared by Log Game and Live: regular-season rest owed, then (v3.18) the day total — this game + regular-season games already logged that date — over `maxPitches` (exactly the max is fine; "20p earlier today + 50p = 70p — over the 55p daily max"), or `getTourneyLimitViolation`. New games only — the edit modals don't run rule checks, except on pitchers newly added to a past game in `EditGameGroupModal` (v3.22) |
 | `buildGameEntries({pitchers, date, opponent, context, tourney, sharedGameId})` | HistoryEntry payloads (`{playerId, data}`) for one game — shared by Log Game and Live |
 | `getLivePitcherBudget(pitcher, liveGame, tournaments)` | Live tab per-pitcher view: `{ inGame, hasLeft, count, eligible, reason, priorToday, pitchesLeft, leftLabel, arcValue, arcMax, note, rest }`. Eligibility is from logged history only (so it doesn't flip mid-game); pitches left includes the live count. Regular: `maxPitches` per day minus already-logged same-day pitches + live count. Tournament: tighter of the day's hard limit and the total. Also `rings` (`[{key,label,value,max,ticks,guideline}]` — one TODAY ring for regular, DAY N + TOURNEY for a tournament), `milestones` (from `getLiveMilestones`) and `status` (from `getLiveStatus`). In a tournament with rest tiers the DAY N ring also gets tier ticks and `dayRest` milestones ("Next pitch = out Day 2", "Now out Day 2"); `status.dayOut` ("Day 2") then replaces the status box's left column (label "SITS") |
 | `getLiveStatus({restUsed, limits, restAfterTourney, eligible, reason})` | The Live card's status box: `{ restDays, restAfterTourney, justCrossed, next, alert, level }`. `next` is always the nearest rest step or unreached limit, however far (ties → limit). `alert` priority: over a hard limit (`level:"over"`) > at one > not eligible > at/over a guideline (soft). Otherwise `level` uses `getLiveMilestones`' 5-pitch window (`urgent`/`warn`/`soft`), `info` for 3 pitches after crossing a step, else `neutral` |
